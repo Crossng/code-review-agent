@@ -88,6 +88,16 @@ try {
         && url.searchParams.get("activityLimit") === "25";
     }).catch(() => false)
   );
+  const demoReadiness = page.locator(".demoReadinessPanel");
+  await demoReadiness.getByText("演示就绪", { exact: true }).waitFor();
+  await demoReadiness.getByText("本地闭环演示", { exact: true }).waitFor();
+  await demoReadiness.getByText("可演示").first().waitFor();
+  await demoReadiness.getByText("真实模型演示", { exact: true }).waitFor();
+  await demoReadiness.getByText("可选增强", { exact: true }).waitFor();
+  await demoReadiness.getByText("远端 GitHub PR", { exact: true }).waitFor();
+  await demoReadiness.getByText("本地草稿", { exact: true }).waitFor();
+  await demoReadiness.getByText("REPOPILOT_CODER_MODE=openai-compatible").waitFor();
+  await demoReadiness.getByText("REPOPILOT_GITHUB_ENABLED=true").waitFor();
   const coderSettings = page.locator(".coderSettingsPanel");
   await coderSettings.getByText("Coder 配置").waitFor();
   await coderSettings.getByText("模型提供方状态").waitFor();

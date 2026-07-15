@@ -324,6 +324,44 @@ h2 {
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
 }
 
+.demoReadinessPanel {
+  grid-column: 1 / -1;
+}
+
+.demoReadinessList {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.demoReadinessItem {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.demoReadinessItem[data-status="可演示"] {
+  border-color: rgba(47, 125, 85, 0.38);
+  background: #f6fbf5;
+}
+
+.demoReadinessItem[data-status="需要配置"] {
+  border-color: rgba(180, 51, 51, 0.38);
+  background: #fff8f6;
+}
+
+.demoReadinessItem ul {
+  color: var(--muted);
+  display: grid;
+  font-size: 0.8rem;
+  gap: 5px;
+  margin: 0;
+  padding-left: 18px;
+}
+
 .taskLayout {
   grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
   align-items: start;

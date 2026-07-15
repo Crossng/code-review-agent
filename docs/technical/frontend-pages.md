@@ -100,6 +100,7 @@ Agent 执行页必须特别处理长任务状态：
 | `PullRequestPreflightSummary` | 用中文标签展示 PR 发布前置检查、发布模式、本地草稿状态、远程 GitHub 状态和 blocker |
 | `ToolCallAuditPanel` | 展示工具调用输入、输出摘要、状态和耗时 |
 | `ModelCallAuditPanel` | 展示模型调用提示词、响应摘要、模型名、token 和耗时 |
+| `DemoReadinessPanel` | 用中文 checklist 汇总本地闭环演示、真实模型演示和远端 GitHub PR 演示是否就绪，展示缺失环境变量名但不展示任何密钥 |
 | `CoderSettingsPanel` | 用中文标签展示当前 Coder mode、provider、model、API base URL、key 是否配置、fixture 是否配置、缺失配置项和支持模式；不展示任何密钥或 fixture 原文 |
 | `GitHubSettingsPanel` | 用中文标签展示当前 GitHub PR 发布模式、provider、API base URL、token 是否配置、远程发布是否启用和缺失配置项；不展示 token 原文 |
 | `SandboxSettingsPanel` | 用中文标签展示 Docker daemon、sandbox image、Maven cache、workspace root、timeout 和 readiness 检查；不启动测试容器 |
@@ -123,6 +124,7 @@ Agent 执行页必须特别处理长任务状态：
 - Coder 配置状态应通过 `GET /api/settings/coder` 加载，和项目/任务列表并行请求；前端只展示脱敏字段与缺失配置项，不允许展示 API key、fixture response 或 organization/project 原文。
 - GitHub 发布配置状态应通过 `GET /api/settings/github` 加载，和项目/任务列表、Coder 配置并行请求；前端只展示 `LOCAL_DRAFT_ONLY`/`REMOTE_GITHUB_PR`、endpoint、token 是否配置和缺失项，不允许展示 token 原文。
 - Sandbox 运行时配置状态应通过 `GET /api/settings/sandbox` 加载，和项目/任务列表、Coder/GitHub 配置并行请求；前端展示 Docker daemon、image、timeout、Maven cache 与 workspace readiness，不触发容器执行。
+- 演示就绪总览应只从 Coder/GitHub/Sandbox 三个脱敏配置响应派生，不新增密钥读取；默认本地环境展示“本地闭环演示：可演示”“真实模型演示：可选增强”“远端 GitHub PR：本地草稿”，真实 token 环境下自动切换为可演示或需要配置。
 - 工作台概览应通过 `GET /api/dashboard/summary`、`GET /api/dashboard/run-metrics?days=...` 和 `GET /api/dashboard/activity?limit=...` 加载，和项目/任务列表、Coder/GitHub/Sandbox 配置并行请求；创建项目、索引完成、创建任务、任务运行状态变化、审批和 PR 准备后应刷新概览指标。概览只展示当前用户聚合数据，不暴露其他用户项目或任务信息。Run metrics 默认最近 7 天，可切换 14/30 天并通过 `runMetricsDays` 恢复当前窗口；Activity 默认最近 10 条，可切换 25/50 条并通过 `activityLimit` 恢复当前数量窗口；overview 提供复制链接操作，写入当前 `runMetricsDays`、`activityLimit` 和 `#overview` 锚点；二者都不阻塞任务详情渲染。
 - Regenerate 可以附带用户反馈。
 

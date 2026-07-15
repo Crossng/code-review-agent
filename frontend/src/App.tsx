@@ -1295,6 +1295,11 @@ export function App() {
 
         {token ? (
           <section className="settingsGrid" id="settings">
+            <DemoReadinessPanel
+              coderSettings={coderSettings}
+              githubSettings={githubSettings}
+              sandboxSettings={sandboxSettings}
+            />
             <CoderSettingsPanel settings={coderSettings} />
             <GitHubSettingsPanel settings={githubSettings} />
             <SandboxSettingsPanel settings={sandboxSettings} />
@@ -1904,6 +1909,128 @@ function DashboardActivityPanel({
       )}
     </section>
   );
+}
+
+type DemoReadinessItem = {
+  title: string;
+  status: "可演示" | "可选增强" | "本地草稿" | "需要配置" | "加载中";
+  summary: string;
+  details: string[];
+};
+
+function DemoReadinessPanel({
+  coderSettings,
+  githubSettings,
+  sandboxSettings
+}: {
+  coderSettings: CoderSettings | null;
+  githubSettings: GitHubSettings | null;
+  sandboxSettings: SandboxSettings | null;
+}) {
+  const items = demoReadinessItems(coderSettings, githubSettings, sandboxSettings);
+  return (
+    <section className="panel demoReadinessPanel">
+      <div className="panelHeader">
+        <div>
+          <p className="eyebrow">演示就绪</p>
+          <h2>本地闭环、真实模型、远端 PR</h2>
+        </div>
+        <Badge value={items.some((item) => item.status === "需要配置") ? "CHECK" : "READY"} />
+      </div>
+      <div className="demoReadinessList">
+        {items.map((item) => (
+          <article className="demoReadinessItem" data-status={item.status} key={item.title}>
+            <div className="sectionHeader">
+              <div>
+                <strong>{item.title}</strong>
+                <span>{item.summary}</span>
+              </div>
+              <Badge value={item.status} />
+            </div>
+            <ul>
+              {item.details.map((detail) => <li key={detail}>{detail}</li>)}
+            </ul>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function demoReadinessItems(
+  coderSettings: CoderSettings | null,
+  githubSettings: GitHubSettings | null,
+  sandboxSettings: SandboxSettings | null
+): DemoReadinessItem[] {
+  if (coderSettings === null || githubSettings === null || sandboxSettings === null) {
+    return [
+      {
+        title: "演示环境",
+        status: "加载中",
+        summary: "正在读取 Coder、GitHub 和 Sandbox 配置。",
+        details: ["配置接口会脱敏返回状态，不会暴露模型 key 或 GitHub token。"]
+      }
+    ];
+  }
+
+  const sandboxReady = sandboxSettings.ready;
+  const modelMode = coderSettings.mode.toLowerCase();
+  const realCoderMode = modelMode === "openai" || modelMode === "openai-compatible";
+  const realCoderReady = realCoderMode && coderSettings.ready;
+  const remotePrReady = githubSettings.remotePublishingEnabled && githubSettings.ready && githubSettings.tokenConfigured;
+
+  return [
+    {
+      title: "本地闭环演示",
+      status: sandboxReady ? "可演示" : "需要配置",
+      summary: sandboxReady
+        ? "可以完整演示仓库接入、索引、Agent、沙箱测试、审批和本地 PR 草稿。"
+        : "沙箱运行时还没准备好，本地闭环会卡在 Maven 测试阶段。",
+      details: compactStrings([
+        `Docker 沙箱：${sandboxSettings.ready ? "READY" : "NEEDS CONFIG"}`,
+        `沙箱镜像：${sandboxSettings.dockerImage ?? "未配置"}`,
+        githubSettings.localDraftMode ? "GitHub 远端发布关闭时仍会生成 DRAFT_READY 记录。" : "当前已启用远端 GitHub 发布。"
+      ])
+    },
+    {
+      title: "真实模型演示",
+      status: realCoderReady ? "可演示" : "可选增强",
+      summary: realCoderReady
+        ? `已启用 ${coderSettings.mode}，下一次非 recipe 任务会调用真实 Coder 模型。`
+        : "当前仍可用 recipe/fixture/安全兜底演示；真实模型演示需要补齐 Coder 环境变量。",
+      details: realCoderReady
+        ? compactStrings([
+            `模型：${coderSettings.model ?? "未配置"}`,
+            `端点：${coderSettings.apiBaseUrl}`,
+            "模型 key 只从环境变量读取，界面不会展示明文。"
+          ])
+        : compactStrings([
+            "设置 REPOPILOT_CODER_MODE=openai-compatible。",
+            "设置 REPOPILOT_CODER_API_KEY 或 OPENAI_API_KEY。",
+            "设置 REPOPILOT_CODER_MODEL，例如 gpt-4.1-mini 或兼容端点模型名。"
+          ])
+    },
+    {
+      title: "远端 GitHub PR",
+      status: remotePrReady ? "可演示" : githubSettings.localDraftMode ? "本地草稿" : "需要配置",
+      summary: remotePrReady
+        ? "审批后会推送 target branch 并调用 GitHub API 创建 PR。"
+        : githubSettings.localDraftMode
+          ? "当前演示停在本地分支、commit 和 DRAFT_READY PR 记录。"
+          : "已启用远端发布，但还缺少 GitHub token 或发布配置。",
+      details: remotePrReady
+        ? compactStrings([
+            `GitHub API：${githubSettings.apiBaseUrl}`,
+            "REPOPILOT_GITHUB_TOKEN 已配置。",
+            "远端发布失败时可在任务详情重试。"
+          ])
+        : compactStrings([
+            "远端发布需要 REPOPILOT_GITHUB_ENABLED=true。",
+            "设置 REPOPILOT_GITHUB_TOKEN 或 GITHUB_TOKEN。",
+            `当前发布模式：${githubSettings.publishMode}`
+          ])
+    }
+  ];
 }
 
 function CoderSettingsPanel({ settings }: { settings: CoderSettings | null }) {

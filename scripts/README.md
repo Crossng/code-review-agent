@@ -13,6 +13,7 @@
 - 启动 PostgreSQL 和 Redis。
 - 若本地 8080/5173 未运行，则临时启动后端和前端。
 - 安装/确认 Playwright Chromium。
+- 验证演示就绪总览：本地闭环可演示、真实模型为可选增强、远端 GitHub PR 处于本地草稿模式，并展示真实 token 演示所需环境变量名。
 - 在真实浏览器中注册 smoke 用户、创建本地 demo 项目、Clone、Index、刷新代码地图、验证 Controller API 风险筛选并搜索 `UserService`。
 - 创建 Agent 任务，运行 Agent，验证步骤、模型调用、工具调用、任务 SSE 快照流、真实 `GET /api/users/page` patch、文件级 `changedFiles` 摘要、自动风险审查、Maven 沙箱测试，点击 Regenerate 并校验新 Run/Patch/Test run 编号，再完成人工审批和本地 `DRAFT_READY` PR 准备记录。
 - 创建第二个 User id 参数校验任务，验证真实 guard patch、`UserServiceTest` 覆盖、文件级 `changedFiles` 摘要、自动风险审查和 Maven 沙箱测试。
