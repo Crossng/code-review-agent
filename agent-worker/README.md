@@ -12,14 +12,22 @@ Current slice:
 
 ```bash
 ../scripts/agent-worker-smoke.sh
+../scripts/agent-worker-callback-smoke.sh
 ```
 
-The smoke script checks:
+The contract smoke script checks:
 
 - FastAPI dependencies are importable.
 - `/health` returns `status=UP` and `service=agent-worker`.
 - `/runs/303/start` returns `accepted=true`, `status=QUEUED` and the expected MVP graph node list.
 - Evidence is written to `output/agent-worker-smoke/last-run.json`.
+
+The callback smoke script checks:
+
+- `BackendApiClient` posts to `/api/internal/agent-worker/runs/{run_id}/steps`.
+- `X-RepoPilot-Worker-Token` is attached.
+- Step payload uses the backend callback contract.
+- Evidence is written to `output/agent-worker-callback-smoke/last-run.json`.
 
 ## Backend Start Bridge
 
@@ -34,9 +42,29 @@ repopilot:
 
 When enabled, backend run execution records an `agent_worker_start` step with the worker response. If the worker call fails, the failure is recorded as step evidence and the current Spring Boot executor continues as the local fallback.
 
+## Backend Step Callback
+
+Worker nodes can write step evidence back to the backend through `BackendApiClient`:
+
+```python
+from app.clients.backend_api import BackendApiClient
+from app.schemas import AgentStepRecordRequest
+
+BackendApiClient().record_step(
+    run_id=303,
+    step=AgentStepRecordRequest(
+        step_name="plan_task",
+        status="SUCCESS",
+        output={"summary": "Worker generated a plan"},
+    ),
+)
+```
+
+The backend requires `X-RepoPilot-Worker-Token`, configured by `REPOPILOT_AGENT_WORKER_CALLBACK_TOKEN`.
+
 Next implementation steps:
 
-1. Add Backend API client for run and step updates.
+1. Add run/task status callback APIs.
 2. Add MCP client for repository tools.
 3. Implement LangGraph nodes from `docs/technical/agent-workflow.md`.
-4. Persist step events back to the Spring Boot backend.
+4. Persist tool call and model call events back to the Spring Boot backend.

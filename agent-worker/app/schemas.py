@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Any, Literal, Optional
 
 
 class AgentRunStartRequest(BaseModel):
@@ -20,3 +20,11 @@ class AgentRunStartResponse(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     service: str
+
+
+class AgentStepRecordRequest(BaseModel):
+    step_name: str = Field(min_length=1, max_length=120)
+    status: Literal["PENDING", "RUNNING", "SUCCESS", "FAILED"]
+    input: Optional[dict[str, Any]] = None
+    output: Optional[dict[str, Any]] = None
+    error_message: Optional[str] = Field(default=None, max_length=4000)

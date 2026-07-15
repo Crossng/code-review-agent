@@ -6,15 +6,23 @@
 
 ```bash
 ./scripts/agent-worker-smoke.sh
+./scripts/agent-worker-callback-smoke.sh
 ```
 
-该脚本用于验证 Python Agent Worker 的最小服务契约。它会：
+`agent-worker-smoke.sh` 用于验证 Python Agent Worker 的最小服务契约。它会：
 
 - 检查 `fastapi`、`uvicorn`、`pydantic` 和 `pydantic_settings` 依赖是否可导入。
 - 若 `REPOPILOT_AGENT_WORKER_URL` 已有 worker，则复用；否则临时启动 `agent-worker/app/main.py`。
 - 验证 `GET /health` 返回 `status=UP` 和 `service=agent-worker`。
 - 验证 `POST /runs/303/start` 返回 `accepted=true`、`status=QUEUED` 和 MVP graph node 清单。
 - 将证据写入 `output/agent-worker-smoke/last-run.json`。
+
+`agent-worker-callback-smoke.sh` 用于验证 Python Agent Worker 的后端回写 client。它会：
+
+- 启动本地 HTTP stub。
+- 调用 `BackendApiClient.record_step(...)`。
+- 验证 `/api/internal/agent-worker/runs/{run_id}/steps` 路径、`X-RepoPilot-Worker-Token` header 和 step JSON。
+- 将证据写入 `output/agent-worker-callback-smoke/last-run.json`。
 
 ## Real Token Demo Check
 

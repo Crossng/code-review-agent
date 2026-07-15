@@ -10,6 +10,7 @@ public class AgentWorkerProperties {
     private boolean enabled = false;
     private String baseUrl = "http://127.0.0.1:8090";
     private int timeoutSeconds = 10;
+    private String callbackToken = "";
 
     public boolean isEnabled() {
         return enabled;
@@ -33,5 +34,13 @@ public class AgentWorkerProperties {
 
     public void setTimeoutSeconds(int timeoutSeconds) {
         this.timeoutSeconds = timeoutSeconds;
+    }
+
+    public String getCallbackToken() {
+        return callbackToken;
+    }
+
+    public void setCallbackToken(String callbackToken) {
+        this.callbackToken = callbackToken;
     }
 }

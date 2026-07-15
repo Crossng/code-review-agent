@@ -35,6 +35,39 @@ Authorization: Bearer <jwt>
 }
 ```
 
+### Internal Agent Worker Callback
+
+Agent Worker 回写接口使用独立内部路径和专用 header，不使用用户 JWT：
+
+```text
+X-RepoPilot-Worker-Token: <worker-callback-token>
+```
+
+该 token 由后端 `REPOPILOT_AGENT_WORKER_CALLBACK_TOKEN` 配置。未配置 token 时，内部回写接口返回 `AGENT_WORKER_CALLBACK_DISABLED`；token 缺失或不匹配时返回 `AGENT_WORKER_CALLBACK_FORBIDDEN`。
+
+| 方法 | 路径 | 功能 |
+| --- | --- | --- |
+| `POST` | `/internal/agent-worker/runs/{runId}/steps` | Agent Worker 回写 run step 证据 |
+
+请求：
+
+```json
+{
+  "step_name": "plan_task",
+  "status": "SUCCESS",
+  "input": {
+    "taskId": 1001,
+    "source": "agent-worker"
+  },
+  "output": {
+    "summary": "Worker generated a plan"
+  },
+  "error_message": null
+}
+```
+
+响应返回标准 `AgentStepResponse`，其中 `inputJson` / `outputJson` 为落库后的 JSON 字符串。后端保存 step 后会发布 `STEP_RECORDED` 事件，前端已订阅的任务 SSE 可收到回写结果。
+
 ## 2. Auth API
 
 | 方法 | 路径 | 功能 |
