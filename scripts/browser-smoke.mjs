@@ -535,7 +535,7 @@ try {
   await taskDetail.getByText("review_patch").first().waitFor();
   const prPanel = taskDetail.locator("#pr");
   await prPanel.getByText("发布前置检查").waitFor();
-  await prPanel.getByText("Approve the tested patch before preparing a pull request.").first().waitFor();
+  await prPanel.getByText("准备 PR 前需要先审批已测试通过的补丁。").first().waitFor();
   await assertTaskStreamSnapshot(page);
   await taskDetail.getByRole("button", { name: "重新生成" }).waitFor();
   await page.waitForFunction(() => {
@@ -570,14 +570,14 @@ try {
   await clickAndWaitForIdle(page, taskDetail.getByRole("button", { name: "通过审批" }));
   await waitForBadge(taskDetail, "CREATING_PULL_REQUEST");
   await taskDetail.getByText("APPROVE").first().waitFor();
-  await prPanel.getByText("Local branch and commit can be prepared.").waitFor();
-  await prPanel.getByText("Remote GitHub publishing is disabled; RepoPilot will stop at DRAFT_READY.").waitFor();
+  await prPanel.getByText("本地分支和提交可以准备。").waitFor();
+  await prPanel.getByText("远端 GitHub 发布已关闭，RepoPilot 会停在 DRAFT_READY。").waitFor();
   await clickAndWaitForIdle(page, taskDetail.getByRole("button", { name: "准备 PR" }));
   await waitForBadge(taskDetail, "DRAFT_READY");
   await taskDetail.getByText("repopilot/task-").first().waitFor();
   await taskDetail.getByText("未打开").first().waitFor();
-  await taskDetail.getByText("Prepared by RepoPilot.").first().waitFor();
-  await prPanel.getByText("Pull request record has already been prepared.").waitFor();
+  await taskDetail.getByText("由 RepoPilot 准备。").first().waitFor();
+  await prPanel.getByText("PR 记录已经准备完成。").waitFor();
 
   await taskForm.getByLabel("标题").fill("Fix User id validation bug");
   await taskForm

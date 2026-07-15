@@ -51,7 +51,7 @@ public class ApprovalService {
         projectWriteGuardService.ensureProjectWriteSlot(
                 context.task(),
                 Set.of(AgentTaskStatus.WAITING_HUMAN_APPROVAL),
-                "Task is not waiting for human approval"
+                "任务不在等待人工审批状态"
         );
         context.patch().approve();
         context.task().setStatus(AgentTaskStatus.CREATING_PULL_REQUEST);
@@ -91,35 +91,35 @@ public class ApprovalService {
         AgentTask task = task(taskId);
         ensureOwner(task, userId);
         PatchRecord patch = patchRecordRepository.findById(patchId)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "PATCH_NOT_FOUND", "Patch not found"));
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "PATCH_NOT_FOUND", "没有找到补丁"));
         if (!patch.getAgentTask().getId().equals(task.getId())) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "PATCH_TASK_MISMATCH", "Patch does not belong to task");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "PATCH_TASK_MISMATCH", "补丁不属于该任务");
         }
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "User not found"));
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "没有找到用户"));
         return new ApprovalContext(task, patch, user);
     }
 
     private AgentTask task(Long taskId) {
         return agentTaskRepository.findById(taskId)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "AGENT_TASK_NOT_FOUND", "Agent task not found"));
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "AGENT_TASK_NOT_FOUND", "没有找到 Agent 任务"));
     }
 
     private void ensureOwner(AgentTask task, Long userId) {
         if (!task.getUser().getId().equals(userId)) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "AGENT_TASK_FORBIDDEN", "Task does not belong to current user");
+            throw new ApiException(HttpStatus.FORBIDDEN, "AGENT_TASK_FORBIDDEN", "该任务不属于当前用户");
         }
     }
 
     private void ensureApprovable(PatchRecord patch) {
         if (patch.getStatus() != PatchStatus.GENERATED && patch.getStatus() != PatchStatus.APPLIED) {
-            throw new ApiException(HttpStatus.CONFLICT, "PATCH_INVALID_STATUS", "Only GENERATED or APPLIED patches can be approved or rejected");
+            throw new ApiException(HttpStatus.CONFLICT, "PATCH_INVALID_STATUS", "只有 GENERATED 或 APPLIED 状态的补丁可以审批或拒绝");
         }
     }
 
     private void ensureWaitingHumanApproval(AgentTask task) {
         if (task.getStatus() != AgentTaskStatus.WAITING_HUMAN_APPROVAL) {
-            throw new ApiException(HttpStatus.CONFLICT, "AGENT_INVALID_STATUS", "Task is not waiting for human approval");
+            throw new ApiException(HttpStatus.CONFLICT, "AGENT_INVALID_STATUS", "任务不在等待人工审批状态");
         }
     }
 

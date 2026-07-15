@@ -96,7 +96,7 @@ class PullRequestServiceTest {
                         "main",
                         "repopilot/task-20",
                         "abc123def456",
-                        "RepoPilot: test"
+                        "RepoPilot：test"
                 ));
         when(pullRequestRecordRepository.save(any(PullRequestRecord.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -121,12 +121,12 @@ class PullRequestServiceTest {
                 fixture.task(),
                 fixture.patch(),
                 com.repopilot.pullrequest.domain.PullRequestProvider.GITHUB,
-                "RepoPilot: test",
-                "Prepared by RepoPilot.",
+                "RepoPilot：test",
+                "由 RepoPilot 准备。",
                 "main",
                 "repopilot/task-20",
                 "abc123def456",
-                "RepoPilot: test",
+                "RepoPilot：test",
                 PullRequestStatus.DRAFT_READY
         );
         when(agentTaskRepository.findById(fixture.task().getId())).thenReturn(Optional.of(fixture.task()));
@@ -152,7 +152,7 @@ class PullRequestServiceTest {
                         "main",
                         "repopilot/task-20",
                         "abc123def456",
-                        "RepoPilot: test"
+                        "RepoPilot：test"
                 ));
         when(pullRequestRecordRepository.save(any(PullRequestRecord.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -161,7 +161,7 @@ class PullRequestServiceTest {
                 .thenThrow(new ApiException(
                         HttpStatus.CONFLICT,
                         "GITHUB_TOKEN_NOT_CONFIGURED",
-                        "GitHub publishing is enabled but no token is configured"
+                        "已启用 GitHub 发布，但尚未配置 token"
                 ));
 
         ApiException exception = assertThrows(
@@ -177,7 +177,7 @@ class PullRequestServiceTest {
         verify(pullRequestRecordRepository, org.mockito.Mockito.times(2)).save(captor.capture());
         PullRequestRecord failedRecord = captor.getAllValues().get(1);
         assertEquals(PullRequestStatus.FAILED, failedRecord.getStatus());
-        assertEquals("GitHub publishing is enabled but no token is configured", failedRecord.getErrorMessage());
+        assertEquals("已启用 GitHub 发布，但尚未配置 token", failedRecord.getErrorMessage());
     }
 
     @Test
@@ -191,7 +191,7 @@ class PullRequestServiceTest {
                         "main",
                         "repopilot/task-20",
                         "abc123def456",
-                        "RepoPilot: test"
+                        "RepoPilot：test"
                 ));
         when(pullRequestRecordRepository.save(any(PullRequestRecord.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -251,7 +251,7 @@ class PullRequestServiceTest {
         assertTrue(response.remotePublishingEnabled());
         assertTrue(response.remotePublishingWillRun());
         assertFalse(response.remoteReady());
-        assertTrue(response.blockers().contains("GitHub remote publishing is enabled for this repository, but no token is configured."));
+        assertTrue(response.blockers().contains("该仓库已启用远端 GitHub 发布，但尚未配置 token。"));
     }
 
     @Test

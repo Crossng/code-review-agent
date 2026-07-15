@@ -3040,7 +3040,7 @@ function PullRequestPanel({
     <section className="panel" id="pr">
       <div className="panelHeader">
         <div>
-          <p className="eyebrow">Pull Request</p>
+          <p className="eyebrow">拉取请求</p>
           <h2>PR 准备结果</h2>
         </div>
         {pullRequest ? <Badge value={pullRequest.status} /> : null}
@@ -3054,7 +3054,7 @@ function PullRequestPanel({
             <Meta label="PR" value={pullRequest.prNumber === null ? "未打开" : `#${pullRequest.prNumber}`} />
             <Meta label="打开时间" value={pullRequest.openedAt ? formatDate(pullRequest.openedAt) : "未打开"} />
           </div>
-          {pullRequest.url ? <a className="externalLink" href={pullRequest.url} target="_blank" rel="noreferrer">打开 Pull Request</a> : null}
+          {pullRequest.url ? <a className="externalLink" href={pullRequest.url} target="_blank" rel="noreferrer">打开 PR</a> : null}
           {pullRequest.errorMessage ? <div className="errorBox">{pullRequest.errorMessage}</div> : null}
           <pre className="logBlock">{pullRequest.body || "还没有 PR 正文记录。"}</pre>
         </>

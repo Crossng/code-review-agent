@@ -63,13 +63,13 @@ public class PullRequestService {
         ensureOwner(task, userId);
         if (task.getStatus() == AgentTaskStatus.DONE) {
             return pullRequestRecordRepository.findFirstByAgentTaskIdOrderByCreatedAtDesc(taskId)
-                    .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "AGENT_INVALID_STATUS", "Task is not ready to create a pull request"));
+                    .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "AGENT_INVALID_STATUS", "任务还不能准备 PR"));
         }
         ensurePrCreationState(task);
         projectWriteGuardService.ensureProjectWriteSlot(
                 task,
                 Set.of(AgentTaskStatus.CREATING_PULL_REQUEST, AgentTaskStatus.FAILED_PR_CREATION),
-                "Task is not ready to create pull request"
+                "任务还不能准备 PR"
         );
 
         PatchRecord patch = patchRecordRepository.findFirstByAgentTaskIdOrderByCreatedAtDesc(taskId)
@@ -87,7 +87,7 @@ public class PullRequestService {
         AgentTask task = task(taskId);
         ensureOwner(task, userId);
         return pullRequestRecordRepository.findFirstByAgentTaskIdOrderByCreatedAtDesc(taskId)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "PULL_REQUEST_NOT_FOUND", "Pull request record not found"));
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "PULL_REQUEST_NOT_FOUND", "没有找到 PR 记录"));
     }
 
     @Transactional(readOnly = true)
@@ -150,84 +150,84 @@ public class PullRequestService {
 
     private AgentTask task(Long taskId) {
         return agentTaskRepository.findById(taskId)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "AGENT_TASK_NOT_FOUND", "Agent task not found"));
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "AGENT_TASK_NOT_FOUND", "没有找到 Agent 任务"));
     }
 
     private void ensureOwner(AgentTask task, Long userId) {
         if (!task.getUser().getId().equals(userId)) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "AGENT_TASK_FORBIDDEN", "Task does not belong to current user");
+            throw new ApiException(HttpStatus.FORBIDDEN, "AGENT_TASK_FORBIDDEN", "该任务不属于当前用户");
         }
     }
 
     private void ensurePrCreationState(AgentTask task) {
         if (task.getStatus() == AgentTaskStatus.WAITING_HUMAN_APPROVAL) {
-            throw new ApiException(HttpStatus.CONFLICT, "PATCH_NOT_APPROVED", "Patch must be approved before preparing a pull request");
+            throw new ApiException(HttpStatus.CONFLICT, "PATCH_NOT_APPROVED", "准备 PR 前需要先审批补丁");
         }
         if (task.getStatus() != AgentTaskStatus.CREATING_PULL_REQUEST
                 && task.getStatus() != AgentTaskStatus.FAILED_PR_CREATION) {
-            throw new ApiException(HttpStatus.CONFLICT, "AGENT_INVALID_STATUS", "Task is not ready to create a pull request");
+            throw new ApiException(HttpStatus.CONFLICT, "AGENT_INVALID_STATUS", "任务还不能准备 PR");
         }
     }
 
     private PullRequestPreflightCheckResponse taskStatusCheck(AgentTask task, boolean taskReady, boolean alreadyPrepared) {
         if (taskReady) {
-            return check("TASK_STATUS", "Task state", "PASS", "Task is ready to prepare a pull request.");
+            return check("TASK_STATUS", "任务状态", "PASS", "任务已进入 PR 准备状态。");
         }
         if (alreadyPrepared) {
-            return check("TASK_STATUS", "Task state", "PASS", "Pull request record has already been prepared.");
+            return check("TASK_STATUS", "任务状态", "PASS", "PR 记录已经准备完成。");
         }
         if (task.getStatus() == AgentTaskStatus.WAITING_HUMAN_APPROVAL) {
-            return check("TASK_STATUS", "Task state", "BLOCKED", "Approve the tested patch before preparing a pull request.");
+            return check("TASK_STATUS", "任务状态", "BLOCKED", "准备 PR 前需要先审批已测试通过的补丁。");
         }
-        return check("TASK_STATUS", "Task state", "BLOCKED", "Task status " + task.getStatus() + " is not ready for pull request preparation.");
+        return check("TASK_STATUS", "任务状态", "BLOCKED", "当前任务状态为 " + task.getStatus() + "，还不能准备 PR。");
     }
 
     private PullRequestPreflightCheckResponse patchCheck(Optional<PatchRecord> latestPatch) {
         if (latestPatch.isEmpty()) {
-            return check("PATCH_APPROVED", "Patch approval", "PENDING", "No patch has been generated yet.");
+            return check("PATCH_APPROVED", "补丁审批", "PENDING", "还没有生成补丁。");
         }
         PatchRecord patch = latestPatch.get();
         if (patch.getStatus() == PatchStatus.APPROVED) {
-            return check("PATCH_APPROVED", "Patch approval", "PASS", "Latest patch is approved.");
+            return check("PATCH_APPROVED", "补丁审批", "PASS", "最新补丁已通过审批。");
         }
-        return check("PATCH_APPROVED", "Patch approval", "BLOCKED", "Latest patch status is " + patch.getStatus() + "; approval is required.");
+        return check("PATCH_APPROVED", "补丁审批", "BLOCKED", "最新补丁状态为 " + patch.getStatus() + "，需要先审批。");
     }
 
     private PullRequestPreflightCheckResponse testCheck(Optional<PatchRecord> latestPatch, Optional<TestRun> latestTestRun) {
         if (latestPatch.isEmpty()) {
-            return check("SANDBOX_TEST", "Sandbox test", "PENDING", "Sandbox test waits for a generated patch.");
+            return check("SANDBOX_TEST", "沙箱测试", "PENDING", "沙箱测试正在等待补丁生成。");
         }
         if (latestTestRun.isEmpty()) {
-            return check("SANDBOX_TEST", "Sandbox test", "PENDING", "Latest patch has no sandbox test run.");
+            return check("SANDBOX_TEST", "沙箱测试", "PENDING", "最新补丁还没有沙箱测试记录。");
         }
         TestRun testRun = latestTestRun.get();
         if (testRun.getStatus() == TestRunStatus.PASSED) {
-            return check("SANDBOX_TEST", "Sandbox test", "PASS", "Latest sandbox test passed.");
+            return check("SANDBOX_TEST", "沙箱测试", "PASS", "最新沙箱测试已通过。");
         }
-        return check("SANDBOX_TEST", "Sandbox test", "BLOCKED", "Latest sandbox test status is " + testRun.getStatus() + "; passing tests are required.");
+        return check("SANDBOX_TEST", "沙箱测试", "BLOCKED", "最新沙箱测试状态为 " + testRun.getStatus() + "，需要先通过测试。");
     }
 
     private PullRequestPreflightCheckResponse localDraftCheck(boolean localDraftReady, boolean alreadyPrepared) {
         if (alreadyPrepared) {
-            return check("LOCAL_DRAFT", "Local draft", "PASS", "Local branch and commit are already recorded.");
+            return check("LOCAL_DRAFT", "本地草稿", "PASS", "本地分支和提交已经记录。");
         }
         if (localDraftReady) {
-            return check("LOCAL_DRAFT", "Local draft", "PASS", "Local branch and commit can be prepared.");
+            return check("LOCAL_DRAFT", "本地草稿", "PASS", "本地分支和提交可以准备。");
         }
-        return check("LOCAL_DRAFT", "Local draft", "PENDING", "Local draft waits for task readiness, approval, and a passed sandbox test.");
+        return check("LOCAL_DRAFT", "本地草稿", "PENDING", "本地草稿正在等待任务就绪、补丁审批和沙箱测试通过。");
     }
 
     private PullRequestPreflightCheckResponse remoteGitHubCheck(boolean remotePublishingEnabled, boolean repositoryEligible, boolean tokenConfigured) {
         if (!remotePublishingEnabled) {
-            return check("REMOTE_GITHUB", "Remote GitHub", "WARN", "Remote GitHub publishing is disabled; RepoPilot will stop at DRAFT_READY.");
+            return check("REMOTE_GITHUB", "远端 GitHub", "WARN", "远端 GitHub 发布已关闭，RepoPilot 会停在 DRAFT_READY。");
         }
         if (!repositoryEligible) {
-            return check("REMOTE_GITHUB", "Remote GitHub", "WARN", "Project is not a github.com repository; remote PR creation will be skipped.");
+            return check("REMOTE_GITHUB", "远端 GitHub", "WARN", "项目不是 github.com 仓库，将跳过远端 PR 创建。");
         }
         if (!tokenConfigured) {
-            return check("REMOTE_GITHUB", "Remote GitHub", "BLOCKED", "GitHub remote publishing is enabled for this repository, but no token is configured.");
+            return check("REMOTE_GITHUB", "远端 GitHub", "BLOCKED", "该仓库已启用远端 GitHub 发布，但尚未配置 token。");
         }
-        return check("REMOTE_GITHUB", "Remote GitHub", "PASS", "Remote GitHub PR creation is configured.");
+        return check("REMOTE_GITHUB", "远端 GitHub", "PASS", "远端 GitHub PR 创建已配置。");
     }
 
     private PullRequestPreflightCheckResponse check(String code, String label, String status, String message) {
@@ -236,15 +236,15 @@ public class PullRequestService {
 
     private void ensureApproved(PatchRecord patch) {
         if (patch.getStatus() != PatchStatus.APPROVED) {
-            throw new ApiException(HttpStatus.CONFLICT, "PATCH_NOT_APPROVED", "Latest patch must be approved before preparing a pull request");
+            throw new ApiException(HttpStatus.CONFLICT, "PATCH_NOT_APPROVED", "准备 PR 前需要先审批最新补丁");
         }
     }
 
     private void ensureTestPassed(PatchRecord patch) {
         TestRun testRun = testRunRepository.findFirstByPatchIdOrderByCreatedAtDesc(patch.getId())
-                .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "PATCH_TEST_NOT_FOUND", "Patch must have a sandbox test run before preparing a pull request"));
+                .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "PATCH_TEST_NOT_FOUND", "准备 PR 前需要先有沙箱测试记录"));
         if (testRun.getStatus() != TestRunStatus.PASSED) {
-            throw new ApiException(HttpStatus.CONFLICT, "PATCH_TEST_NOT_PASSED", "Latest sandbox test run must pass before preparing a pull request");
+            throw new ApiException(HttpStatus.CONFLICT, "PATCH_TEST_NOT_PASSED", "准备 PR 前最新沙箱测试必须通过");
         }
     }
 
@@ -300,7 +300,7 @@ public class PullRequestService {
     }
 
     private String title(AgentTask task) {
-        String title = "RepoPilot: " + task.getTitle();
+        String title = "RepoPilot：" + task.getTitle();
         if (title.length() <= MAX_TITLE_LENGTH) {
             return title;
         }
@@ -309,22 +309,22 @@ public class PullRequestService {
 
     private String body(AgentTask task, PatchRecord patch, PullRequestGitService.MaterializedPullRequest materialized) {
         return """
-                Prepared by RepoPilot.
+                由 RepoPilot 准备。
 
-                Task:
+                任务：
                 %s
 
-                Patch:
-                - Patch ID: %d
-                - Base branch: %s
-                - Target branch: %s
-                - Status: %s
+                补丁：
+                - 补丁 ID：%d
+                - 基线分支：%s
+                - 目标分支：%s
+                - 状态：%s
 
-                Local Git:
-                - Commit: %s
+                本地 Git：
+                - Commit：%s
 
-                Notes:
-                GitHub API creation is not enabled in this local slice yet, so the branch and commit are prepared locally without an external PR URL.
+                说明：
+                当前本地模式未启用 GitHub API 创建，因此 RepoPilot 只准备本地分支和提交，不创建外部 PR URL。
                 """
                 .formatted(
                         task.getDescription(),

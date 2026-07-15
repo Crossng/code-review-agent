@@ -65,7 +65,7 @@ public class GitHubPullRequestService {
 
     public GitHubPullRequest publish(Project project, PullRequestRecord record) {
         GitHubRepository repository = repository(project)
-                .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "PROJECT_NOT_GITHUB_REPOSITORY", "Project repository is not hosted on github.com"));
+                .orElseThrow(() -> new ApiException(HttpStatus.CONFLICT, "PROJECT_NOT_GITHUB_REPOSITORY", "项目仓库不是 github.com 托管仓库"));
         ensureLocalGitReady(record);
         String authToken = token();
         pullRequestGitService.pushBranch(project, record.getTargetBranch(), authToken);
@@ -95,21 +95,21 @@ public class GitHubPullRequestService {
                 throw new ApiException(
                         HttpStatus.BAD_GATEWAY,
                         "GITHUB_PR_CREATE_FAILED",
-                        "GitHub returned HTTP " + response.statusCode() + ": " + excerpt(response.body())
+                        "GitHub 返回 HTTP " + response.statusCode() + "：" + excerpt(response.body())
                 );
             }
             JsonNode body = objectMapper.readTree(response.body());
             int number = body.path("number").asInt(0);
             String url = body.path("html_url").asText(null);
             if (number <= 0 || url == null || url.isBlank()) {
-                throw new ApiException(HttpStatus.BAD_GATEWAY, "GITHUB_PR_CREATE_FAILED", "GitHub response did not include pull request number or URL");
+                throw new ApiException(HttpStatus.BAD_GATEWAY, "GITHUB_PR_CREATE_FAILED", "GitHub 响应没有包含 PR 编号或 URL");
             }
             return new GitHubPullRequest(number, url);
         } catch (IOException exception) {
             throw new ApiException(HttpStatus.BAD_GATEWAY, "GITHUB_PR_CREATE_FAILED", exception.getMessage());
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
-            throw new ApiException(HttpStatus.BAD_GATEWAY, "GITHUB_PR_CREATE_FAILED", "GitHub request interrupted");
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "GITHUB_PR_CREATE_FAILED", "GitHub 请求被中断");
         }
     }
 
@@ -149,14 +149,14 @@ public class GitHubPullRequestService {
 
     private String token() {
         if (token == null || token.isBlank()) {
-            throw new ApiException(HttpStatus.CONFLICT, "GITHUB_TOKEN_NOT_CONFIGURED", "GitHub publishing is enabled but no token is configured");
+            throw new ApiException(HttpStatus.CONFLICT, "GITHUB_TOKEN_NOT_CONFIGURED", "已启用 GitHub 发布，但尚未配置 token");
         }
         return token.trim();
     }
 
     private void ensureLocalGitReady(PullRequestRecord record) {
         if (isBlank(record.getBaseBranch()) || isBlank(record.getTargetBranch()) || isBlank(record.getCommitSha())) {
-            throw new ApiException(HttpStatus.CONFLICT, "PULL_REQUEST_LOCAL_GIT_NOT_READY", "Pull request record does not have local branch and commit metadata");
+            throw new ApiException(HttpStatus.CONFLICT, "PULL_REQUEST_LOCAL_GIT_NOT_READY", "PR 记录缺少本地分支或提交元数据");
         }
     }
 

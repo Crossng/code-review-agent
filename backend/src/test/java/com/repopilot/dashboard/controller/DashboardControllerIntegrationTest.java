@@ -320,12 +320,12 @@ class DashboardControllerIntegrationTest {
                 task,
                 patch,
                 PullRequestProvider.GITHUB,
-                "RepoPilot: dashboard fixture",
-                "Prepared by RepoPilot.",
+                "RepoPilot：dashboard fixture",
+                "由 RepoPilot 准备。",
                 "main",
                 "repopilot/dashboard-" + task.getId(),
                 "abc123",
-                "RepoPilot: dashboard fixture",
+                "RepoPilot：dashboard fixture",
                 status
         ));
     }

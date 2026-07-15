@@ -121,7 +121,7 @@ class PullRequestApprovalIntegrationTest {
                 .andExpect(jsonPath("$.data.taskStatus").value("WAITING_HUMAN_APPROVAL"))
                 .andExpect(jsonPath("$.data.latestPatchStatus").value("APPLIED"))
                 .andExpect(jsonPath("$.data.latestTestStatus").value("PASSED"))
-                .andExpect(jsonPath("$.data.blockers[0]").value("Approve the tested patch before preparing a pull request."));
+                .andExpect(jsonPath("$.data.blockers[0]").value("准备 PR 前需要先审批已测试通过的补丁。"));
 
         mockMvc.perform(post("/api/tasks/{taskId}/pull-request", fixture.task().getId())
                         .header(AUTHORIZATION, bearer(token)))
@@ -133,7 +133,7 @@ class PullRequestApprovalIntegrationTest {
                         .contentType(APPLICATION_JSON)
                         .content(json(Map.of(
                                 "patchId", fixture.patch().getId(),
-                                "comment", "Tests passed, approve PR preparation."
+                                "comment", "测试已通过，同意准备 PR。"
                         ))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
@@ -157,7 +157,7 @@ class PullRequestApprovalIntegrationTest {
         mockMvc.perform(get("/api/tasks/{taskId}/approval", fixture.task().getId())
                         .header(AUTHORIZATION, bearer(token)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[0].comment").value("Tests passed, approve PR preparation."));
+                .andExpect(jsonPath("$.data[0].comment").value("测试已通过，同意准备 PR。"));
 
         MvcResult prepareResult = mockMvc.perform(post("/api/tasks/{taskId}/pull-request", fixture.task().getId())
                         .header(AUTHORIZATION, bearer(token)))
