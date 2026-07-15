@@ -75,6 +75,7 @@ Agent 执行页必须特别处理长任务状态：
 - 任务存在 current run 时，任务详情应通过 `GET /api/agent/tasks/{id}/run-report` 加载可复制/下载的 Markdown run report；没有 current run 时按钮禁用并保持空状态。任务详情还应通过 `GET /api/agent/tasks/{id}/run-report/snapshots?limit=5` 展示最近运行报告快照，可通过 `POST /api/agent/tasks/{id}/run-report/snapshots` 保存当前报告，并从历史快照复制或下载保存时的 Markdown。
 - 任务详情主链路的导航、状态卡、步骤时间线、Agent 证据、模型/工具审计、补丁、沙箱测试、人工审批和 PR 前置检查使用中文产品文案；后端枚举、step name、recipe id 和导出的 Markdown 报告标题保留工程原文，便于排查和对接 API。
 - 工作台概览、Agent 运行表现、最近任务活动、Coder 配置、GitHub 发布配置和沙箱运行时配置使用中文产品文案；配置枚举、provider、mode 和 readiness badge 保留工程原文，便于和环境变量、后端响应对应。
+- 登录、项目接入、项目筛选、任务创建、任务筛选、仓库洞察、Controller API 风险视图、接口文档快照和代码搜索使用中文产品文案；仓库名、Java 符号、HTTP 方法、风险码、后端状态枚举和后端生成的 Markdown 内容保留工程原文，便于和代码及 API 响应一一对应。
 
 ## 5. 核心组件
 
@@ -84,13 +85,13 @@ Agent 执行页必须特别处理长任务状态：
 | `DashboardRunMetricsPanel` | 用中文指标卡展示当前用户最近 7/14/30 天 Agent run 总数、成功率、平均耗时、运行中数量和每日趋势，窗口选择通过 `runMetricsDays` URL 参数恢复 |
 | `DashboardActivityPanel` | 用中文标题和空状态展示当前用户最近 10/25/50 条 Agent step 活动，包含项目、任务、step、状态和发生时间，数量选择通过 `activityLimit` URL 参数恢复 |
 | `ProjectStatusBadge` | 展示项目 clone/index 状态 |
-| `ProjectFilterForm` | 按项目状态和 repo 名称/URL 关键词筛选 `GET /api/projects` 结果，支持一键重置和复制当前项目视图链接 |
-| `FileTree` | 展示仓库文件树 |
-| `SymbolSummary` | 展示 Controller、Service、Mapper、Entity 数量 |
-| `ControllerApiList` | 展示 Spring Controller 路由、HTTP 方法、参数来源、Service 与 Mapper/Repository 调用、风险分、鉴权/校验/参数边界风险提示、字段/参数级风险细节、风险等级计数、风险等级/风险码筛选、可复制风险视图/单路由链接、可复制/下载/保存由后端生成的当前可见 API Markdown 文档、最近 API 文档快照及快照复制/下载/删除/清空操作、请求/响应类型和源码位置 |
+| `ProjectFilterForm` | 用中文标签按项目状态和 repo 名称/URL 关键词筛选 `GET /api/projects` 结果，支持一键重置、显示项目数量和复制当前项目视图链接 |
+| `FileTree` | 用中文标题、空状态和目录/文件说明展示仓库文件树 |
+| `SymbolSummary` | 用中文标题、空状态和索引数量说明展示 Controller、Service、Mapper、Entity 数量 |
+| `ControllerApiList` | 用中文标签展示 Spring Controller 路由、HTTP 方法、参数来源、Service 与 Mapper/Repository 调用、风险分、鉴权/校验/参数边界风险提示、字段/参数级风险细节、风险等级计数、风险等级/风险码筛选、可复制风险视图/单路由链接、可复制/下载/保存由后端生成的当前可见 API Markdown 文档、最近 API 文档快照及快照复制/下载/删除/清空操作、请求/响应类型和源码位置；Markdown 内容仍由后端生成并保留工程原文 |
 | `AgentStepTimeline` | 以中文标题展示 Agent 状态机步骤和运行中状态 |
 | `AgentEvidencePanel` | 从当前任务 step JSON 中提取 planner、retriever、Coder、sandbox、review 和 approval checkpoint 证据，用中文证据卡展示规划、检索、补丁、安全门、测试、审查和人工审批检查点，并支持复制、下载或保存后端生成的 Markdown run report；最近运行报告快照支持复制和下载 |
-| `TaskFilterForm` | 按项目、状态、类型和关键词筛选 `GET /api/agent/tasks` 结果，支持一键重置和复制当前任务视图链接 |
+| `TaskFilterForm` | 用中文标签按项目、状态、类型和关键词筛选 `GET /api/agent/tasks` 结果，支持一键重置、显示任务数量和复制当前任务视图链接 |
 | `ToolCallTable` | 展示工具调用审计 |
 | `DiffViewer` | 展示 unified diff、文件级摘要和 patch generation mode |
 | `TestLogPanel` | 展示 Maven 测试日志 |
@@ -110,12 +111,12 @@ Agent 执行页必须特别处理长任务状态：
 - patch 未审批时创建 PR 按钮禁用。
 - PR 准备按钮应以 `GET /api/tasks/{id}/pull-request/preflight` 返回的 `canPrepare` 为准；PR 面板展示 `PASS`、`PENDING`、`BLOCKED`、`WARN` 检查项，以及未审批、测试未过、GitHub token 缺失等 blocker。
 - 任务运行中禁止重复启动同一任务。
-- 项目列表筛选应通过 `GET /api/projects` 的 `status` 和 `query` 查询参数执行；筛选表单点击 Apply 后请求后端，Reset 清空筛选并重新加载项目行。控制台应保留完整项目列表用于创建任务、任务筛选和任务详情项目名展示，避免项目列表筛选影响任务操作上下文。
+- 项目列表筛选应通过 `GET /api/projects` 的 `status` 和 `query` 查询参数执行；筛选表单点击 `应用筛选` 后请求后端，`重置` 清空筛选并重新加载项目行。控制台应保留完整项目列表用于创建任务、任务筛选和任务详情项目名展示，避免项目列表筛选影响任务操作上下文。
 - 项目视图应通过应用 URL query 恢复当前项目列表筛选和洞察项目：`projectStatus` 对应项目 API 的 `status`，`projectQuery` 对应项目 API 的 `query`，`projectId` 对应 Repository insight 当前项目。URL 同步应保留 Controller API 风险筛选参数和 hash。
-- 项目筛选表单应提供 `Copy project view link` 操作，将当前项目筛选和 `projectId` 写入剪贴板，并通过 `aria-live` 状态提示复制成功或不可用。
-- 任务列表筛选应通过 `GET /api/agent/tasks` 的 `projectId`、`status`、`taskType` 和 `query` 查询参数执行；筛选表单点击 Apply 后请求后端，Reset 清空筛选并重新加载任务。运行中任务的轮询和 SSE 刷新应继续使用当前筛选条件。
+- 项目筛选表单应提供 `复制项目视图链接` 操作，将当前项目筛选和 `projectId` 写入剪贴板，并通过 `aria-live` 状态提示复制成功或不可用。
+- 任务列表筛选应通过 `GET /api/agent/tasks` 的 `projectId`、`status`、`taskType` 和 `query` 查询参数执行；筛选表单点击 `应用筛选` 后请求后端，`重置` 清空筛选并重新加载任务。运行中任务的轮询和 SSE 刷新应继续使用当前筛选条件。
 - 任务视图应通过应用 URL query 恢复当前任务筛选和任务详情：`taskProjectId` 对应任务 API 的 `projectId`，`taskStatus` 对应 `status`，`taskType` 对应 `taskType`，`taskQuery` 对应 `query`，`taskId` 对应当前任务详情。URL 同步应保留项目视图、Controller API 风险筛选参数和 hash。
-- 任务筛选表单应提供 `Copy task view link` 操作，将当前任务筛选和 `taskId` 写入剪贴板，并通过 `aria-live` 状态提示复制成功或不可用。
+- 任务筛选表单应提供 `复制任务视图链接` 操作，将当前任务筛选和 `taskId` 写入剪贴板，并通过 `aria-live` 状态提示复制成功或不可用。
 - 任务运行中展示实时 stream 状态；断线后保留轮询刷新。
 - Reject 必须填写原因。
 - Controller API 风险筛选应支持按风险等级和风险码组合过滤，筛选变化应触发后端 `riskLevel`/`riskCode` 查询参数，基于 API `filteredCount` 展示过滤后的路由数量，通过 URL query 恢复筛选状态，基于 API `riskSummary` 展示 HIGH/MEDIUM/LOW/NONE 风险等级计数，基于 API `riskCodes` 展示全量风险码选项，点击计数可快速筛选对应等级，并允许复制当前风险视图链接、单条 Controller API 路由链接，或复制/下载/保存当前可见 API 的 Markdown 文档。Markdown 文档应由 `GET /api/projects/{id}/controller-apis/docs?riskLevel=...&riskCode=...&limit=...` 生成，包含项目名、当前筛选、HTTP 方法/路径、Controller 方法、参数、request/response、调用链、风险提示和源码位置；下载文件名应包含 `controller-api-docs` 且使用 `.md` 后缀；保存快照应调用 `POST /api/projects/{id}/controller-apis/docs/snapshots?riskLevel=...&riskCode=...&limit=...`，项目洞察加载时应通过 `GET /api/projects/{id}/controller-apis/docs/snapshots?limit=5` 展示最近快照摘要；复制或下载历史快照应先读取 `GET /api/projects/{id}/controller-apis/docs/snapshots/{snapshotId}`，确保使用保存时的 Markdown 内容而不是当前重新生成内容；删除历史快照应调用 `DELETE /api/projects/{id}/controller-apis/docs/snapshots/{snapshotId}` 并从最近快照列表即时移除；清空历史快照应调用 `DELETE /api/projects/{id}/controller-apis/docs/snapshots`，展示删除数量并清空最近快照列表。

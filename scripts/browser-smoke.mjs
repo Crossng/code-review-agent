@@ -28,11 +28,11 @@ page.setDefaultTimeout(240_000);
 try {
   await page.goto(frontendUrl, { waitUntil: "domcontentloaded" });
 
-  const registerForm = page.locator("form").filter({ hasText: "Create a local account" });
-  await registerForm.getByLabel("Display name").fill(displayName);
-  await registerForm.getByLabel("Email").fill(email);
-  await registerForm.getByLabel("Password").fill(password);
-  await registerForm.getByRole("button", { name: "Register" }).click();
+  const registerForm = page.locator("form").filter({ hasText: "创建本地账号" });
+  await registerForm.getByLabel("显示名称").fill(displayName);
+  await registerForm.getByLabel("邮箱").fill(email);
+  await registerForm.getByLabel("密码").fill(password);
+  await registerForm.getByRole("button", { name: "注册" }).click();
   await page.getByRole("button", { name: "退出登录" }).waitFor();
   const overview = page.locator(".dashboardSummaryPanel");
   await overview.getByText("工作台概览").waitFor();
@@ -111,22 +111,22 @@ try {
   await sandboxSettings.getByText("沙箱就绪检查").waitFor();
   await sandboxSettings.getByText("Maven 缓存路径：").waitFor();
 
-  const projectForm = page.locator("form").filter({ hasText: "Add project" });
-  await projectForm.getByLabel("Repository URL").fill(repoUrl);
-  await projectForm.getByLabel("Default branch").fill("main");
-  await projectForm.getByRole("button", { name: "Create project" }).click();
+  const projectForm = page.locator("form").filter({ hasText: "添加项目" });
+  await projectForm.getByLabel("仓库地址").fill(repoUrl);
+  await projectForm.getByLabel("默认分支").fill("main");
+  await projectForm.getByRole("button", { name: "创建项目" }).click();
   await page.locator(".projectRow").filter({ hasText: "CREATED" }).waitFor();
-  await page.getByRole("button", { name: "Clone" }).first().waitFor();
+  await page.getByRole("button", { name: "克隆" }).first().waitFor();
 
-  await clickAndWaitForIdle(page, page.getByRole("button", { name: "Clone" }).first());
+  await clickAndWaitForIdle(page, page.getByRole("button", { name: "克隆" }).first());
   await page.locator(".projectRow").filter({ hasText: "READY" }).waitFor();
 
-  const projectFilters = page.getByLabel("Project filters");
-  await projectFilters.getByLabel("Search projects").fill("demo-spring-repo");
-  await clickAndWaitForIdle(page, projectFilters.getByRole("button", { name: "Apply filters" }));
+  const projectFilters = page.getByLabel("项目筛选");
+  await projectFilters.getByLabel("搜索项目").fill("demo-spring-repo");
+  await clickAndWaitForIdle(page, projectFilters.getByRole("button", { name: "应用筛选" }));
   await page.locator(".projectRow").filter({ hasText: "READY" }).waitFor();
-  await projectFilters.getByLabel("Project status filter").selectOption("READY");
-  await clickAndWaitForIdle(page, projectFilters.getByRole("button", { name: "Apply filters" }));
+  await projectFilters.getByLabel("项目状态筛选").selectOption("READY");
+  await clickAndWaitForIdle(page, projectFilters.getByRole("button", { name: "应用筛选" }));
   await page.locator(".projectRow").filter({ hasText: "READY" }).waitFor();
   await page.waitForFunction(() => {
     const params = new URLSearchParams(window.location.search);
@@ -139,20 +139,20 @@ try {
   await reloadFilteredProjects;
   await page.locator(".projectRow").filter({ hasText: "READY" }).waitFor();
   await page.waitForFunction(() => {
-    const status = document.querySelector('[aria-label="Project status filter"]');
+    const status = document.querySelector('[aria-label="项目状态筛选"]');
     return status?.value === "READY";
   });
   const restoredProjectId = await page.evaluate(() => new URLSearchParams(window.location.search).get("projectId"));
   await page.waitForFunction((projectId) => {
-    const insightProject = document.querySelector('[aria-label="Insight project"]');
+    const insightProject = document.querySelector('[aria-label="洞察项目"]');
     return projectId !== null && insightProject?.value === projectId;
   }, restoredProjectId);
-  const restoredProjectQuery = await projectFilters.getByLabel("Search projects").inputValue();
+  const restoredProjectQuery = await projectFilters.getByLabel("搜索项目").inputValue();
   if (restoredProjectQuery !== "demo-spring-repo") {
     throw new Error(`Expected restored project query demo-spring-repo, got ${restoredProjectQuery}`);
   }
-  await projectFilters.getByRole("button", { name: "Copy project view link" }).click();
-  await projectFilters.getByText("Project link copied").waitFor();
+  await projectFilters.getByRole("button", { name: "复制项目视图链接" }).click();
+  await projectFilters.getByText("项目链接已复制").waitFor();
   await page.waitForFunction(() =>
     navigator.clipboard.readText().then((text) => {
       if (!text) {
@@ -164,42 +164,42 @@ try {
         && url.searchParams.has("projectId");
     }).catch(() => false)
   );
-  await clickAndWaitForIdle(page, projectFilters.getByRole("button", { name: "Reset" }));
+  await clickAndWaitForIdle(page, projectFilters.getByRole("button", { name: "重置" }));
   await page.locator(".projectRow").filter({ hasText: "READY" }).waitFor();
   await page.waitForFunction(() => {
     const params = new URLSearchParams(window.location.search);
     return !params.has("projectStatus") && !params.has("projectQuery");
   });
 
-  await clickAndWaitForIdle(page, page.getByRole("button", { name: "Index" }).first());
+  await clickAndWaitForIdle(page, page.getByRole("button", { name: "索引" }).first());
   await expectDashboardMetric(page, overview, "项目", "1/1 就绪");
-  await clickAndWaitForIdle(page, page.getByRole("button", { name: "Refresh map" }));
+  await clickAndWaitForIdle(page, page.getByRole("button", { name: "刷新地图" }));
 
   const insight = page.locator(".projectInsightPanel");
   await insight.getByText("SERVICE 1").waitFor();
   await insight.getByText("src/main/java/com/example/demo/user/UserService.java").first().waitFor();
   const mediumApiResponse = waitForControllerApiQuery(page, { riskLevel: "MEDIUM" });
-  await insight.getByLabel("Controller API risk summary").getByRole("button", { name: /MEDIUM/ }).click();
+  await insight.getByLabel("Controller 接口风险概览").getByRole("button", { name: /MEDIUM/ }).click();
   await mediumApiResponse;
   await page.waitForFunction(() => {
-    const riskLevel = document.querySelector('[aria-label="Risk level"]');
+    const riskLevel = document.querySelector('[aria-label="风险等级"]');
     return riskLevel?.value === "MEDIUM";
   });
-  await insight.getByLabel("Risk level").selectOption("MEDIUM");
+  await insight.getByLabel("风险等级").selectOption("MEDIUM");
   const filteredApiResponse = waitForControllerApiQuery(page, {
     riskLevel: "MEDIUM",
     riskCode: "NO_SECURITY_ANNOTATION"
   });
-  await insight.getByLabel("Risk code").selectOption("NO_SECURITY_ANNOTATION");
+  await insight.getByLabel("风险码").selectOption("NO_SECURITY_ANNOTATION");
   await filteredApiResponse;
-  await insight.getByText("2 of 2 routes").waitFor();
+  await insight.getByText("2 / 2 个接口").waitFor();
   await page.waitForFunction(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get("controllerRiskLevel") === "MEDIUM"
       && params.get("controllerRiskCode") === "NO_SECURITY_ANNOTATION";
   });
-  await insight.getByRole("button", { name: "Copy risk view link" }).click();
-  await insight.getByText("Link copied").waitFor();
+  await insight.getByRole("button", { name: "复制风险视图链接" }).click();
+  await insight.getByText("链接已复制").waitFor();
   await page.waitForFunction(() =>
     navigator.clipboard.readText().then((text) => {
       if (!text) {
@@ -216,14 +216,14 @@ try {
   });
   await page.reload({ waitUntil: "domcontentloaded" });
   await reloadFilteredApiResponse;
-  await insight.getByText("2 of 2 routes").waitFor();
+  await insight.getByText("2 / 2 个接口").waitFor();
   await page.waitForFunction(() => {
-    const riskLevel = document.querySelector('[aria-label="Risk level"]');
-    const riskCode = document.querySelector('[aria-label="Risk code"]');
+    const riskLevel = document.querySelector('[aria-label="风险等级"]');
+    const riskCode = document.querySelector('[aria-label="风险码"]');
     return riskLevel?.value === "MEDIUM" && riskCode?.value === "NO_SECURITY_ANNOTATION";
   });
-  await insight.getByRole("button", { name: "Copy route link" }).first().click();
-  await insight.getByText("Route link copied").waitFor();
+  await insight.getByRole("button", { name: "复制路由链接" }).first().click();
+  await insight.getByText("路由链接已复制").waitFor();
   await page.waitForFunction(() =>
     navigator.clipboard.readText().then((text) => {
       if (!text) {
@@ -240,9 +240,9 @@ try {
     riskCode: "NO_SECURITY_ANNOTATION",
     limit: "2"
   });
-  await insight.getByRole("button", { name: "Copy API docs" }).click();
+  await insight.getByRole("button", { name: "复制接口文档" }).click();
   await controllerApiDocsResponse;
-  await insight.getByText("API docs copied").waitFor();
+  await insight.getByText("接口文档已复制").waitFor();
   await page.waitForFunction(() =>
     navigator.clipboard.readText().then((text) =>
       text.includes("# Controller API docs:")
@@ -258,10 +258,10 @@ try {
     limit: "2"
   });
   const apiDocsDownloadPromise = page.waitForEvent("download");
-  await insight.getByRole("button", { name: "Download API docs" }).click();
+  await insight.getByRole("button", { name: "下载接口文档" }).click();
   await controllerApiDocsDownloadResponse;
   const apiDocsDownload = await apiDocsDownloadPromise;
-  await insight.getByText("API docs downloaded").waitFor();
+  await insight.getByText("接口文档已下载").waitFor();
   const apiDocsFilename = apiDocsDownload.suggestedFilename();
   if (!apiDocsFilename.endsWith(".md") || !apiDocsFilename.includes("controller-api-docs")) {
     throw new Error(`Expected controller API docs markdown filename, got ${apiDocsFilename}`);
@@ -283,22 +283,22 @@ try {
     riskCode: "NO_SECURITY_ANNOTATION",
     limit: "2"
   });
-  await insight.getByRole("button", { name: "Save API docs snapshot" }).click();
+  await insight.getByRole("button", { name: "保存接口文档快照" }).click();
   const snapshotResponse = await controllerApiDocsSnapshotResponse;
   const snapshotPayload = await snapshotResponse.json();
   const snapshotId = snapshotPayload.data.id;
   if (!Number.isInteger(snapshotId) || snapshotId <= 0) {
     throw new Error(`Expected saved Controller API docs snapshot id, got ${snapshotId}`);
   }
-  await insight.getByText(`API docs snapshot #${snapshotId} saved`).waitFor();
-  const apiDocSnapshots = insight.getByLabel("API doc snapshots");
-  await apiDocSnapshots.getByText(`Snapshot #${snapshotId}`).waitFor();
-  await apiDocSnapshots.getByText("2 of 2 routes").waitFor();
-  await apiDocSnapshots.getByText("Risk MEDIUM / NO_SECURITY_ANNOTATION").waitFor();
+  await insight.getByText(`接口文档快照 #${snapshotId} 已保存`).waitFor();
+  const apiDocSnapshots = insight.getByLabel("接口文档快照");
+  await apiDocSnapshots.getByText(`快照 #${snapshotId}`).waitFor();
+  await apiDocSnapshots.getByText("2 / 2 个接口").waitFor();
+  await apiDocSnapshots.getByText("风险 MEDIUM / NO_SECURITY_ANNOTATION").waitFor();
   const snapshotCopyResponse = waitForControllerApiDocsSnapshotDetail(page, snapshotId);
-  await apiDocSnapshots.getByRole("button", { name: "Copy snapshot" }).click();
+  await apiDocSnapshots.getByRole("button", { name: "复制快照" }).click();
   await snapshotCopyResponse;
-  await apiDocSnapshots.getByText(`Snapshot #${snapshotId} copied`).waitFor();
+  await apiDocSnapshots.getByText(`快照 #${snapshotId} 已复制`).waitFor();
   await page.waitForFunction(() =>
     navigator.clipboard.readText().then((text) =>
       text.includes("# Controller API docs:")
@@ -308,10 +308,10 @@ try {
   );
   const snapshotDownloadResponse = waitForControllerApiDocsSnapshotDetail(page, snapshotId);
   const snapshotDownloadPromise = page.waitForEvent("download");
-  await apiDocSnapshots.getByRole("button", { name: "Download snapshot" }).click();
+  await apiDocSnapshots.getByRole("button", { name: "下载快照" }).click();
   await snapshotDownloadResponse;
   const snapshotDownload = await snapshotDownloadPromise;
-  await apiDocSnapshots.getByText(`Snapshot #${snapshotId} downloaded`).waitFor();
+  await apiDocSnapshots.getByText(`快照 #${snapshotId} 已下载`).waitFor();
   const snapshotFilename = snapshotDownload.suggestedFilename();
   if (!snapshotFilename.endsWith(".md") || !snapshotFilename.includes("controller-api-docs")) {
     throw new Error(`Expected saved snapshot markdown filename, got ${snapshotFilename}`);
@@ -329,50 +329,50 @@ try {
     throw new Error("Downloaded Controller API docs snapshot did not contain expected Markdown content.");
   }
   const snapshotDeleteResponse = waitForControllerApiDocsSnapshotDelete(page, snapshotId);
-  await apiDocSnapshots.getByRole("button", { name: "Delete snapshot" }).click();
+  await apiDocSnapshots.getByRole("button", { name: "删除快照" }).click();
   await snapshotDeleteResponse;
-  await apiDocSnapshots.getByText(`Snapshot #${snapshotId} deleted`).waitFor();
-  await apiDocSnapshots.getByText("No API doc snapshots saved yet.").waitFor();
+  await apiDocSnapshots.getByText(`快照 #${snapshotId} 已删除`).waitFor();
+  await apiDocSnapshots.getByText("还没有保存接口文档快照。").waitFor();
   const firstClearSnapshotResponse = waitForControllerApiDocsSnapshotCreate(page, {
     riskLevel: "MEDIUM",
     riskCode: "NO_SECURITY_ANNOTATION",
     limit: "2"
   });
-  await insight.getByRole("button", { name: "Save API docs snapshot" }).click();
+  await insight.getByRole("button", { name: "保存接口文档快照" }).click();
   const firstClearSnapshotPayload = await (await firstClearSnapshotResponse).json();
   const firstClearSnapshotId = firstClearSnapshotPayload.data.id;
-  await apiDocSnapshots.getByText(`Snapshot #${firstClearSnapshotId}`).waitFor();
+  await apiDocSnapshots.getByText(`快照 #${firstClearSnapshotId}`).waitFor();
   const secondClearSnapshotResponse = waitForControllerApiDocsSnapshotCreate(page, {
     riskLevel: "MEDIUM",
     riskCode: "NO_SECURITY_ANNOTATION",
     limit: "2"
   });
-  await insight.getByRole("button", { name: "Save API docs snapshot" }).click();
+  await insight.getByRole("button", { name: "保存接口文档快照" }).click();
   const secondClearSnapshotPayload = await (await secondClearSnapshotResponse).json();
   const secondClearSnapshotId = secondClearSnapshotPayload.data.id;
   if (secondClearSnapshotId === firstClearSnapshotId) {
     throw new Error("Expected a distinct second Controller API docs snapshot id.");
   }
-  await apiDocSnapshots.getByText(`Snapshot #${secondClearSnapshotId}`).waitFor();
+  await apiDocSnapshots.getByText(`快照 #${secondClearSnapshotId}`).waitFor();
   const snapshotClearResponse = waitForControllerApiDocsSnapshotClear(page);
-  await apiDocSnapshots.getByRole("button", { name: "Clear snapshots" }).click();
+  await apiDocSnapshots.getByRole("button", { name: "清空快照" }).click();
   const snapshotClearPayload = await (await snapshotClearResponse).json();
   if (snapshotClearPayload.data.deletedCount !== 2) {
     throw new Error(`Expected clearing two Controller API docs snapshots, got ${snapshotClearPayload.data.deletedCount}`);
   }
-  await apiDocSnapshots.getByText("Cleared 2 snapshots").waitFor();
-  await apiDocSnapshots.getByText("No API doc snapshots saved yet.").waitFor();
+  await apiDocSnapshots.getByText("已清空 2 份快照").waitFor();
+  await apiDocSnapshots.getByText("还没有保存接口文档快照。").waitFor();
 
-  await insight.getByLabel("Code search").fill("UserService");
-  await clickAndWaitForIdle(page, insight.getByRole("button", { name: "Search" }));
+  await insight.getByLabel("代码搜索").fill("UserService");
+  await clickAndWaitForIdle(page, insight.getByRole("button", { name: "搜索" }));
   await insight.getByText("class UserService").first().waitFor();
 
-  const taskForm = page.locator("form").filter({ hasText: "Create task" });
-  await clickAndWaitForIdle(page, taskForm.getByRole("button", { name: "Create task" }));
+  const taskForm = page.locator("form").filter({ hasText: "创建任务" });
+  await clickAndWaitForIdle(page, taskForm.getByRole("button", { name: "创建任务" }));
   await page.locator(".taskListItem").filter({ hasText: "Add User pagination API" }).waitFor();
-  const taskFilters = page.getByLabel("Task filters");
-  await taskFilters.getByLabel("Search tasks").fill("pagination");
-  await clickAndWaitForIdle(page, taskFilters.getByRole("button", { name: "Apply filters" }));
+  const taskFilters = page.getByLabel("任务筛选");
+  await taskFilters.getByLabel("搜索任务").fill("pagination");
+  await clickAndWaitForIdle(page, taskFilters.getByRole("button", { name: "应用筛选" }));
   await page.locator(".taskListItem").filter({ hasText: "Add User pagination API" }).waitFor();
   await page.waitForFunction(() => {
     const params = new URLSearchParams(window.location.search);
@@ -382,7 +382,7 @@ try {
   await page.reload({ waitUntil: "domcontentloaded" });
   await reloadFilteredTasks;
   await page.locator(".taskListItem").filter({ hasText: "Add User pagination API" }).waitFor();
-  const restoredTaskQuery = await taskFilters.getByLabel("Search tasks").inputValue();
+  const restoredTaskQuery = await taskFilters.getByLabel("搜索任务").inputValue();
   if (restoredTaskQuery !== "pagination") {
     throw new Error(`Expected restored task query pagination, got ${restoredTaskQuery}`);
   }
@@ -396,8 +396,8 @@ try {
   await expectDashboardMetric(page, runMetrics, "运行次数", "1");
   await expectDashboardMetric(page, runMetrics, "成功率", "100%");
   await activity.locator(".activityTitle strong").filter({ hasText: /^waiting_human_approval$/ }).waitFor();
-  await taskFilters.getByLabel("Task status filter").selectOption("WAITING_HUMAN_APPROVAL");
-  await clickAndWaitForIdle(page, taskFilters.getByRole("button", { name: "Apply filters" }));
+  await taskFilters.getByLabel("任务状态筛选").selectOption("WAITING_HUMAN_APPROVAL");
+  await clickAndWaitForIdle(page, taskFilters.getByRole("button", { name: "应用筛选" }));
   await page.locator(".taskListItem").filter({ hasText: "Add User pagination API" }).waitFor();
   await page.waitForFunction(() => {
     const params = new URLSearchParams(window.location.search);
@@ -413,15 +413,15 @@ try {
   await reloadStatusFilteredTasks;
   await page.locator(".taskListItem").filter({ hasText: "Add User pagination API" }).waitFor();
   await page.waitForFunction(() => {
-    const status = document.querySelector('[aria-label="Task status filter"]');
+    const status = document.querySelector('[aria-label="任务状态筛选"]');
     return status?.value === "WAITING_HUMAN_APPROVAL";
   });
-  const restoredStatusTaskQuery = await taskFilters.getByLabel("Search tasks").inputValue();
+  const restoredStatusTaskQuery = await taskFilters.getByLabel("搜索任务").inputValue();
   if (restoredStatusTaskQuery !== "pagination") {
     throw new Error(`Expected restored task query pagination after status reload, got ${restoredStatusTaskQuery}`);
   }
-  await taskFilters.getByRole("button", { name: "Copy task view link" }).click();
-  await taskFilters.getByText("Task link copied").waitFor();
+  await taskFilters.getByRole("button", { name: "复制任务视图链接" }).click();
+  await taskFilters.getByText("任务链接已复制").waitFor();
   await page.waitForFunction(() =>
     navigator.clipboard.readText().then((text) => {
       if (!text) {
@@ -433,7 +433,7 @@ try {
         && url.searchParams.has("taskId");
     }).catch(() => false)
   );
-  await clickAndWaitForIdle(page, taskFilters.getByRole("button", { name: "Reset" }));
+  await clickAndWaitForIdle(page, taskFilters.getByRole("button", { name: "重置" }));
   await page.waitForFunction(() => {
     const params = new URLSearchParams(window.location.search);
     return !params.has("taskStatus")
@@ -579,11 +579,11 @@ try {
   await taskDetail.getByText("Prepared by RepoPilot.").first().waitFor();
   await prPanel.getByText("Pull request record has already been prepared.").waitFor();
 
-  await taskForm.getByLabel("Title").fill("Fix User id validation bug");
+  await taskForm.getByLabel("标题").fill("Fix User id validation bug");
   await taskForm
-    .getByLabel("Description")
+    .getByLabel("任务描述")
     .fill("修复 User 模块 getUser 参数校验 bug，拒绝空 id 和非正数 id。");
-  await clickAndWaitForIdle(page, taskForm.getByRole("button", { name: "Create task" }));
+  await clickAndWaitForIdle(page, taskForm.getByRole("button", { name: "创建任务" }));
   await page.locator(".taskListItem").filter({ hasText: "Fix User id validation bug" }).waitFor();
   await taskDetail.getByRole("heading", { name: /#\d+ Fix User id validation bug/ }).waitFor();
 
@@ -601,11 +601,11 @@ try {
   await validationChangedFiles.getByText("ADDED").waitFor();
   await assertLatestValidationPatchChangedFiles(page);
 
-  await taskForm.getByLabel("Title").fill("Add User count API");
+  await taskForm.getByLabel("标题").fill("Add User count API");
   await taskForm
-    .getByLabel("Description")
+    .getByLabel("任务描述")
     .fill("给 User 模块新增统计用户总数接口。");
-  await clickAndWaitForIdle(page, taskForm.getByRole("button", { name: "Create task" }));
+  await clickAndWaitForIdle(page, taskForm.getByRole("button", { name: "创建任务" }));
   await page.locator(".taskListItem").filter({ hasText: "Add User count API" }).waitFor();
   await taskDetail.getByRole("heading", { name: /#\d+ Add User count API/ }).waitFor();
 
@@ -622,11 +622,11 @@ try {
   await countChangedFiles.getByText("src/test/java/com/example/demo/user/UserServiceTest.java").waitFor();
   await assertLatestCountPatchChangedFiles(page);
 
-  await taskForm.getByLabel("Title").fill("Add User create API");
+  await taskForm.getByLabel("标题").fill("Add User create API");
   await taskForm
-    .getByLabel("Description")
+    .getByLabel("任务描述")
     .fill("给 User 模块新增创建用户接口，接收 name 并返回创建结果。");
-  await clickAndWaitForIdle(page, taskForm.getByRole("button", { name: "Create task" }));
+  await clickAndWaitForIdle(page, taskForm.getByRole("button", { name: "创建任务" }));
   await page.locator(".taskListItem").filter({ hasText: "Add User create API" }).waitFor();
   await taskDetail.getByRole("heading", { name: /#\d+ Add User create API/ }).waitFor();
 

@@ -528,14 +528,14 @@ async function copyTextToClipboard(
   setStatus: (value: string) => void
 ) {
   if (navigator.clipboard === undefined) {
-    setStatus("Copy unavailable");
+    setStatus("无法复制");
     return;
   }
   try {
     await navigator.clipboard.writeText(text);
     setStatus(successMessage);
   } catch {
-    setStatus("Copy failed");
+    setStatus("复制失败");
   }
 }
 
@@ -570,7 +570,7 @@ function agentRunReportSnapshotFilename(snapshot: AgentRunReportSnapshot) {
 }
 
 function controllerApiFilterLabel(filters: { riskLevel: string | null; riskCode: string | null }) {
-  return `Risk ${filters.riskLevel ?? "ALL"} / ${filters.riskCode ?? "ALL"}`;
+  return `风险 ${filters.riskLevel ?? "ALL"} / ${filters.riskCode ?? "ALL"}`;
 }
 
 function downloadTextFile(filename: string, text: string, type = "text/plain;charset=utf-8") {
@@ -934,7 +934,7 @@ export function App() {
   }
 
   async function loadProjectInsight(authToken: string, projectId: number, riskFilters = controllerApiRiskFilters) {
-    await withBusy("Loading project insight", async () => {
+    await withBusy("正在加载项目洞察", async () => {
       const [files, symbols, controllerApiList, controllerApiDocSnapshots] = await Promise.all([
         listProjectFiles(authToken, projectId, 10),
         listProjectSymbols(authToken, projectId),
@@ -985,7 +985,7 @@ export function App() {
       setDashboardActivity(nextDashboardActivity);
     };
     if (showBusy) {
-      await withBusy("Loading task details", action);
+      await withBusy("正在加载任务详情", action);
       return;
     }
     try {
@@ -997,19 +997,19 @@ export function App() {
 
   async function handleAuth(event: FormEvent<HTMLFormElement>, mode: "login" | "register") {
     event.preventDefault();
-    await withBusy(mode === "login" ? "Signing in" : "Creating account", async () => {
+    await withBusy(mode === "login" ? "正在登录" : "正在创建账号", async () => {
       const auth = mode === "login"
         ? await login(email, password)
         : await register(email, password, displayName);
       localStorage.setItem("repopilot.token", auth.token);
       setToken(auth.token);
-      setMessage(`Signed in as ${auth.user.email}`);
+      setMessage(`已登录：${auth.user.email}`);
     });
   }
 
   async function handleCreateProject(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    await withBusy("Creating project", async () => {
+    await withBusy("正在创建项目", async () => {
       const project = await createProject(token, { repoUrl, defaultBranch });
       const [
         nextProjects,
@@ -1031,12 +1031,12 @@ export function App() {
       setDashboardSummary(nextDashboardSummary);
       setDashboardRunMetrics(nextDashboardRunMetrics);
       setDashboardActivity(nextDashboardActivity);
-      setMessage(`Project #${project.id} created.`);
+      setMessage(`项目 #${project.id} 已创建。`);
     });
   }
 
   async function refreshProjectList(filters = projectFilters) {
-    await withBusy("Filtering projects", async () => {
+    await withBusy("正在筛选项目", async () => {
       const [
         nextProjects,
         nextProjectRows,
@@ -1067,21 +1067,21 @@ export function App() {
   }
 
   async function copyProjectViewLink() {
-    await copyUrlToClipboard(projectViewUrl(projectFilters, selectedProjectId), "Project link copied", setCopyProjectLinkStatus);
+    await copyUrlToClipboard(projectViewUrl(projectFilters, selectedProjectId), "项目链接已复制", setCopyProjectLinkStatus);
   }
 
   async function handleCodeSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const query = codeSearchQuery.trim();
     if (selectedProjectId === "") {
-      setMessage("Select a project before searching code.");
+      setMessage("请先选择项目再搜索代码。");
       return;
     }
     if (!query) {
-      setMessage("Enter a code search query.");
+      setMessage("请输入代码搜索关键词。");
       return;
     }
-    await withBusy("Searching code", async () => {
+    await withBusy("正在搜索代码", async () => {
       const search = await searchProjectCode(token, Number(selectedProjectId), query, 8);
       setProjectInsight((current) => ({ ...current, search }));
     });
@@ -1090,10 +1090,10 @@ export function App() {
   async function handleCreateTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (taskProjectId === "") {
-      setMessage("Select a project before creating a task.");
+      setMessage("请先选择项目再创建任务。");
       return;
     }
-    await withBusy("Creating task", async () => {
+    await withBusy("正在创建任务", async () => {
       const task = await createTask(token, {
         projectId: Number(taskProjectId),
         taskType: "FEATURE",
@@ -1109,12 +1109,12 @@ export function App() {
       setDashboardSummary(nextDashboardSummary);
       setDashboardRunMetrics(nextDashboardRunMetrics);
       setDashboardActivity(nextDashboardActivity);
-      setMessage(`Task #${task.id} created.`);
+      setMessage(`任务 #${task.id} 已创建。`);
     });
   }
 
   async function refreshTaskList(filters = taskFilters) {
-    await withBusy("Filtering tasks", async () => {
+    await withBusy("正在筛选任务", async () => {
       const [nextTasks, [nextDashboardSummary, nextDashboardRunMetrics, nextDashboardActivity]] = await Promise.all([
         listTasks(token, filters),
         fetchDashboard(token)
@@ -1141,7 +1141,7 @@ export function App() {
   }
 
   async function copyTaskViewLink() {
-    await copyUrlToClipboard(taskViewUrl(taskFilters, selectedTaskId), "Task link copied", setCopyTaskLinkStatus);
+    await copyUrlToClipboard(taskViewUrl(taskFilters, selectedTaskId), "任务链接已复制", setCopyTaskLinkStatus);
   }
 
   async function copyRunReport() {
@@ -1304,27 +1304,27 @@ export function App() {
         {!token ? (
           <section className="authGrid">
             <form className="panel" onSubmit={(event) => void handleAuth(event, "login")}>
-              <div className="panelHeader">
-                <div>
-                  <p className="eyebrow">Authentication</p>
-                  <h2>Sign in</h2>
+                <div className="panelHeader">
+                  <div>
+                    <p className="eyebrow">身份认证</p>
+                    <h2>登录</h2>
+                  </div>
                 </div>
-              </div>
-              <TextField label="Email" value={email} onChange={setEmail} />
-              <TextField label="Password" value={password} onChange={setPassword} type="password" />
-              <button className="primaryButton fullButton" type="submit" disabled={busy !== null}>Sign in</button>
+              <TextField label="邮箱" value={email} onChange={setEmail} />
+              <TextField label="密码" value={password} onChange={setPassword} type="password" />
+              <button className="primaryButton fullButton" type="submit" disabled={busy !== null}>登录</button>
             </form>
             <form className="panel" onSubmit={(event) => void handleAuth(event, "register")}>
               <div className="panelHeader">
                 <div>
-                  <p className="eyebrow">First run</p>
-                  <h2>Create a local account</h2>
+                  <p className="eyebrow">首次使用</p>
+                  <h2>创建本地账号</h2>
                 </div>
               </div>
-              <TextField label="Display name" value={displayName} onChange={setDisplayName} />
-              <TextField label="Email" value={email} onChange={setEmail} />
-              <TextField label="Password" value={password} onChange={setPassword} type="password" />
-              <button className="primaryButton fullButton" type="submit" disabled={busy !== null}>Register</button>
+              <TextField label="显示名称" value={displayName} onChange={setDisplayName} />
+              <TextField label="邮箱" value={email} onChange={setEmail} />
+              <TextField label="密码" value={password} onChange={setPassword} type="password" />
+              <button className="primaryButton fullButton" type="submit" disabled={busy !== null}>注册</button>
             </form>
           </section>
         ) : (
@@ -1333,102 +1333,102 @@ export function App() {
               <form className="panel" onSubmit={(event) => void handleCreateProject(event)}>
                 <div className="panelHeader">
                   <div>
-                    <p className="eyebrow">Repository intake</p>
-                    <h2>Add project</h2>
+                    <p className="eyebrow">仓库接入</p>
+                    <h2>添加项目</h2>
                   </div>
                 </div>
-                <TextField label="Repository URL" value={repoUrl} onChange={setRepoUrl} />
-                <TextField label="Default branch" value={defaultBranch} onChange={setDefaultBranch} />
-                <button className="primaryButton fullButton" type="submit" disabled={busy !== null}>Create project</button>
+                <TextField label="仓库地址" value={repoUrl} onChange={setRepoUrl} />
+                <TextField label="默认分支" value={defaultBranch} onChange={setDefaultBranch} />
+                <button className="primaryButton fullButton" type="submit" disabled={busy !== null}>创建项目</button>
               </form>
 
               <form className="panel" onSubmit={(event) => void handleCreateTask(event)}>
                 <div className="panelHeader">
                   <div>
-                    <p className="eyebrow">Agent task</p>
-                    <h2>Create task</h2>
+                    <p className="eyebrow">Agent 任务</p>
+                    <h2>创建任务</h2>
                   </div>
                   <span className="pill">FEATURE</span>
                 </div>
-                <label className="fieldLabel" htmlFor="projectSelect">Project</label>
+                <label className="fieldLabel" htmlFor="projectSelect">项目</label>
                 <select
                   id="projectSelect"
                   value={taskProjectId}
                   onChange={(event) => setTaskProjectId(event.target.value === "" ? "" : Number(event.target.value))}
                 >
-                  <option value="">Select a project</option>
+                  <option value="">选择项目</option>
                   {projects.map((project) => (
                     <option value={project.id} key={project.id}>
                       #{project.id} {project.repoFullName}
                     </option>
                   ))}
                 </select>
-                <TextField label="Title" value={taskTitle} onChange={setTaskTitle} />
-                <label className="fieldLabel" htmlFor="taskDescription">Description</label>
+                <TextField label="标题" value={taskTitle} onChange={setTaskTitle} />
+                <label className="fieldLabel" htmlFor="taskDescription">任务描述</label>
                 <textarea
                   id="taskDescription"
                   value={taskDescription}
                   onChange={(event) => setTaskDescription(event.target.value)}
                 />
-                <button className="primaryButton fullButton" type="submit" disabled={busy !== null}>Create task</button>
+                <button className="primaryButton fullButton" type="submit" disabled={busy !== null}>创建任务</button>
               </form>
             </section>
 
             <section className="panel">
               <div className="panelHeader">
                 <div>
-                  <p className="eyebrow">Projects</p>
-                  <h2>Repository workspaces</h2>
+                  <p className="eyebrow">项目</p>
+                  <h2>仓库工作区</h2>
                 </div>
               </div>
-              <form className="projectFilterForm" aria-label="Project filters" onSubmit={(event) => void handleProjectFiltersSubmit(event)}>
-                <label className="fieldLabel" htmlFor="projectFilterStatus">Status</label>
+              <form className="projectFilterForm" aria-label="项目筛选" onSubmit={(event) => void handleProjectFiltersSubmit(event)}>
+                <label className="fieldLabel" htmlFor="projectFilterStatus">状态</label>
                 <select
                   id="projectFilterStatus"
-                  aria-label="Project status filter"
+                  aria-label="项目状态筛选"
                   value={projectFilters.status ?? "ALL"}
                   onChange={(event) => setProjectFilters((current) => ({ ...current, status: event.target.value }))}
                 >
-                  <option value="ALL">All statuses</option>
+                  <option value="ALL">全部状态</option>
                   {projectStatusOptions.map((status) => (
                     <option value={status} key={status}>{status}</option>
                   ))}
                 </select>
                 <TextField
-                  label="Search projects"
+                  label="搜索项目"
                   value={projectFilters.query ?? ""}
                   onChange={(query) => setProjectFilters((current) => ({ ...current, query }))}
                 />
                 <div className="buttonRow">
-                  <button className="ghostButton" type="submit" disabled={busy !== null}>Apply filters</button>
-                  <button className="ghostButton" type="button" onClick={() => void resetProjectFilters()} disabled={busy !== null}>Reset</button>
+                  <button className="ghostButton" type="submit" disabled={busy !== null}>应用筛选</button>
+                  <button className="ghostButton" type="button" onClick={() => void resetProjectFilters()} disabled={busy !== null}>重置</button>
                   <button className="ghostButton copyProjectLinkButton" type="button" onClick={() => void copyProjectViewLink()}>
-                    Copy project view link
+                    复制项目视图链接
                   </button>
                   <span className="copyProjectLinkStatus" aria-live="polite">
                     {copyProjectLinkStatus ?? ""}
                   </span>
                 </div>
-                <span className="filterSummary">Showing {projectRows.length} project{projectRows.length === 1 ? "" : "s"}</span>
+                <span className="filterSummary">显示 {projectRows.length} 个项目</span>
               </form>
               <div className="dataTable">
                 {projectRows.length === 0 ? (
-                  <EmptyText text={projects.length === 0 ? "No projects yet." : "No projects match the current filters."} />
+                  <EmptyText text={projects.length === 0 ? "还没有项目。" : "没有项目匹配当前筛选。"} />
                 ) : projectRows.map((project) => (
                   <div className="dataRow projectRow" key={project.id}>
                     <span>#{project.id}</span>
                     <strong>{project.repoFullName}</strong>
                     <Badge value={project.status} />
-                    <span>{project.lastIndexedAt ? formatDate(project.lastIndexedAt) : "Not indexed"}</span>
+                    <span>{project.lastIndexedAt ? formatDate(project.lastIndexedAt) : "未索引"}</span>
                     <div className="rowActions">
-                      <button className="ghostButton" type="button" onClick={() => void withBusy("Cloning project", async () => {
+                      <button className="ghostButton" type="button" onClick={() => void withBusy("正在克隆项目", async () => {
                         await cloneProject(token, project.id);
                         await loadWorkspace(token);
-                      })}>Clone</button>
-                      <button className="ghostButton" type="button" onClick={() => void withBusy("Indexing project", async () => {
+                      })}>克隆</button>
+                      <button className="ghostButton" type="button" onClick={() => void withBusy("正在索引项目", async () => {
                         await indexProject(token, project.id);
                         await loadWorkspace(token);
-                      })}>Index</button>
+                      })}>索引</button>
                     </div>
                   </div>
                 ))}
@@ -1450,13 +1450,13 @@ export function App() {
               setRiskCodeFilter={(riskCode) => setControllerApiRiskFilters((current) => ({ ...current, riskCode }))}
               onLoadApiDocs={async (limit) => {
                 if (selectedProjectId === "") {
-                  throw new Error("Select a project before loading API docs.");
+                  throw new Error("请先选择项目再加载接口文档。");
                 }
                 return getControllerApiDocs(token, Number(selectedProjectId), controllerApiRiskFilters, limit);
               }}
               onSaveApiDocsSnapshot={async (limit) => {
                 if (selectedProjectId === "") {
-                  throw new Error("Select a project before saving API docs snapshot.");
+                  throw new Error("请先选择项目再保存接口文档快照。");
                 }
                 const snapshot = await createControllerApiDocsSnapshot(
                   token,
@@ -1475,13 +1475,13 @@ export function App() {
               }}
               onLoadApiDocsSnapshot={async (snapshotId) => {
                 if (selectedProjectId === "") {
-                  throw new Error("Select a project before loading API docs snapshot.");
+                  throw new Error("请先选择项目再加载接口文档快照。");
                 }
                 return getControllerApiDocsSnapshot(token, Number(selectedProjectId), snapshotId);
               }}
               onDeleteApiDocsSnapshot={async (snapshotId) => {
                 if (selectedProjectId === "") {
-                  throw new Error("Select a project before deleting API docs snapshot.");
+                  throw new Error("请先选择项目再删除接口文档快照。");
                 }
                 await deleteControllerApiDocsSnapshot(token, Number(selectedProjectId), snapshotId);
                 setProjectInsight((current) => ({
@@ -1491,7 +1491,7 @@ export function App() {
               }}
               onClearApiDocsSnapshots={async () => {
                 if (selectedProjectId === "") {
-                  throw new Error("Select a project before clearing API docs snapshots.");
+                  throw new Error("请先选择项目再清空接口文档快照。");
                 }
                 const result = await clearControllerApiDocsSnapshots(token, Number(selectedProjectId));
                 setProjectInsight((current) => ({
@@ -1512,71 +1512,71 @@ export function App() {
               <aside className="panel taskListPanel">
                 <div className="panelHeader">
                   <div>
-                    <p className="eyebrow">Tasks</p>
-                    <h2>Agent runs</h2>
+                    <p className="eyebrow">任务</p>
+                    <h2>Agent 运行</h2>
                   </div>
                 </div>
-                <form className="taskFilterForm" aria-label="Task filters" onSubmit={(event) => void handleTaskFiltersSubmit(event)}>
-                  <label className="fieldLabel" htmlFor="taskFilterProject">Project</label>
+                <form className="taskFilterForm" aria-label="任务筛选" onSubmit={(event) => void handleTaskFiltersSubmit(event)}>
+                  <label className="fieldLabel" htmlFor="taskFilterProject">项目</label>
                   <select
                     id="taskFilterProject"
-                    aria-label="Task project filter"
+                    aria-label="任务项目筛选"
                     value={taskFilters.projectId ?? ""}
                     onChange={(event) => setTaskFilters((current) => ({
                       ...current,
                       projectId: event.target.value === "" ? "" : Number(event.target.value)
                     }))}
                   >
-                    <option value="">All projects</option>
+                    <option value="">全部项目</option>
                     {projects.map((project) => (
                       <option value={project.id} key={project.id}>
                         #{project.id} {project.repoFullName}
                       </option>
                     ))}
                   </select>
-                  <label className="fieldLabel" htmlFor="taskFilterStatus">Status</label>
+                  <label className="fieldLabel" htmlFor="taskFilterStatus">状态</label>
                   <select
                     id="taskFilterStatus"
-                    aria-label="Task status filter"
+                    aria-label="任务状态筛选"
                     value={taskFilters.status ?? "ALL"}
                     onChange={(event) => setTaskFilters((current) => ({ ...current, status: event.target.value }))}
                   >
-                    <option value="ALL">All statuses</option>
+                    <option value="ALL">全部状态</option>
                     {taskStatusOptions.map((status) => (
                       <option value={status} key={status}>{status}</option>
                     ))}
                   </select>
-                  <label className="fieldLabel" htmlFor="taskFilterType">Type</label>
+                  <label className="fieldLabel" htmlFor="taskFilterType">类型</label>
                   <select
                     id="taskFilterType"
-                    aria-label="Task type filter"
+                    aria-label="任务类型筛选"
                     value={taskFilters.taskType ?? "ALL"}
                     onChange={(event) => setTaskFilters((current) => ({ ...current, taskType: event.target.value }))}
                   >
-                    <option value="ALL">All types</option>
+                    <option value="ALL">全部类型</option>
                     {taskTypeOptions.map((taskType) => (
                       <option value={taskType} key={taskType}>{taskType}</option>
                     ))}
                   </select>
                   <TextField
-                    label="Search tasks"
+                    label="搜索任务"
                     value={taskFilters.query ?? ""}
                     onChange={(query) => setTaskFilters((current) => ({ ...current, query }))}
                   />
                   <div className="buttonRow">
-                    <button className="ghostButton" type="submit" disabled={busy !== null}>Apply filters</button>
-                    <button className="ghostButton" type="button" onClick={() => void resetTaskFilters()} disabled={busy !== null}>Reset</button>
+                    <button className="ghostButton" type="submit" disabled={busy !== null}>应用筛选</button>
+                    <button className="ghostButton" type="button" onClick={() => void resetTaskFilters()} disabled={busy !== null}>重置</button>
                     <button className="ghostButton copyTaskLinkButton" type="button" onClick={() => void copyTaskViewLink()}>
-                      Copy task view link
+                      复制任务视图链接
                     </button>
                     <span className="copyTaskLinkStatus" aria-live="polite">
                       {copyTaskLinkStatus ?? ""}
                     </span>
                   </div>
-                  <span className="filterSummary">Showing {tasks.length} task{tasks.length === 1 ? "" : "s"}</span>
+                  <span className="filterSummary">显示 {tasks.length} 个任务</span>
                 </form>
                 <div className="taskList">
-                  {tasks.length === 0 ? <EmptyText text="No tasks yet." /> : tasks.map((task) => (
+                  {tasks.length === 0 ? <EmptyText text="还没有任务。" /> : tasks.map((task) => (
                     <button
                       className={task.id === selectedTaskId ? "taskListItem active" : "taskListItem"}
                       type="button"
@@ -2163,25 +2163,25 @@ function ProjectInsightPanel({
   }, [visibleApiAnchors]);
 
   async function copyRiskViewLink() {
-    await copyUrlToClipboard(controllerApiRiskFilterUrl(riskLevelFilter, riskCodeFilter), "Link copied", setCopyRiskLinkStatus);
+    await copyUrlToClipboard(controllerApiRiskFilterUrl(riskLevelFilter, riskCodeFilter), "链接已复制", setCopyRiskLinkStatus);
   }
 
   async function copyControllerApiLink(api: ControllerApi) {
     await copyUrlToClipboard(
       controllerApiRiskFilterUrl(riskLevelFilter, riskCodeFilter, controllerApiAnchor(api)),
-      "Route link copied",
+      "路由链接已复制",
       setCopyRiskLinkStatus
     );
   }
 
   async function copyControllerApiDocs() {
     if (!selectedProject) {
-      setCopyApiDocsStatus("Copy unavailable");
+      setCopyApiDocsStatus("无法复制");
       return;
     }
     try {
       const docs = await onLoadApiDocs(Math.max(1, visibleApis.length));
-      await copyTextToClipboard(docs.markdown, "API docs copied", setCopyApiDocsStatus);
+      await copyTextToClipboard(docs.markdown, "接口文档已复制", setCopyApiDocsStatus);
     } catch (error) {
       setCopyApiDocsStatus(formatError(error));
     }
@@ -2189,13 +2189,13 @@ function ProjectInsightPanel({
 
   async function downloadControllerApiDocs() {
     if (!selectedProject) {
-      setDownloadApiDocsStatus("Download unavailable");
+      setDownloadApiDocsStatus("无法下载");
       return;
     }
     try {
       const docs = await onLoadApiDocs(Math.max(1, visibleApis.length));
       downloadTextFile(controllerApiDocsFilename(docs), docs.markdown, "text/markdown;charset=utf-8");
-      setDownloadApiDocsStatus("API docs downloaded");
+      setDownloadApiDocsStatus("接口文档已下载");
     } catch (error) {
       setDownloadApiDocsStatus(formatError(error));
     }
@@ -2203,12 +2203,12 @@ function ProjectInsightPanel({
 
   async function saveControllerApiDocsSnapshot() {
     if (!selectedProject) {
-      setSaveApiDocsStatus("Snapshot unavailable");
+      setSaveApiDocsStatus("无法保存快照");
       return;
     }
     try {
       const snapshot = await onSaveApiDocsSnapshot(Math.max(1, visibleApis.length));
-      setSaveApiDocsStatus(`API docs snapshot #${snapshot.id} saved`);
+      setSaveApiDocsStatus(`接口文档快照 #${snapshot.id} 已保存`);
     } catch (error) {
       setSaveApiDocsStatus(formatError(error));
     }
@@ -2217,7 +2217,7 @@ function ProjectInsightPanel({
   async function copySavedApiDocsSnapshot(snapshotId: number) {
     try {
       const snapshot = await onLoadApiDocsSnapshot(snapshotId);
-      await copyTextToClipboard(snapshot.markdown, `Snapshot #${snapshot.id} copied`, setSnapshotActionStatus);
+      await copyTextToClipboard(snapshot.markdown, `快照 #${snapshot.id} 已复制`, setSnapshotActionStatus);
     } catch (error) {
       setSnapshotActionStatus(formatError(error));
     }
@@ -2227,7 +2227,7 @@ function ProjectInsightPanel({
     try {
       const snapshot = await onLoadApiDocsSnapshot(snapshotId);
       downloadTextFile(controllerApiDocsFilename(snapshot), snapshot.markdown, "text/markdown;charset=utf-8");
-      setSnapshotActionStatus(`Snapshot #${snapshot.id} downloaded`);
+      setSnapshotActionStatus(`快照 #${snapshot.id} 已下载`);
     } catch (error) {
       setSnapshotActionStatus(formatError(error));
     }
@@ -2236,7 +2236,7 @@ function ProjectInsightPanel({
   async function deleteSavedApiDocsSnapshot(snapshotId: number) {
     try {
       await onDeleteApiDocsSnapshot(snapshotId);
-      setSnapshotActionStatus(`Snapshot #${snapshotId} deleted`);
+      setSnapshotActionStatus(`快照 #${snapshotId} 已删除`);
     } catch (error) {
       setSnapshotActionStatus(formatError(error));
     }
@@ -2244,13 +2244,12 @@ function ProjectInsightPanel({
 
   async function clearSavedApiDocsSnapshots() {
     if (insight.controllerApiDocSnapshots.length === 0) {
-      setSnapshotActionStatus("No snapshots to clear");
+      setSnapshotActionStatus("没有可清空的快照");
       return;
     }
     try {
       const result = await onClearApiDocsSnapshots();
-      const suffix = result.deletedCount === 1 ? "" : "s";
-      setSnapshotActionStatus(`Cleared ${result.deletedCount} snapshot${suffix}`);
+      setSnapshotActionStatus(`已清空 ${result.deletedCount} 份快照`);
     } catch (error) {
       setSnapshotActionStatus(formatError(error));
     }
@@ -2260,16 +2259,16 @@ function ProjectInsightPanel({
     <section className="panel projectInsightPanel" id="code">
       <div className="panelHeader">
         <div>
-          <p className="eyebrow">Code map</p>
-          <h2>Repository insight</h2>
+          <p className="eyebrow">代码地图</p>
+          <h2>仓库洞察</h2>
         </div>
         <div className="insightControls">
           <select
-            aria-label="Insight project"
+            aria-label="洞察项目"
             value={selectedProjectId}
             onChange={(event) => onSelectProject(event.target.value === "" ? "" : Number(event.target.value))}
           >
-            <option value="">Select a project</option>
+            <option value="">选择项目</option>
             {projects.map((project) => (
               <option value={project.id} key={project.id}>
                 #{project.id} {project.repoFullName}
@@ -2277,7 +2276,7 @@ function ProjectInsightPanel({
             ))}
           </select>
           <button className="ghostButton" type="button" onClick={onRefresh} disabled={selectedProjectId === "" || busy}>
-            Refresh map
+            刷新地图
           </button>
         </div>
       </div>
@@ -2285,23 +2284,23 @@ function ProjectInsightPanel({
       {selectedProject ? (
         <>
           <div className="metaGrid compact">
-            <Meta label="Project" value={`#${selectedProject.id} ${selectedProject.repoFullName}`} />
-            <Meta label="Status" value={selectedProject.status} />
-            <Meta label="Indexed" value={selectedProject.lastIndexedAt ? formatDate(selectedProject.lastIndexedAt) : "Not indexed"} />
+            <Meta label="项目" value={`#${selectedProject.id} ${selectedProject.repoFullName}`} />
+            <Meta label="状态" value={selectedProject.status} />
+            <Meta label="索引时间" value={selectedProject.lastIndexedAt ? formatDate(selectedProject.lastIndexedAt) : "未索引"} />
           </div>
 
           <section className="insightGrid">
             <div className="insightColumn">
               <div className="sectionHeader">
-                <h3>Files</h3>
-                <span>{insight.files.length} paths</span>
+                <h3>文件</h3>
+                <span>{insight.files.length} 条路径</span>
               </div>
               <div className="compactList">
-                {visibleFiles.length === 0 ? <EmptyText text="Clone the project to load file paths." /> : visibleFiles.map((file) => (
+                {visibleFiles.length === 0 ? <EmptyText text="克隆项目后会加载文件路径。" /> : visibleFiles.map((file) => (
                   <div className="compactRow" key={file.path}>
                     <Badge value={file.type === "DIRECTORY" ? "DIR" : "FILE"} />
                     <strong>{file.path}</strong>
-                    <span>{file.type === "DIRECTORY" ? "-" : formatSize(file.size)}</span>
+                    <span>{file.type === "DIRECTORY" ? "目录" : formatSize(file.size)}</span>
                   </div>
                 ))}
               </div>
@@ -2309,16 +2308,16 @@ function ProjectInsightPanel({
 
             <div className="insightColumn">
               <div className="sectionHeader">
-                <h3>Symbols</h3>
-                <span>{insight.symbols.length} indexed</span>
+                <h3>符号</h3>
+                <span>{insight.symbols.length} 个已索引</span>
               </div>
               <div className="chipRow">
-                {Object.entries(symbolCounts).length === 0 ? <span className="mutedChip">No symbols</span> : Object.entries(symbolCounts).map(([type, count]) => (
+                {Object.entries(symbolCounts).length === 0 ? <span className="mutedChip">暂无符号</span> : Object.entries(symbolCounts).map(([type, count]) => (
                   <span className="pill" key={type}>{type} {count}</span>
                 ))}
               </div>
               <div className="compactList">
-                {topSymbols.length === 0 ? <EmptyText text="Index the project to extract Java symbols." /> : topSymbols.map((symbol) => (
+                {topSymbols.length === 0 ? <EmptyText text="索引项目后会提取 Java 符号。" /> : topSymbols.map((symbol) => (
                   <div className="symbolRow" key={symbol.id}>
                     <Badge value={symbol.symbolType} />
                     <strong>{symbol.qualifiedName || symbol.name}</strong>
@@ -2331,14 +2330,14 @@ function ProjectInsightPanel({
 
           <section className="apiSection">
             <div className="sectionHeader">
-              <h3>Controller APIs</h3>
+              <h3>Controller 接口</h3>
               <span>
                 {!riskFiltersActive
-                  ? `${insight.controllerApiRiskSummary.total} routes`
-                  : `${insight.controllerApiFilteredCount} of ${insight.controllerApiRiskSummary.total} routes`}
+                  ? `${insight.controllerApiRiskSummary.total} 个接口`
+                  : `${insight.controllerApiFilteredCount} / ${insight.controllerApiRiskSummary.total} 个接口`}
               </span>
             </div>
-            <div className="apiRiskSummary" aria-label="Controller API risk summary">
+            <div className="apiRiskSummary" aria-label="Controller 接口风险概览">
               {controllerRiskLevels.filter((level) => level !== "ALL").map((level) => (
                 <button
                   className="riskSummaryButton"
@@ -2355,32 +2354,32 @@ function ProjectInsightPanel({
             </div>
             <div className="apiFilterBar">
               <label>
-                <span>Risk level</span>
+                <span>风险等级</span>
                 <select
-                  aria-label="Risk level"
+                  aria-label="风险等级"
                   value={riskLevelFilter}
                   onChange={(event) => setRiskLevelFilter(event.target.value)}
                 >
-                  <option value="ALL">All levels</option>
+                  <option value="ALL">全部等级</option>
                   {controllerRiskLevels.filter((level) => level !== "ALL").map((level) => (
                     <option value={level} key={level}>{level}</option>
                   ))}
                 </select>
               </label>
               <label>
-                <span>Risk code</span>
+                <span>风险码</span>
                 <select
-                  aria-label="Risk code"
+                  aria-label="风险码"
                   value={riskCodeFilter}
                   onChange={(event) => setRiskCodeFilter(event.target.value)}
                 >
-                  <option value="ALL">All codes</option>
+                  <option value="ALL">全部风险码</option>
                   {selectedRiskCodeIsMissing ? <option value={riskCodeFilter}>{riskCodeFilter}</option> : null}
                   {riskCodeOptions.map((code) => <option value={code} key={code}>{code}</option>)}
                 </select>
               </label>
               <button className="ghostButton copyRiskLinkButton" type="button" onClick={copyRiskViewLink}>
-                Copy risk view link
+                复制风险视图链接
               </button>
               <span className="copyRiskLinkStatus" aria-live="polite">
                 {copyRiskLinkStatus ?? ""}
@@ -2391,7 +2390,7 @@ function ProjectInsightPanel({
                 onClick={() => void copyControllerApiDocs()}
                 disabled={visibleApis.length === 0}
               >
-                Copy API docs
+                复制接口文档
               </button>
               <span className="copyApiDocsStatus" aria-live="polite">
                 {copyApiDocsStatus ?? ""}
@@ -2402,7 +2401,7 @@ function ProjectInsightPanel({
                 onClick={() => void downloadControllerApiDocs()}
                 disabled={visibleApis.length === 0}
               >
-                Download API docs
+                下载接口文档
               </button>
               <span className="downloadApiDocsStatus" aria-live="polite">
                 {downloadApiDocsStatus ?? ""}
@@ -2413,37 +2412,37 @@ function ProjectInsightPanel({
                 onClick={() => void saveControllerApiDocsSnapshot()}
                 disabled={visibleApis.length === 0}
               >
-                Save API docs snapshot
+                保存接口文档快照
               </button>
               <span className="saveApiDocsStatus" aria-live="polite">
                 {saveApiDocsStatus ?? ""}
               </span>
             </div>
-            <div className="apiDocSnapshotList" aria-label="API doc snapshots">
+            <div className="apiDocSnapshotList" aria-label="接口文档快照">
               <div className="sectionHeader apiDocSnapshotHeader">
-                <h4>API doc snapshots</h4>
+                <h4>接口文档快照</h4>
                 <div className="apiDocSnapshotHeaderActions">
-                  <span aria-live="polite">{snapshotActionStatus ?? `${insight.controllerApiDocSnapshots.length} recent`}</span>
+                  <span aria-live="polite">{snapshotActionStatus ?? `${insight.controllerApiDocSnapshots.length} 份最近快照`}</span>
                   {insight.controllerApiDocSnapshots.length > 0 ? (
                     <button
                       className="ghostButton dangerButton"
                       type="button"
                       onClick={() => void clearSavedApiDocsSnapshots()}
                     >
-                      Clear snapshots
+                      清空快照
                     </button>
                   ) : null}
                 </div>
               </div>
               {insight.controllerApiDocSnapshots.length === 0 ? (
-                <EmptyText text="No API doc snapshots saved yet." />
+                <EmptyText text="还没有保存接口文档快照。" />
               ) : (
                 <div className="compactList">
                   {insight.controllerApiDocSnapshots.map((snapshot) => (
                     <div className="apiDocSnapshotRow" key={snapshot.id}>
-                      <strong>Snapshot #{snapshot.id}</strong>
+                      <strong>快照 #{snapshot.id}</strong>
                       <span>{formatDate(snapshot.generatedAt)}</span>
-                      <span>{snapshot.routeCount} of {snapshot.filteredCount} routes</span>
+                      <span>{snapshot.routeCount} / {snapshot.filteredCount} 个接口</span>
                       <span>{controllerApiFilterLabel(snapshot.filters)}</span>
                       <span className="apiDocSnapshotActions">
                         <button
@@ -2451,21 +2450,21 @@ function ProjectInsightPanel({
                           type="button"
                           onClick={() => void copySavedApiDocsSnapshot(snapshot.id)}
                         >
-                          Copy snapshot
+                          复制快照
                         </button>
                         <button
                           className="ghostButton"
                           type="button"
                           onClick={() => void downloadSavedApiDocsSnapshot(snapshot.id)}
                         >
-                          Download snapshot
+                          下载快照
                         </button>
                         <button
                           className="ghostButton dangerButton"
                           type="button"
                           onClick={() => void deleteSavedApiDocsSnapshot(snapshot.id)}
                         >
-                          Delete snapshot
+                          删除快照
                         </button>
                       </span>
                     </div>
@@ -2475,7 +2474,7 @@ function ProjectInsightPanel({
             </div>
             <div className="apiList">
               {visibleApis.length === 0 ? (
-                <EmptyText text={insight.controllerApiRiskSummary.total === 0 ? "No Spring Controller APIs detected." : "No Controller APIs match the selected risk filters."} />
+                <EmptyText text={insight.controllerApiRiskSummary.total === 0 ? "没有检测到 Spring Controller 接口。" : "没有接口匹配当前风险筛选。"} />
               ) : visibleApis.map((api) => (
                 <article className="apiRow" id={controllerApiAnchor(api)} key={`${api.qualifiedControllerName}.${api.methodName}.${api.httpMethod}.${api.path}`}>
                   <div className="apiMethodStack">
@@ -2489,12 +2488,12 @@ function ProjectInsightPanel({
                     <strong>{api.path}</strong>
                     <span>{api.controllerName}.{api.methodName}</span>
                     <button className="ghostButton routeLinkButton" type="button" onClick={() => void copyControllerApiLink(api)}>
-                      Copy route link
+                      复制路由链接
                     </button>
                   </div>
                   <div className="apiMeta">
-                    <span>Response: {api.responseType}</span>
-                    <span>Request body: {api.requestType ?? "none"}</span>
+                    <span>响应：{api.responseType}</span>
+                    <span>请求体：{api.requestType ?? "无"}</span>
                     <span>{api.filePath}:{api.startLine ?? "?"}</span>
                   </div>
                   {api.securityAnnotations.length > 0 ? (
@@ -2503,20 +2502,20 @@ function ProjectInsightPanel({
                     </div>
                   ) : null}
                   <div className="apiParams">
-                    {api.parameters.length === 0 ? <span className="mutedChip">No parameters</span> : api.parameters.map((parameter) => (
+                    {api.parameters.length === 0 ? <span className="mutedChip">无参数</span> : api.parameters.map((parameter) => (
                       <span className="paramChip" key={`${parameter.source}.${parameter.name}.${parameter.type}`}>
                         <strong>{parameter.source}</strong> {parameter.name}: {parameter.type} {parameterHint(parameter)}
                       </span>
                     ))}
                   </div>
                   <div className="apiServiceCalls">
-                    {api.serviceCalls.length === 0 ? <span className="mutedChip">No service calls</span> : api.serviceCalls.map((call) => (
+                    {api.serviceCalls.length === 0 ? <span className="mutedChip">无 Service 调用</span> : api.serviceCalls.map((call) => (
                       <span className="serviceCallChip" key={`${call.receiverName}.${call.serviceType}.${call.methodName}.${call.line ?? "?"}`}>
-                        <strong>{call.serviceType}.{call.methodName}</strong> via {call.receiverName}
+                        <strong>{call.serviceType}.{call.methodName}</strong> 通过 {call.receiverName}
                         {call.line === null ? "" : `:${call.line}`}
                         {call.downstreamCalls.map((downstream) => (
                           <em key={`${downstream.receiverName}.${downstream.componentType}.${downstream.methodName}.${downstream.line ?? "?"}`}>
-                            -&gt; {downstream.componentType}.{downstream.methodName} via {downstream.receiverName}
+                            -&gt; {downstream.componentType}.{downstream.methodName} 通过 {downstream.receiverName}
                             {downstream.line === null ? "" : `:${downstream.line}`}
                           </em>
                         ))}
@@ -2524,10 +2523,10 @@ function ProjectInsightPanel({
                     ))}
                   </div>
                   <div className="apiRiskHints">
-                    {api.riskHints.length === 0 ? <span className="mutedChip">No risk hints</span> : api.riskHints.map((hint) => (
+                    {api.riskHints.length === 0 ? <span className="mutedChip">无风险提示</span> : api.riskHints.map((hint) => (
                       <span className="riskHintChip" data-severity={hint.severity} key={`${hint.severity}.${hint.code}`}>
                         <strong>{hint.severity}</strong> {hint.code}: {hint.message}
-                        {hint.details.length === 0 ? null : <em>Details: {hint.details.join(", ")}</em>}
+                        {hint.details.length === 0 ? null : <em>细节：{hint.details.join(", ")}</em>}
                       </span>
                     ))}
                   </div>
@@ -2537,21 +2536,21 @@ function ProjectInsightPanel({
           </section>
 
           <form className="searchBar" onSubmit={onSearch}>
-            <label className="fieldLabel" htmlFor="codeSearch">Code search</label>
+            <label className="fieldLabel" htmlFor="codeSearch">代码搜索</label>
             <div>
               <input
                 id="codeSearch"
                 value={codeSearchQuery}
                 onChange={(event) => setCodeSearchQuery(event.target.value)}
-                placeholder="Search symbols, summaries, or code preview"
+                placeholder="搜索符号、摘要或代码片段"
               />
-              <button className="primaryButton" type="submit" disabled={busy}>Search</button>
+              <button className="primaryButton" type="submit" disabled={busy}>搜索</button>
             </div>
           </form>
 
           <div className="searchResults">
-            {insight.search === null ? <EmptyText text="Run a search to inspect indexed chunks." /> : insight.search.results.length === 0 ? (
-              <EmptyText text={`No indexed chunks matched "${insight.search.query}".`} />
+            {insight.search === null ? <EmptyText text="搜索后可查看已索引代码片段。" /> : insight.search.results.length === 0 ? (
+              <EmptyText text={`没有已索引片段匹配 “${insight.search.query}”。`} />
             ) : insight.search.results.map((result) => (
               <article className="searchResult" key={result.chunkId}>
                 <div className="sectionHeader">
@@ -2567,7 +2566,7 @@ function ProjectInsightPanel({
             ))}
           </div>
         </>
-      ) : <EmptyText text="Create or select a project to inspect repository structure." />}
+      ) : <EmptyText text="创建或选择项目后可查看仓库结构。" />}
     </section>
   );
 }
@@ -3452,8 +3451,8 @@ function formatSize(value: number) {
 }
 
 function parameterHint(parameter: { required: boolean; defaultValue: string | null }) {
-  if (parameter.defaultValue !== null) return `default ${parameter.defaultValue}`;
-  return parameter.required ? "required" : "optional";
+  if (parameter.defaultValue !== null) return `默认 ${parameter.defaultValue}`;
+  return parameter.required ? "必填" : "可选";
 }
 
 function toneFor(value: string | undefined) {
@@ -3465,5 +3464,5 @@ function toneFor(value: string | undefined) {
 }
 
 function shortSha(value: string | null) {
-  return value ? value.slice(0, 10) : "Not committed";
+  return value ? value.slice(0, 10) : "未提交";
 }
