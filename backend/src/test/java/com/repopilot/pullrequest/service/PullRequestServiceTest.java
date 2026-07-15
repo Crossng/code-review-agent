@@ -213,6 +213,46 @@ class PullRequestServiceTest {
     }
 
     @Test
+    void prepareRetriesExistingFailedRemotePullRequestRecord() {
+        Fixture fixture = fixture("https://github.com/example/demo.git");
+        fixture.task().setStatus(AgentTaskStatus.FAILED_PR_CREATION);
+        PullRequestRecord failedRecord = new PullRequestRecord(
+                fixture.task(),
+                fixture.patch(),
+                com.repopilot.pullrequest.domain.PullRequestProvider.GITHUB,
+                "RepoPilot：test",
+                "由 RepoPilot 准备。",
+                "main",
+                "repopilot/task-20",
+                "abc123def456",
+                "RepoPilot：test",
+                PullRequestStatus.DRAFT_READY
+        );
+        failedRecord.markFailed("GitHub 返回 HTTP 500：server error");
+        stubReadyTask(fixture);
+        when(pullRequestRecordRepository.findFirstByPatchIdOrderByCreatedAtDesc(fixture.patch().getId()))
+                .thenReturn(Optional.of(failedRecord));
+        when(gitHubPullRequestService.shouldPublish(fixture.project())).thenReturn(true);
+        when(gitHubPullRequestService.publish(eq(fixture.project()), eq(failedRecord)))
+                .thenReturn(new GitHubPullRequestService.GitHubPullRequest(
+                        18,
+                        "https://github.com/example/demo/pull/18"
+                ));
+        when(pullRequestRecordRepository.save(any(PullRequestRecord.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        PullRequestRecord record = service.prepare(fixture.task().getId(), fixture.user().getId());
+
+        assertSame(failedRecord, record);
+        assertEquals(PullRequestStatus.OPEN, record.getStatus());
+        assertEquals(18, record.getPrNumber());
+        assertEquals("https://github.com/example/demo/pull/18", record.getUrl());
+        assertEquals(AgentTaskStatus.DONE, fixture.task().getStatus());
+        verify(pullRequestGitService, never()).materialize(any(), any(), anyString());
+        verify(agentTaskRepository).save(fixture.task());
+    }
+
+    @Test
     void preflightAllowsLocalDraftWhenReadyAndRemotePublishingIsDisabled() {
         Fixture fixture = fixture("file:///tmp/demo-repo");
         stubReadyTask(fixture);

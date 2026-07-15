@@ -812,6 +812,7 @@ GET /api/agent/tasks?projectId=1&status=WAITING_HUMAN_APPROVAL&taskType=FEATURE&
 - 项目本地仓库工作区必须干净。
 - 同一项目不能有其他写入型任务正在运行，否则返回 `409 PROJECT_WRITE_TASK_RUNNING`。
 - 未开启 GitHub 发布时，记录停留在 `DRAFT_READY`，`url` 和 `prNumber` 为空，任务状态为 `DONE`。
+- 远端 PR 创建失败后会保留 `FAILED` 记录和本地分支/commit；从 `FAILED_PR_CREATION` 重试会复用已有记录继续发布，成功后更新为 `OPEN`。
 
 ### GET `/tasks/{id}/pull-request/preflight`
 

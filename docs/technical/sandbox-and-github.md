@@ -108,6 +108,8 @@ REPOPILOT_GITHUB_API_BASE_URL=https://api.github.com
 
 `GET /api/tasks/{id}/pull-request/preflight` 提供任务级 PR 发布前置检查，覆盖任务状态、patch 审批、沙箱测试、本地草稿准备、远程 GitHub 仓库资格和 token 配置。该接口只读，不创建分支或 PR，供控制台在审批前后展示 blocker 和 warning。
 
+远端发布链路的本地验证使用临时 bare Git 仓库模拟 `origin`，并用本地 HTTP server 模拟 GitHub `/repos/{owner}/{repo}/pulls` API。测试会真实执行 `git push origin {targetBranch}`，断言远端分支存在、PR API 收到脱敏 token header、title/head/base/body 正确，并确认服务返回 PR number/url。这样即使没有真实 GitHub token，也可以重复验证 push + GitHub API 创建 PR 的主路径。
+
 PR body 模板：
 
 ```markdown
@@ -136,7 +138,7 @@ PR body 模板：
 | diff 应用失败 | 标记 patch 失败，要求重新生成 |
 | 测试失败 | 保存日志，最多进入 RepairAgent 2 次；当前确定性修复覆盖缺失 `spring-boot-starter-test` 和常见 Java 标准库缺 import 编译失败，无法修复时进入 `FAILED_TEST` 等待人工处理或 Regenerate |
 | push 失败 | 保留本地分支，允许重试 |
-| PR 创建失败 | 保存 GitHub API 响应，允许重试 |
+| PR 创建失败 | 保存 GitHub API 响应，允许从 `FAILED_PR_CREATION` 重试；重试会复用已有 `pull_request_record` 和本地分支/commit，成功后更新为 `OPEN` |
 
 ## 8. 安全要求
 
