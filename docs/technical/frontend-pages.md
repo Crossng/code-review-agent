@@ -74,14 +74,15 @@ Agent 执行页必须特别处理长任务状态：
 - 任务详情应把 `agent_step.inputJson`/`outputJson` 的稳定字段解析为 `AgentEvidencePanel`，在原始审计 JSON 之外展示计划摘要、检索命中、patch 生成结果、patch 安全门、沙箱测试结果、自动审查和人工审批 checkpoint。
 - 任务存在 current run 时，任务详情应通过 `GET /api/agent/tasks/{id}/run-report` 加载可复制/下载的 Markdown run report；没有 current run 时按钮禁用并保持空状态。任务详情还应通过 `GET /api/agent/tasks/{id}/run-report/snapshots?limit=5` 展示最近运行报告快照，可通过 `POST /api/agent/tasks/{id}/run-report/snapshots` 保存当前报告，并从历史快照复制或下载保存时的 Markdown。
 - 任务详情主链路的导航、状态卡、步骤时间线、Agent 证据、模型/工具审计、补丁、沙箱测试、人工审批和 PR 前置检查使用中文产品文案；后端枚举、step name、recipe id 和导出的 Markdown 报告标题保留工程原文，便于排查和对接 API。
+- 工作台概览、Agent 运行表现、最近任务活动、Coder 配置、GitHub 发布配置和沙箱运行时配置使用中文产品文案；配置枚举、provider、mode 和 readiness badge 保留工程原文，便于和环境变量、后端响应对应。
 
 ## 5. 核心组件
 
 | 组件 | 用途 |
 | --- | --- |
-| `DashboardSummaryPanel` | 展示当前用户工作区项目、任务运行态、待审批、失败、完成和 PR 草稿/打开计数，并可复制包含 Dashboard 窗口状态的 overview 链接 |
-| `DashboardRunMetricsPanel` | 展示当前用户最近 7/14/30 天 Agent run 总数、成功率、平均耗时、运行中数量和每日趋势，窗口选择通过 `runMetricsDays` URL 参数恢复 |
-| `DashboardActivityPanel` | 展示当前用户最近 10/25/50 条 Agent step 活动，包含项目、任务、step、状态和发生时间，数量选择通过 `activityLimit` URL 参数恢复 |
+| `DashboardSummaryPanel` | 用中文指标卡展示当前用户工作区项目、任务运行态、待审批、失败、完成和 PR 草稿/打开计数，并可复制包含 Dashboard 窗口状态的概览链接 |
+| `DashboardRunMetricsPanel` | 用中文指标卡展示当前用户最近 7/14/30 天 Agent run 总数、成功率、平均耗时、运行中数量和每日趋势，窗口选择通过 `runMetricsDays` URL 参数恢复 |
+| `DashboardActivityPanel` | 用中文标题和空状态展示当前用户最近 10/25/50 条 Agent step 活动，包含项目、任务、step、状态和发生时间，数量选择通过 `activityLimit` URL 参数恢复 |
 | `ProjectStatusBadge` | 展示项目 clone/index 状态 |
 | `ProjectFilterForm` | 按项目状态和 repo 名称/URL 关键词筛选 `GET /api/projects` 结果，支持一键重置和复制当前项目视图链接 |
 | `FileTree` | 展示仓库文件树 |
@@ -98,9 +99,9 @@ Agent 执行页必须特别处理长任务状态：
 | `PullRequestPreflightSummary` | 用中文标签展示 PR 发布前置检查、发布模式、本地草稿状态、远程 GitHub 状态和 blocker |
 | `ToolCallAuditPanel` | 展示工具调用输入、输出摘要、状态和耗时 |
 | `ModelCallAuditPanel` | 展示模型调用提示词、响应摘要、模型名、token 和耗时 |
-| `CoderSettingsPanel` | 展示当前 Coder mode、provider、model、API base URL、key 是否配置、fixture 是否配置、缺失配置项和支持模式；不展示任何密钥或 fixture 原文 |
-| `GitHubSettingsPanel` | 展示当前 GitHub PR 发布模式、provider、API base URL、token 是否配置、远程发布是否启用和缺失配置项；不展示 token 原文 |
-| `SandboxSettingsPanel` | 展示 Docker daemon、sandbox image、Maven cache、workspace root、timeout 和 readiness 检查；不启动测试容器 |
+| `CoderSettingsPanel` | 用中文标签展示当前 Coder mode、provider、model、API base URL、key 是否配置、fixture 是否配置、缺失配置项和支持模式；不展示任何密钥或 fixture 原文 |
+| `GitHubSettingsPanel` | 用中文标签展示当前 GitHub PR 发布模式、provider、API base URL、token 是否配置、远程发布是否启用和缺失配置项；不展示 token 原文 |
+| `SandboxSettingsPanel` | 用中文标签展示 Docker daemon、sandbox image、Maven cache、workspace root、timeout 和 readiness 检查；不启动测试容器 |
 
 ## 6. 交互约束
 

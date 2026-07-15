@@ -860,7 +860,7 @@ export function App() {
   async function handleRunMetricsDaysChange(days: number) {
     const supportedDays = supportedRunMetricsDays(days);
     setRunMetricsDays(supportedDays);
-    await withBusy("Loading run metrics", async () => {
+    await withBusy("正在加载运行指标", async () => {
       const nextRunMetrics = await getDashboardRunMetrics(token, supportedDays);
       setDashboardRunMetrics(nextRunMetrics);
     });
@@ -869,7 +869,7 @@ export function App() {
   async function handleActivityLimitChange(limit: number) {
     const supportedLimit = supportedActivityLimit(limit);
     setActivityLimit(supportedLimit);
-    await withBusy("Loading activity", async () => {
+    await withBusy("正在加载活动流", async () => {
       const nextActivity = await getDashboardActivity(token, supportedLimit);
       setDashboardActivity(nextActivity);
     });
@@ -878,7 +878,7 @@ export function App() {
   async function copyOverviewLink() {
     await copyUrlToClipboard(
       dashboardOverviewUrl(runMetricsDays, activityLimit),
-      "Overview link copied",
+      "概览链接已复制",
       setCopyOverviewLinkStatus
     );
   }
@@ -1718,31 +1718,31 @@ function DashboardSummaryPanel({
   onCopyLink: () => void;
 }) {
   const cards = summary === null ? [
-    { label: "Projects", value: "Loading", tone: "neutral" },
-    { label: "Running", value: "Loading", tone: "neutral" },
-    { label: "Waiting approval", value: "Loading", tone: "neutral" },
-    { label: "Failed", value: "Loading", tone: "neutral" }
+    { label: "项目", value: "加载中", tone: "neutral" },
+    { label: "运行中", value: "加载中", tone: "neutral" },
+    { label: "待审批", value: "加载中", tone: "neutral" },
+    { label: "失败", value: "加载中", tone: "neutral" }
   ] : [
-    { label: "Projects", value: `${summary.readyProjects}/${summary.totalProjects} ready`, tone: summary.failedProjects > 0 ? "warn" : "good" },
-    { label: "Tasks", value: `${summary.totalTasks} total`, tone: "neutral" },
-    { label: "Running", value: String(summary.runningTasks), tone: summary.runningTasks > 0 ? "warn" : "neutral" },
-    { label: "Waiting approval", value: String(summary.waitingApprovalTasks), tone: summary.waitingApprovalTasks > 0 ? "warn" : "neutral" },
-    { label: "Failed", value: String(summary.failedTasks), tone: summary.failedTasks > 0 ? "bad" : "good" },
-    { label: "Done", value: String(summary.doneTasks), tone: "good" },
-    { label: "PR drafts", value: String(summary.draftPullRequests), tone: summary.draftPullRequests > 0 ? "warn" : "neutral" },
-    { label: "Open PRs", value: String(summary.openPullRequests), tone: summary.openPullRequests > 0 ? "good" : "neutral" }
+    { label: "项目", value: `${summary.readyProjects}/${summary.totalProjects} 就绪`, tone: summary.failedProjects > 0 ? "warn" : "good" },
+    { label: "任务", value: `${summary.totalTasks} 个任务`, tone: "neutral" },
+    { label: "运行中", value: String(summary.runningTasks), tone: summary.runningTasks > 0 ? "warn" : "neutral" },
+    { label: "待审批", value: String(summary.waitingApprovalTasks), tone: summary.waitingApprovalTasks > 0 ? "warn" : "neutral" },
+    { label: "失败", value: String(summary.failedTasks), tone: summary.failedTasks > 0 ? "bad" : "good" },
+    { label: "完成", value: String(summary.doneTasks), tone: "good" },
+    { label: "PR 草稿", value: String(summary.draftPullRequests), tone: summary.draftPullRequests > 0 ? "warn" : "neutral" },
+    { label: "已打开 PR", value: String(summary.openPullRequests), tone: summary.openPullRequests > 0 ? "good" : "neutral" }
   ];
 
   return (
-    <section className="dashboardSummaryPanel" id="overview" aria-label="Workspace overview">
+    <section className="dashboardSummaryPanel" id="overview" aria-label="工作台概览">
       <div className="sectionHeader">
         <div>
-          <h3>Workspace overview</h3>
-          {summary === null ? <span>Loading summary</span> : <span>{summary.cancelledTasks} cancelled, {summary.failedPullRequests} failed PRs</span>}
+          <h3>工作台概览</h3>
+          {summary === null ? <span>正在加载概览</span> : <span>{summary.cancelledTasks} 个已取消，{summary.failedPullRequests} 个 PR 失败</span>}
         </div>
         <div className="buttonRow overviewShareActions">
           <button className="ghostButton copyOverviewLinkButton" type="button" onClick={onCopyLink} disabled={busy}>
-            Copy overview link
+            复制概览链接
           </button>
           <span className="copyOverviewLinkStatus" aria-live="polite">
             {copyLinkStatus ?? ""}
@@ -1773,42 +1773,42 @@ function DashboardRunMetricsPanel({
   onDaysChange: (days: number) => void;
 }) {
   const cards = metrics === null ? [
-    { label: "Runs", value: "Loading", tone: "neutral" },
-    { label: "Success rate", value: "Loading", tone: "neutral" },
-    { label: "Avg duration", value: "Loading", tone: "neutral" },
-    { label: "Running now", value: "Loading", tone: "neutral" }
+    { label: "运行次数", value: "加载中", tone: "neutral" },
+    { label: "成功率", value: "加载中", tone: "neutral" },
+    { label: "平均耗时", value: "加载中", tone: "neutral" },
+    { label: "当前运行", value: "加载中", tone: "neutral" }
   ] : [
-    { label: "Runs", value: String(metrics.totalRuns), tone: "neutral" },
-    { label: "Success rate", value: `${metrics.successRatePercent}%`, tone: metrics.failedRuns > 0 ? "warn" : "good" },
-    { label: "Avg duration", value: formatDuration(metrics.averageDurationSeconds), tone: "neutral" },
-    { label: "Running now", value: String(metrics.runningRuns), tone: metrics.runningRuns > 0 ? "warn" : "neutral" }
+    { label: "运行次数", value: String(metrics.totalRuns), tone: "neutral" },
+    { label: "成功率", value: `${metrics.successRatePercent}%`, tone: metrics.failedRuns > 0 ? "warn" : "good" },
+    { label: "平均耗时", value: formatDuration(metrics.averageDurationSeconds), tone: "neutral" },
+    { label: "当前运行", value: String(metrics.runningRuns), tone: metrics.runningRuns > 0 ? "warn" : "neutral" }
   ];
   const maxRuns = metrics === null
     ? 1
     : Math.max(1, ...metrics.trend.map((point) => point.totalRuns));
 
   return (
-    <section className="dashboardRunMetricsPanel panel" aria-label="Agent run performance">
+    <section className="dashboardRunMetricsPanel panel" aria-label="Agent 运行表现">
       <div className="sectionHeader">
         <div>
-          <h3>Agent run performance</h3>
+          <h3>Agent 运行表现</h3>
           {metrics === null ? (
-            <span>Loading run metrics</span>
+            <span>正在加载运行指标</span>
           ) : (
-            <span>Last {metrics.days} days, {metrics.failedRuns} failed, {metrics.cancelledRuns} cancelled</span>
+            <span>最近 {metrics.days} 天，{metrics.failedRuns} 次失败，{metrics.cancelledRuns} 次取消</span>
           )}
         </div>
         <label className="runMetricsWindowControl" htmlFor="runMetricsWindow">
-          <span>Window</span>
+          <span>窗口</span>
           <select
             id="runMetricsWindow"
-            aria-label="Run metrics window"
+            aria-label="运行指标窗口"
             value={days}
             onChange={(event) => onDaysChange(Number(event.target.value))}
             disabled={busy}
           >
             {runMetricsDaysOptions.map((option) => (
-              <option value={option} key={option}>Last {option} days</option>
+              <option value={option} key={option}>最近 {option} 天</option>
             ))}
           </select>
         </label>
@@ -1822,9 +1822,9 @@ function DashboardRunMetricsPanel({
         ))}
       </div>
       {metrics === null ? (
-        <EmptyText text="Loading daily run trend." />
+        <EmptyText text="正在加载每日运行趋势。" />
       ) : (
-        <div className="runTrendList" aria-label="Daily run trend">
+        <div className="runTrendList" aria-label="每日运行趋势">
           {metrics.trend.map((point) => (
             <div className="runTrendRow" key={point.date}>
               <span>{point.date.slice(5)}</span>
@@ -1835,7 +1835,7 @@ function DashboardRunMetricsPanel({
                 />
               </div>
               <strong>{point.totalRuns}</strong>
-              <span>{point.successRuns} ok</span>
+              <span>{point.successRuns} 次成功</span>
             </div>
           ))}
         </div>
@@ -1856,31 +1856,31 @@ function DashboardActivityPanel({
   onLimitChange: (limit: number) => void;
 }) {
   return (
-    <section className="dashboardActivityPanel panel" aria-label="Recent task activity">
+    <section className="dashboardActivityPanel panel" aria-label="最近任务活动">
       <div className="sectionHeader">
         <div>
-          <h3>Recent task activity</h3>
-          <span>{activity === null ? "Loading activity" : `${activity.length} of latest ${limit} events`}</span>
+          <h3>最近任务活动</h3>
+          <span>{activity === null ? "正在加载活动流" : `最近 ${limit} 条中的 ${activity.length} 条`}</span>
         </div>
         <label className="activityLimitControl" htmlFor="activityLimit">
-          <span>Limit</span>
+          <span>数量</span>
           <select
             id="activityLimit"
-            aria-label="Activity limit"
+            aria-label="活动数量"
             value={limit}
             onChange={(event) => onLimitChange(Number(event.target.value))}
             disabled={busy}
           >
             {activityLimitOptions.map((option) => (
-              <option value={option} key={option}>Latest {option} events</option>
+              <option value={option} key={option}>最近 {option} 条</option>
             ))}
           </select>
         </label>
       </div>
       {activity === null ? (
-        <EmptyText text="Loading recent task activity." />
+        <EmptyText text="正在加载最近任务活动。" />
       ) : activity.length === 0 ? (
-        <EmptyText text="No task activity yet." />
+        <EmptyText text="还没有任务活动。" />
       ) : (
         <div className="activityList">
           {activity.map((item) => (
@@ -1891,7 +1891,7 @@ function DashboardActivityPanel({
                   <Badge value={item.status} />
                 </div>
                 <p>#{item.taskId} {item.taskTitle}</p>
-                <span>{item.projectName} · task {item.taskStatus}</span>
+                <span>{item.projectName} · 任务 {item.taskStatus}</span>
               </div>
               <time dateTime={item.occurredAt}>{formatDate(item.occurredAt)}</time>
             </article>
@@ -1912,8 +1912,8 @@ function CoderSettingsPanel({ settings }: { settings: CoderSettings | null }) {
     <section className="panel coderSettingsPanel">
       <div className="panelHeader">
         <div>
-          <p className="eyebrow">Coder configuration</p>
-          <h2>Model provider status</h2>
+          <p className="eyebrow">Coder 配置</p>
+          <h2>模型提供方状态</h2>
         </div>
         <div className="headerBadges">
           {settings ? <Badge value={settings.provider} /> : null}
@@ -1921,31 +1921,31 @@ function CoderSettingsPanel({ settings }: { settings: CoderSettings | null }) {
         </div>
       </div>
       {settings === null ? (
-        <EmptyText text="Loading Coder model configuration." />
+        <EmptyText text="正在加载 Coder 模型配置。" />
       ) : (
         <>
           <div className="metaGrid coderSettingsGrid">
-            <Meta label="Mode" value={settings.mode} />
-            <Meta label="Model" value={settings.model ?? "Not configured"} />
-            <Meta label="API key" value={settings.apiKeyConfigured ? "Configured" : "Not configured"} />
-            <Meta label="Endpoint" value={settings.apiBaseUrl} />
+            <Meta label="模式" value={settings.mode} />
+            <Meta label="模型" value={settings.model ?? "未配置"} />
+            <Meta label="API Key" value={settings.apiKeyConfigured ? "已配置" : "未配置"} />
+            <Meta label="端点" value={settings.apiBaseUrl} />
           </div>
           <div className="coderSettingsDetails">
-            <span className="paramChip"><strong>STATE</strong> {settings.enabled ? "External/fixture model path enabled" : "Recipe and safe fallback mode"}</span>
-            <span className="paramChip"><strong>ROLE</strong> {settings.instructionRole}</span>
-            <span className="paramChip"><strong>TIMEOUT</strong> {settings.timeoutSeconds}s</span>
-            <span className="paramChip"><strong>TOKENS</strong> {settings.maxCompletionTokens}</span>
-            <span className="paramChip"><strong>FIXTURE</strong> {settings.fixtureConfigured ? "configured" : "empty"}</span>
-            <span className="paramChip"><strong>ORG</strong> {settings.organizationConfigured ? "configured" : "empty"}</span>
-            <span className="paramChip"><strong>PROJECT</strong> {settings.projectConfigured ? "configured" : "empty"}</span>
+            <span className="paramChip"><strong>状态</strong> {settings.enabled ? "外部/fixture 模型路径已启用" : "Recipe 与安全兜底模式"}</span>
+            <span className="paramChip"><strong>角色</strong> {settings.instructionRole}</span>
+            <span className="paramChip"><strong>超时</strong> {settings.timeoutSeconds}s</span>
+            <span className="paramChip"><strong>Token 上限</strong> {settings.maxCompletionTokens}</span>
+            <span className="paramChip"><strong>Fixture</strong> {settings.fixtureConfigured ? "已配置" : "空"}</span>
+            <span className="paramChip"><strong>组织</strong> {settings.organizationConfigured ? "已配置" : "空"}</span>
+            <span className="paramChip"><strong>项目</strong> {settings.projectConfigured ? "已配置" : "空"}</span>
           </div>
           {settings.missingRequirements.length > 0 ? (
             <div className="errorBox">
-              Missing Coder setting: {settings.missingRequirements.join(", ")}
+              缺少 Coder 配置：{settings.missingRequirements.join(", ")}
             </div>
           ) : null}
           <p className="description compactDescription">
-            Supported modes: {settings.supportedModes.join(", ")}. Secrets stay environment-driven and are never returned by this endpoint.
+            支持模式：{settings.supportedModes.join(", ")}。密钥由环境变量管理，此接口不会返回密钥。
           </p>
         </>
       )}
@@ -1963,8 +1963,8 @@ function GitHubSettingsPanel({ settings }: { settings: GitHubSettings | null }) 
     <section className="panel githubSettingsPanel">
       <div className="panelHeader">
         <div>
-          <p className="eyebrow">GitHub publishing</p>
-          <h2>Pull request publishing</h2>
+          <p className="eyebrow">GitHub 发布</p>
+          <h2>Pull Request 发布</h2>
         </div>
         <div className="headerBadges">
           {settings ? <Badge value={settings.provider} /> : null}
@@ -1972,27 +1972,27 @@ function GitHubSettingsPanel({ settings }: { settings: GitHubSettings | null }) 
         </div>
       </div>
       {settings === null ? (
-        <EmptyText text="Loading GitHub publishing configuration." />
+        <EmptyText text="正在加载 GitHub 发布配置。" />
       ) : (
         <>
           <div className="metaGrid githubSettingsGrid">
-            <Meta label="Mode" value={settings.publishMode} />
-            <Meta label="Token" value={settings.tokenConfigured ? "Configured" : "Not configured"} />
-            <Meta label="Remote PRs" value={settings.remotePublishingEnabled ? "Enabled" : "Disabled"} />
-            <Meta label="Endpoint" value={settings.apiBaseUrl} />
+            <Meta label="发布模式" value={settings.publishMode} />
+            <Meta label="Token" value={settings.tokenConfigured ? "已配置" : "未配置"} />
+            <Meta label="远程 PR" value={settings.remotePublishingEnabled ? "已启用" : "已禁用"} />
+            <Meta label="端点" value={settings.apiBaseUrl} />
           </div>
           <div className="settingsDetails">
-            <span className="paramChip"><strong>STATE</strong> {settings.localDraftMode ? "Local draft PR preparation" : "Remote GitHub PR creation"}</span>
-            <span className="paramChip"><strong>DRAFT</strong> {settings.localDraftMode ? "active" : "fallback"}</span>
-            <span className="paramChip"><strong>REMOTE</strong> {settings.remotePublishingEnabled ? "push and open PR" : "not publishing"}</span>
+            <span className="paramChip"><strong>状态</strong> {settings.localDraftMode ? "本地 PR 草稿准备" : "远程 GitHub PR 创建"}</span>
+            <span className="paramChip"><strong>草稿</strong> {settings.localDraftMode ? "启用" : "兜底"}</span>
+            <span className="paramChip"><strong>远端</strong> {settings.remotePublishingEnabled ? "推送并创建 PR" : "不发布"}</span>
           </div>
           {settings.missingRequirements.length > 0 ? (
             <div className="errorBox">
-              Missing GitHub setting: {settings.missingRequirements.join(", ")}
+              缺少 GitHub 配置：{settings.missingRequirements.join(", ")}
             </div>
           ) : null}
           <p className="description compactDescription">
-            GitHub token stays environment-driven. Disabled remote publishing still prepares a local branch, commit, and DRAFT_READY PR record.
+            GitHub token 由环境变量管理。远端发布关闭时，RepoPilot 仍会准备本地分支、提交和 DRAFT_READY PR 记录。
           </p>
         </>
       )}
@@ -2010,8 +2010,8 @@ function SandboxSettingsPanel({ settings }: { settings: SandboxSettings | null }
     <section className="panel sandboxSettingsPanel">
       <div className="panelHeader">
         <div>
-          <p className="eyebrow">Sandbox runtime</p>
-          <h2>Docker sandbox</h2>
+          <p className="eyebrow">沙箱运行时</p>
+          <h2>Docker 沙箱</h2>
         </div>
         <div className="headerBadges">
           {settings ? <Badge value={settings.dockerAvailable ? "DOCKER" : "LOCAL"} /> : null}
@@ -2019,25 +2019,25 @@ function SandboxSettingsPanel({ settings }: { settings: SandboxSettings | null }
         </div>
       </div>
       {settings === null ? (
-        <EmptyText text="Loading sandbox runtime configuration." />
+        <EmptyText text="正在加载沙箱运行时配置。" />
       ) : (
         <>
           <div className="metaGrid sandboxSettingsGrid">
-            <Meta label="Image" value={settings.dockerImage ?? "Not configured"} />
-            <Meta label="Docker" value={settings.dockerAvailable ? `Available ${settings.dockerVersion ?? ""}`.trim() : settings.dockerCheckEnabled ? "Unavailable" : "Not checked"} />
-            <Meta label="Timeout" value={`${settings.timeoutSeconds}s`} />
-            <Meta label="Maven cache" value={settings.mavenCacheWritable ? "Writable" : "Blocked"} />
+            <Meta label="镜像" value={settings.dockerImage ?? "未配置"} />
+            <Meta label="Docker" value={settings.dockerAvailable ? `可用 ${settings.dockerVersion ?? ""}`.trim() : settings.dockerCheckEnabled ? "不可用" : "未检查"} />
+            <Meta label="超时" value={`${settings.timeoutSeconds}s`} />
+            <Meta label="Maven 缓存" value={settings.mavenCacheWritable ? "可写" : "受阻"} />
           </div>
           <div className="settingsDetails">
-            <span className="paramChip"><strong>WORKSPACE</strong> {settings.workspaceRootWritable ? "writable" : "blocked"}</span>
-            <span className="paramChip"><strong>CACHE</strong> {settings.mavenCacheExists ? "exists" : "will create"}</span>
-            <span className="paramChip"><strong>CHECK</strong> {settings.dockerCheckEnabled ? "docker daemon" : "disabled"}</span>
+            <span className="paramChip"><strong>工作区</strong> {settings.workspaceRootWritable ? "可写" : "受阻"}</span>
+            <span className="paramChip"><strong>缓存</strong> {settings.mavenCacheExists ? "已存在" : "会创建"}</span>
+            <span className="paramChip"><strong>检查</strong> {settings.dockerCheckEnabled ? "Docker daemon" : "已关闭"}</span>
           </div>
           <div className="sectionHeader">
-            <h3>Sandbox readiness checks</h3>
-            <span>{settings.checks.length} checks</span>
+            <h3>沙箱就绪检查</h3>
+            <span>{settings.checks.length} 项检查</span>
           </div>
-          <div className="preflightCheckList" aria-label="Sandbox readiness checks">
+          <div className="preflightCheckList" aria-label="沙箱就绪检查">
             {settings.checks.map((check) => (
               <div className="preflightCheckRow" data-status={check.status} key={check.code}>
                 <Badge value={check.status} />
@@ -2050,11 +2050,11 @@ function SandboxSettingsPanel({ settings }: { settings: SandboxSettings | null }
           </div>
           {settings.missingRequirements.length > 0 ? (
             <div className="errorBox">
-              Missing sandbox requirement: {settings.missingRequirements.join(", ")}
+              缺少沙箱要求：{settings.missingRequirements.join(", ")}
             </div>
           ) : null}
           <p className="description compactDescription">
-            Maven cache path: {settings.mavenCachePath}. Workspace root: {settings.workspaceRoot}.
+            Maven 缓存路径：{settings.mavenCachePath}。工作区根目录：{settings.workspaceRoot}。
           </p>
         </>
       )}

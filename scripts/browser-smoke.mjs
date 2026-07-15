@@ -35,48 +35,48 @@ try {
   await registerForm.getByRole("button", { name: "Register" }).click();
   await page.getByRole("button", { name: "退出登录" }).waitFor();
   const overview = page.locator(".dashboardSummaryPanel");
-  await overview.getByText("Workspace overview").waitFor();
-  await expectDashboardMetric(page, overview, "Projects", "0/0 ready");
-  await expectDashboardMetric(page, overview, "Tasks", "0 total");
-  await expectDashboardMetric(page, overview, "Waiting approval", "0");
+  await overview.getByText("工作台概览").waitFor();
+  await expectDashboardMetric(page, overview, "项目", "0/0 就绪");
+  await expectDashboardMetric(page, overview, "任务", "0 个任务");
+  await expectDashboardMetric(page, overview, "待审批", "0");
   const runMetrics = page.locator(".dashboardRunMetricsPanel");
-  await runMetrics.getByText("Agent run performance").waitFor();
-  await runMetrics.locator(".sectionHeader").getByText(/Last 7 days,/).waitFor();
-  await expectDashboardMetric(page, runMetrics, "Runs", "0");
-  await expectDashboardMetric(page, runMetrics, "Success rate", "0%");
+  await runMetrics.getByText("Agent 运行表现").waitFor();
+  await runMetrics.locator(".sectionHeader").getByText(/最近 7 天，/).waitFor();
+  await expectDashboardMetric(page, runMetrics, "运行次数", "0");
+  await expectDashboardMetric(page, runMetrics, "成功率", "0%");
   const runMetricsWindowResponse = waitForRunMetricsQuery(page, "14");
-  await runMetrics.getByLabel("Run metrics window").selectOption("14");
+  await runMetrics.getByLabel("运行指标窗口").selectOption("14");
   await runMetricsWindowResponse;
-  await runMetrics.locator(".sectionHeader").getByText(/Last 14 days,/).waitFor();
+  await runMetrics.locator(".sectionHeader").getByText(/最近 14 天，/).waitFor();
   await page.waitForFunction(() => new URLSearchParams(window.location.search).get("runMetricsDays") === "14");
-  await expectDashboardMetric(page, runMetrics, "Runs", "0");
+  await expectDashboardMetric(page, runMetrics, "运行次数", "0");
   const reloadRunMetricsWindowResponse = waitForRunMetricsQuery(page, "14");
   await page.reload({ waitUntil: "domcontentloaded" });
   await reloadRunMetricsWindowResponse;
-  await runMetrics.locator(".sectionHeader").getByText(/Last 14 days,/).waitFor();
+  await runMetrics.locator(".sectionHeader").getByText(/最近 14 天，/).waitFor();
   await page.waitForFunction(() => {
-    const select = document.querySelector('[aria-label="Run metrics window"]');
+    const select = document.querySelector('[aria-label="运行指标窗口"]');
     return select?.value === "14";
   });
   const activity = page.locator(".dashboardActivityPanel");
-  await activity.getByText("Recent task activity").waitFor();
-  await activity.locator(".sectionHeader").getByText("0 of latest 10 events").waitFor();
-  await activity.getByText("No task activity yet.").waitFor();
+  await activity.getByText("最近任务活动").waitFor();
+  await activity.locator(".sectionHeader").getByText("最近 10 条中的 0 条").waitFor();
+  await activity.getByText("还没有任务活动。").waitFor();
   const activityLimitResponse = waitForActivityQuery(page, "25");
-  await activity.getByLabel("Activity limit").selectOption("25");
+  await activity.getByLabel("活动数量").selectOption("25");
   await activityLimitResponse;
-  await activity.locator(".sectionHeader").getByText("0 of latest 25 events").waitFor();
+  await activity.locator(".sectionHeader").getByText("最近 25 条中的 0 条").waitFor();
   await page.waitForFunction(() => new URLSearchParams(window.location.search).get("activityLimit") === "25");
   const reloadActivityLimitResponse = waitForActivityQuery(page, "25");
   await page.reload({ waitUntil: "domcontentloaded" });
   await reloadActivityLimitResponse;
-  await activity.locator(".sectionHeader").getByText("0 of latest 25 events").waitFor();
+  await activity.locator(".sectionHeader").getByText("最近 25 条中的 0 条").waitFor();
   await page.waitForFunction(() => {
-    const select = document.querySelector('[aria-label="Activity limit"]');
+    const select = document.querySelector('[aria-label="活动数量"]');
     return select?.value === "25";
   });
-  await overview.getByRole("button", { name: "Copy overview link" }).click();
-  await overview.getByText("Overview link copied").waitFor();
+  await overview.getByRole("button", { name: "复制概览链接" }).click();
+  await overview.getByText("概览链接已复制").waitFor();
   await page.waitForFunction(() =>
     navigator.clipboard.readText().then((text) => {
       if (!text) {
@@ -89,27 +89,27 @@ try {
     }).catch(() => false)
   );
   const coderSettings = page.locator(".coderSettingsPanel");
-  await coderSettings.getByText("Coder configuration").waitFor();
-  await coderSettings.getByText("Model provider status").waitFor();
+  await coderSettings.getByText("Coder 配置").waitFor();
+  await coderSettings.getByText("模型提供方状态").waitFor();
   await coderSettings.locator(".badge").filter({ hasText: /^NONE$/ }).waitFor();
   await coderSettings.locator(".badge").filter({ hasText: /^READY$/ }).waitFor();
-  await coderSettings.getByText("Recipe and safe fallback mode").waitFor();
-  await coderSettings.getByText("Secrets stay environment-driven").waitFor();
+  await coderSettings.getByText("Recipe 与安全兜底模式").waitFor();
+  await coderSettings.getByText("密钥由环境变量管理").waitFor();
   const githubSettings = page.locator(".githubSettingsPanel");
-  await githubSettings.getByText("GitHub publishing").waitFor();
-  await githubSettings.getByText("Pull request publishing").waitFor();
+  await githubSettings.getByText("GitHub 发布").waitFor();
+  await githubSettings.getByText("Pull Request 发布").waitFor();
   await githubSettings.locator(".badge").filter({ hasText: /^GITHUB$/ }).waitFor();
   await githubSettings.locator(".badge").filter({ hasText: /^READY$/ }).waitFor();
   await githubSettings.getByText("LOCAL_DRAFT_ONLY").waitFor();
-  await githubSettings.getByText("Local draft PR preparation").waitFor();
-  await githubSettings.getByText("GitHub token stays environment-driven").waitFor();
+  await githubSettings.getByText("本地 PR 草稿准备").waitFor();
+  await githubSettings.getByText("GitHub token 由环境变量管理").waitFor();
   const sandboxSettings = page.locator(".sandboxSettingsPanel");
-  await sandboxSettings.getByText("Sandbox runtime").waitFor();
-  await sandboxSettings.getByText("Docker sandbox").waitFor();
+  await sandboxSettings.getByText("沙箱运行时").waitFor();
+  await sandboxSettings.getByText("Docker 沙箱").waitFor();
   await sandboxSettings.locator(".badge").filter({ hasText: /^READY$/ }).waitFor();
   await sandboxSettings.getByText("maven:3.9-eclipse-temurin-17").waitFor();
-  await sandboxSettings.getByText("Sandbox readiness checks").waitFor();
-  await sandboxSettings.getByText("Maven cache path:").waitFor();
+  await sandboxSettings.getByText("沙箱就绪检查").waitFor();
+  await sandboxSettings.getByText("Maven 缓存路径：").waitFor();
 
   const projectForm = page.locator("form").filter({ hasText: "Add project" });
   await projectForm.getByLabel("Repository URL").fill(repoUrl);
@@ -172,7 +172,7 @@ try {
   });
 
   await clickAndWaitForIdle(page, page.getByRole("button", { name: "Index" }).first());
-  await expectDashboardMetric(page, overview, "Projects", "1/1 ready");
+  await expectDashboardMetric(page, overview, "项目", "1/1 就绪");
   await clickAndWaitForIdle(page, page.getByRole("button", { name: "Refresh map" }));
 
   const insight = page.locator(".projectInsightPanel");
@@ -392,9 +392,9 @@ try {
   await clickAndWaitForIdle(page, taskDetail.getByRole("button", { name: "运行任务" }));
   await taskDetail.getByText(/Connecting stream|Live stream/).first().waitFor({ timeout: 15000 });
   await waitForBadge(taskDetail, "WAITING_HUMAN_APPROVAL");
-  await expectDashboardMetric(page, overview, "Waiting approval", "1");
-  await expectDashboardMetric(page, runMetrics, "Runs", "1");
-  await expectDashboardMetric(page, runMetrics, "Success rate", "100%");
+  await expectDashboardMetric(page, overview, "待审批", "1");
+  await expectDashboardMetric(page, runMetrics, "运行次数", "1");
+  await expectDashboardMetric(page, runMetrics, "成功率", "100%");
   await activity.locator(".activityTitle strong").filter({ hasText: /^waiting_human_approval$/ }).waitFor();
   await taskFilters.getByLabel("Task status filter").selectOption("WAITING_HUMAN_APPROVAL");
   await clickAndWaitForIdle(page, taskFilters.getByRole("button", { name: "Apply filters" }));
