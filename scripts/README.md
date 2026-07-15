@@ -41,7 +41,7 @@
 - 启动本地后端 HTTP stub 和真实 FastAPI worker。
 - 使用 callback token 调用 `POST /runs/{run_id}/start`。
 - 验证 Worker 后台执行 `load_task_context`、确定性 `plan_task` 和 `retrieve_context`。
-- 验证 Worker 拉取 context、files、symbols、search、file，并回写三个 SUCCESS step。
+- 验证 Worker 拉取 context、files、symbols、search、file，自动回写 tool call audit，并回写三个 SUCCESS step。
 - 将证据写入 `output/agent-worker-node-smoke/last-run.json`。
 
 ## Real Token Demo Check

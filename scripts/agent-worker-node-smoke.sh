@@ -17,7 +17,7 @@ RepoPilot Agent Worker 初始与检索节点 smoke
   - 启动本地后端 HTTP stub 和真实 Agent Worker。
   - 调用 /runs/{run_id}/start。
   - 验证 Worker 后台执行 load_task_context、plan_task 和 retrieve_context。
-  - 校验 Worker 拉取 context/files/symbols/search/file，并回写三个 SUCCESS step。
+  - 校验 Worker 拉取 context/files/symbols/search/file，自动回写 tool call audit，并回写三个 SUCCESS step。
   - 运行证据写入 output/agent-worker-node-smoke/last-run.json。
 EOF
 }
@@ -49,7 +49,7 @@ from urllib.request import Request, urlopen
 root_dir = Path(sys.argv[1])
 summary_path = Path(sys.argv[2])
 log_dir = Path(sys.argv[3])
-captured = {"gets": [], "steps": []}
+captured = {"gets": [], "steps": [], "toolCalls": []}
 
 
 def free_port() -> int:
@@ -206,6 +206,22 @@ class UserService {
             "contentType": self.headers.get("Content-Type"),
             "body": json.loads(body),
         }
+        if parsed.path.endswith("/tool-calls"):
+            captured["toolCalls"].append(event)
+            data = {
+                "id": 800 + len(captured["toolCalls"]),
+                "agentRunId": 606,
+                "toolName": event["body"]["tool_name"],
+                "inputJson": json.dumps(event["body"].get("input", {}), ensure_ascii=False),
+                "outputJson": json.dumps(event["body"].get("output", {}), ensure_ascii=False),
+                "status": event["body"]["status"],
+                "durationMs": event["body"].get("duration_ms", 0),
+                "errorMessage": event["body"].get("error_message"),
+                "startedAt": "2026-07-16T00:00:00Z",
+                "finishedAt": "2026-07-16T00:00:01Z",
+            }
+            self.respond({"success": True, "data": data, "code": None, "message": None, "traceId": "node-smoke"})
+            return
         if not parsed.path.endswith("/steps"):
             self.send_response(404)
             self.end_headers()
@@ -312,7 +328,7 @@ if start.get("run_id") != 606 or start.get("accepted") is not True or start.get(
     raise SystemExit(f"worker start mismatch: {start}")
 if len(captured["steps"]) < 3:
     raise SystemExit(f"expected three worker step callbacks, got {captured['steps']}")
-if any(event["token"] != "node-smoke-token" for event in captured["gets"] + captured["steps"]):
+if any(event["token"] != "node-smoke-token" for event in captured["gets"] + captured["steps"] + captured["toolCalls"]):
     raise SystemExit("worker internal token header mismatch")
 
 get_paths = [event["path"] for event in captured["gets"]]
@@ -350,6 +366,23 @@ if "给 User 模块新增分页查询接口" not in retrieve_output.get("queries
 if not any(file.get("path", "").endswith("UserController.java") for file in retrieve_output.get("readFiles", [])):
     raise SystemExit(f"retrieve_context readFiles mismatch: {retrieve_output}")
 
+tool_calls = captured["toolCalls"]
+if len(tool_calls) != len(captured["gets"]):
+    raise SystemExit(f"tool call audit count mismatch: gets={len(captured['gets'])}, toolCalls={len(tool_calls)}")
+if any(event.get("contentType") != "application/json" for event in tool_calls):
+    raise SystemExit(f"tool call content type mismatch: {tool_calls}")
+if any(event["body"].get("status") != "SUCCESS" for event in tool_calls):
+    raise SystemExit(f"tool call status mismatch: {tool_calls}")
+tool_names = [event["body"]["tool_name"] for event in tool_calls]
+for expected in ["load_run_context", "list_project_files", "list_symbols", "search_code", "read_project_file"]:
+    if expected not in tool_names:
+        raise SystemExit(f"missing tool call audit {expected}: {tool_names}")
+read_file_tool_calls = [event for event in tool_calls if event["body"]["tool_name"] == "read_project_file"]
+if not read_file_tool_calls:
+    raise SystemExit(f"missing read_project_file tool audit: {tool_calls}")
+if any("contentPreview" not in event["body"].get("output", {}) for event in read_file_tool_calls):
+    raise SystemExit(f"read_project_file output summary mismatch: {read_file_tool_calls}")
+
 summary = {
     "generatedAt": datetime.now(timezone.utc).isoformat(),
     "worker": {
@@ -375,6 +408,16 @@ summary = {
         }
         for event in captured["steps"]
     ],
+    "toolCalls": [
+        {
+            "path": event["path"],
+            "toolName": event["body"]["tool_name"],
+            "status": event["body"]["status"],
+            "durationMs": event["body"].get("duration_ms"),
+            "tokenHeaderPresent": event["token"] == "node-smoke-token",
+        }
+        for event in tool_calls
+    ],
     "loadTaskContext": {
         "repoFullName": load_output["repoFullName"],
         "fileCount": load_output["fileCount"],
@@ -395,5 +438,6 @@ summary = {
 summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 print("Agent Worker 初始与检索节点验证通过。")
 print(f"Steps: {', '.join(step['stepName'] for step in summary['steps'])}")
+print(f"Tool calls: {len(summary['toolCalls'])}")
 print(f"证据文件: {summary_path}")
 PY

@@ -46,6 +46,7 @@ The node smoke script checks:
 - A real FastAPI worker starts with a local backend stub.
 - `POST /runs/{run_id}/start` schedules initial worker nodes when `REPOPILOT_AGENT_WORKER_CALLBACK_TOKEN` is configured.
 - The worker reads run context/files/symbols/search/file through the backend tool bridge.
+- Every run-scoped tool read is automatically recorded through `/tool-calls` with a bounded output summary.
 - The worker records `load_task_context`, deterministic `plan_task` and `retrieve_context` SUCCESS steps.
 - Evidence is written to `output/agent-worker-node-smoke/last-run.json`.
 
@@ -150,6 +151,7 @@ symbols = client.list_symbols(run_id=303, symbol_type="CONTROLLER")
 ```
 
 These methods call backend internal endpoints scoped by `run_id`; the backend resolves the related task and project, so the worker does not need a user JWT or a raw `project_id` tool scope.
+Each method also records a best-effort tool call audit entry through `record_tool_call(...)`; audit write failures are ignored so a logging outage does not break the main tool read.
 
 ## Initial Worker Nodes
 
@@ -164,5 +166,5 @@ If no callback token is configured, `/start` remains a pure contract endpoint an
 Next implementation steps:
 
 1. Promote the deterministic initial-node runner into a real LangGraph graph.
-2. Attach Worker tool reads and future model calls to the audit callback automatically.
+2. Attach future Worker model calls to `record_model_call(...)` automatically.
 3. Start migrating `generate_patch` from the Spring Boot fallback executor into the Python Worker.

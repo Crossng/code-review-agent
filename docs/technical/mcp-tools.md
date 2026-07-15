@@ -240,6 +240,7 @@ POST /api/internal/agent-worker/runs/{runId}/model-calls
 ```
 
 这两个接口继续使用 `X-RepoPilot-Worker-Token`，后端按 `runId` 绑定到已有 `agent_run`，并复用本地 executor 的 JSON 截断和敏感字段脱敏逻辑。
+Worker 的 run-scoped 仓库读取 client 已经把 `load_run_context`、`list_project_files`、`read_project_file`、`search_code` 和 `list_symbols` 自动接入 `/tool-calls`；审计写入失败会被忽略，避免日志管道故障影响主工具读取。
 
 ## 5. 安全规则
 

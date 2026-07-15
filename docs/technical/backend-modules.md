@@ -139,7 +139,7 @@ CANCELLED
 - 可通过 `REPOPILOT_AGENT_WORKER_ENABLED=true` 打开 Agent Worker 启动桥；后台执行会调用 `${REPOPILOT_AGENT_WORKER_URL}/runs/{runId}/start` 并写入 `agent_worker_start` step，调用失败只记录失败证据，现阶段仍由 Spring Boot executor 继续兜底。
 - Agent Worker 可通过 `POST /api/internal/agent-worker/runs/{runId}/steps` 回写 step 证据，通过 `/tool-calls` 和 `/model-calls` 回写工具/模型调用审计，通过 `/status` 回写 task/run 状态；内部 callback 由 `REPOPILOT_AGENT_WORKER_CALLBACK_TOKEN` 保护，step/status 成功落库后分别发布 `STEP_RECORDED`、`TASK_UPDATED`，并在 `complete_stream=true` 时发布 `STREAM_COMPLETE`。
 - Agent Worker 可通过 `GET /api/internal/agent-worker/runs/{runId}/context`、`/project/files`、`/project/file`、`/project/search` 和 `/project/symbols` 读取 run 作用域内的任务上下文、文件树、文件内容、代码检索结果和符号；后端按 run 反查 task/project，`read_file` 拒绝越权路径和 `.git` 内部路径，作为正式 MCP Tool Server 拆出前的内部工具桥。
-- 配置 `REPOPILOT_AGENT_WORKER_CALLBACK_TOKEN` 后，Python Worker 的 `/runs/{runId}/start` 会后台执行 `load_task_context`、确定性 `plan_task` 和 `retrieve_context`，通过内部工具桥读取上下文、检索代码、读取关键文件预览并通过 `/steps` 回写 SUCCESS 证据；未配置 token 时 `/start` 只返回启动契约。
+- 配置 `REPOPILOT_AGENT_WORKER_CALLBACK_TOKEN` 后，Python Worker 的 `/runs/{runId}/start` 会后台执行 `load_task_context`、确定性 `plan_task` 和 `retrieve_context`，通过内部工具桥读取上下文、检索代码、读取关键文件预览，并自动通过 `/tool-calls` 回写每次工具读取的 SUCCESS/FAILED 审计摘要，再通过 `/steps` 回写 SUCCESS 证据；未配置 token 时 `/start` 只返回启动契约。
 - 同一个项目同一时间 MVP 只允许一个写入型 Agent 任务运行，避免工作区冲突。
 
 ## 7. 异常处理
