@@ -54,7 +54,7 @@ stateDiagram-v2
 | `validate_patch_safety` | 预检 unified diff 安全边界 | 拒绝路径穿越、绝对路径、Windows/反斜杠路径、`.git`/secret 目录和二进制 patch |
 | `apply_patch` | 在 Docker 沙箱工作区应用 diff | `git apply` |
 | `run_tests` | 在 Docker 沙箱执行 Maven 测试并写入 `test_run` | `mvn -q test` |
-| `repair_patch` | 根据日志修复 | 当前支持 Maven 测试依赖缺失时补充 `spring-boot-starter-test` 并重跑测试；后续增强为 LLM + `read_file` |
+| `repair_patch` | 根据日志修复 | 当前支持 Maven 测试依赖缺失时补充 `spring-boot-starter-test`，以及常见 Java 标准库缺 import 导致的 `cannot find symbol` 编译失败；后续增强为 LLM + `read_file` |
 | `review_patch` | 风险审查 | 当前为规则化 diff/test 审查；后续增强为 LLM + `get_git_diff` |
 | `wait_approval` | 暂停等待人工审批 | Backend API |
 | `create_pr` | 创建 PR | `create_branch`, `commit_changes`, `create_pull_request` |
@@ -158,7 +158,7 @@ RetrieverAgent 输出：
 | 索引 | 1 次 | 解析失败记录文件路径 |
 | 检索 | 0 次 | 返回空上下文时进入失败状态 |
 | diff 生成 | 1 次 | diff 格式不合法或安全预检失败时重新生成 |
-| 测试修复 | 2 次 | RepairAgent 最多尝试 2 次；当前已支持缺失 `spring-boot-starter-test` 的确定性修复 |
+| 测试修复 | 2 次 | RepairAgent 最多尝试 2 次；当前已支持缺失 `spring-boot-starter-test` 和常见 Java 标准库 import 的确定性修复 |
 | PR 创建 | 1 次 | GitHub API 失败保留分支和错误 |
 
 ## 9. Human-in-the-loop

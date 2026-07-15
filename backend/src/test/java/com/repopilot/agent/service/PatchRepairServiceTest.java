@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -56,11 +57,45 @@ class PatchRepairServiceTest {
                 1
         );
 
-        assertThat(repaired.getSummary()).contains("Repair attempt 1");
+        assertThat(repaired.getSummary()).contains("修复尝试 1");
+        assertThat(repaired.getGenerationMode()).isEqualTo("REPAIR_MISSING_TEST_DEPENDENCY");
         assertThat(repaired.getDiffContent())
                 .startsWith("diff --git a/pom.xml b/pom.xml")
                 .contains("spring-boot-starter-test")
                 .contains("diff --git a/src/test/java/com/example/demo/user/UserServiceTest.java");
+    }
+
+    @Test
+    void repairsMissingJavaImportFromMavenCompileLog(@TempDir Path repositoryPath) throws IOException, InterruptedException {
+        when(patchRecordRepository.save(any(PatchRecord.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        copyDirectory(DEMO_REPOSITORY, repositoryPath);
+        String filePath = "src/main/java/com/example/demo/user/UserService.java";
+        String original = Files.readString(repositoryPath.resolve(filePath));
+        String changed = original.replace(
+                "    public UserEntity getUser(Long id) {\n        return userMapper.findById(id);\n    }\n",
+                "    public UserEntity getUser(Long id) {\n        Objects.requireNonNull(id, \"id\");\n        return userMapper.findById(id);\n    }\n"
+        );
+        Fixture fixture = fixture(repositoryPath, replaceFileDiff(filePath, original, changed));
+
+        PatchRecord repaired = patchRepairService.repairMavenFailure(
+                fixture.task(),
+                fixture.run(),
+                fixture.patch(),
+                failedTestRun(fixture, """
+                        [ERROR] %s:[18,9] cannot find symbol
+                        [ERROR]   symbol:   variable Objects
+                        [ERROR]   location: class com.example.demo.user.UserService
+                        """.formatted(repositoryPath.resolve(filePath))),
+                1
+        );
+
+        assertThat(repaired.getGenerationMode()).isEqualTo("REPAIR_MISSING_JAVA_IMPORT");
+        assertThat(repaired.getSummary()).contains("补充 java.util.Objects import");
+        assertThat(repaired.getDiffContent())
+                .startsWith("diff --git a/src/main/java/com/example/demo/user/UserService.java b/src/main/java/com/example/demo/user/UserService.java")
+                .contains("+import java.util.Objects;")
+                .contains("+        Objects.requireNonNull(id, \"id\");");
+        assertGitApplyChecks(repositoryPath, repaired.getDiffContent());
     }
 
     @Test
@@ -76,10 +111,14 @@ class PatchRepairServiceTest {
                 1
         ))
                 .isInstanceOf(ApiException.class)
-                .hasMessageContaining("no deterministic repair");
+                .hasMessageContaining("确定性修复");
     }
 
     private Fixture fixture(Path repositoryPath) {
+        return fixture(repositoryPath, userServiceTestOnlyDiff());
+    }
+
+    private Fixture fixture(Path repositoryPath, String diffContent) {
         User user = new User("repair@example.test", "hash", "Repair", "USER");
         Project project = new Project(user, "file://demo-spring-repo", "demo-spring-repo", "main");
         project.setLocalPath(repositoryPath.toString());
@@ -96,7 +135,7 @@ class PatchRepairServiceTest {
                 run,
                 "main",
                 "repopilot/task-1",
-                userServiceTestOnlyDiff(),
+                diffContent,
                 "Broken patch without test dependency"
         );
         return new Fixture(task, run, patch);
@@ -130,6 +169,38 @@ class PatchRepairServiceTest {
                 +    @Test void compiles() {}
                 +}
                 """;
+    }
+
+    private static String replaceFileDiff(String filePath, String oldContent, String newContent) {
+        String[] oldLines = oldContent.replace("\r\n", "\n").replaceFirst("\\n$", "").split("\n", -1);
+        String[] newLines = newContent.replace("\r\n", "\n").replaceFirst("\\n$", "").split("\n", -1);
+        StringBuilder builder = new StringBuilder();
+        builder.append("diff --git a/").append(filePath).append(" b/").append(filePath).append("\n");
+        builder.append("index 1111111..2222222 100644\n");
+        builder.append("--- a/").append(filePath).append("\n");
+        builder.append("+++ b/").append(filePath).append("\n");
+        builder.append("@@ -1,").append(oldLines.length).append(" +1,").append(newLines.length).append(" @@\n");
+        for (String line : oldLines) {
+            builder.append("-").append(line).append("\n");
+        }
+        for (String line : newLines) {
+            builder.append("+").append(line).append("\n");
+        }
+        return builder.toString();
+    }
+
+    private static void assertGitApplyChecks(Path repositoryPath, String diffContent) throws IOException, InterruptedException {
+        Process process = new ProcessBuilder("git", "apply", "--check", "-")
+                .directory(repositoryPath.toFile())
+                .redirectErrorStream(true)
+                .start();
+        process.getOutputStream().write(diffContent.getBytes(StandardCharsets.UTF_8));
+        process.getOutputStream().close();
+        String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        int exitCode = process.waitFor();
+        assertThat(exitCode)
+                .as(output)
+                .isZero();
     }
 
     private void copyDirectory(Path sourceRoot, Path targetRoot) throws IOException {

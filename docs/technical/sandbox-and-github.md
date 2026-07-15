@@ -134,7 +134,7 @@ PR body 模板：
 | --- | --- |
 | clone 失败 | 标记项目或任务失败，记录 GitHub 错误 |
 | diff 应用失败 | 标记 patch 失败，要求重新生成 |
-| 测试失败 | 保存日志，最多进入 RepairAgent 2 次；当前确定性修复覆盖缺失 `spring-boot-starter-test`，无法修复时进入 `FAILED_TEST` 等待人工处理或 Regenerate |
+| 测试失败 | 保存日志，最多进入 RepairAgent 2 次；当前确定性修复覆盖缺失 `spring-boot-starter-test` 和常见 Java 标准库缺 import 编译失败，无法修复时进入 `FAILED_TEST` 等待人工处理或 Regenerate |
 | push 失败 | 保留本地分支，允许重试 |
 | PR 创建失败 | 保存 GitHub API 响应，允许重试 |
 

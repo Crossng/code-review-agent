@@ -198,10 +198,10 @@ class AgentTaskServiceRegenerationTest {
                 .thenAnswer(invocation -> new CodeSearchResponse(invocation.getArgument(1), invocation.getArgument(2), List.of()));
 
         PatchRecord initialPatch = patch(fixture.task(), new AgentRun(fixture.task()), 300L, "Broken patch without test dependency");
-        PatchRecord repairedPatch = patch(fixture.task(), new AgentRun(fixture.task()), 301L, "Repair attempt 1: adds missing Spring Boot test dependency before rerunning sandbox tests.");
+        PatchRecord repairedPatch = patch(fixture.task(), new AgentRun(fixture.task()), 301L, "修复尝试 1：补充缺失的 Spring Boot test 依赖后重新运行沙箱测试。");
         when(patchGenerationService.generatePatch(any(AgentTask.class), any(AgentRun.class), any()))
                 .thenAnswer(invocation -> patch(invocation.getArgument(0), invocation.getArgument(1), 300L, "Broken patch without test dependency"));
-        when(patchRepairService.repairMissingTestDependency(any(), any(), any(), any(), anyInt()))
+        when(patchRepairService.repairMavenFailure(any(), any(), any(), any(), anyInt()))
                 .thenAnswer(invocation -> patch(invocation.getArgument(0), invocation.getArgument(1), 301L, repairedPatch.getSummary()));
 
         SandboxTestService.SandboxWorkspace workspace = new SandboxTestService.SandboxWorkspace(
@@ -221,7 +221,7 @@ class AgentTaskServiceRegenerationTest {
         when(sandboxTestService.runMavenTest(any(AgentRun.class), any(PatchRecord.class), any()))
                 .thenAnswer(invocation -> {
                     PatchRecord patch = invocation.getArgument(1);
-                    boolean repaired = patch.getSummary().startsWith("Repair attempt");
+                    boolean repaired = patch.getSummary().startsWith("修复尝试");
                     TestRun testRun = new TestRun(
                             invocation.getArgument(0),
                             patch,
@@ -239,7 +239,7 @@ class AgentTaskServiceRegenerationTest {
 
         assertThat(run.getStatus()).isEqualTo(AgentRunStatus.SUCCESS);
         assertThat(fixture.task().getStatus()).isEqualTo(AgentTaskStatus.WAITING_HUMAN_APPROVAL);
-        verify(patchRepairService).repairMissingTestDependency(any(), any(), any(), any(), anyInt());
+        verify(patchRepairService).repairMavenFailure(any(), any(), any(), any(), anyInt());
     }
 
     @Test

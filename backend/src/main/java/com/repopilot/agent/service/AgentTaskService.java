@@ -346,7 +346,7 @@ public class AgentTaskService {
                                     "attempt", attemptNumber,
                                     "maxAttempts", MAX_REPAIR_ATTEMPTS
                             ),
-                            () -> patchRepairService.repairMissingTestDependency(
+                            () -> patchRepairService.repairMavenFailure(
                                     task,
                                     run,
                                     failedPatch,

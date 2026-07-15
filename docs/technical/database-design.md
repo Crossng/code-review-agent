@@ -195,7 +195,7 @@ MVP 使用 PostgreSQL 作为主数据库，并启用 pgvector 存储代码向量
 | `target_branch` | varchar(100) | 目标分支 |
 | `diff_content` | text | unified diff |
 | `summary` | text | 修改摘要 |
-| `generation_mode` | varchar(100) | 生成路径，例如 `SPRING_USER_PAGINATION_RECIPE`、`SPRING_USER_ID_VALIDATION_RECIPE`、`SPRING_USER_COUNT_RECIPE`、`SPRING_USER_CREATE_RECIPE`、`LLM_CODER_DRAFT`、`SAFE_PLANNING_FALLBACK`、`REPAIR_MISSING_TEST_DEPENDENCY` |
+| `generation_mode` | varchar(100) | 生成路径，例如 `SPRING_USER_PAGINATION_RECIPE`、`SPRING_USER_ID_VALIDATION_RECIPE`、`SPRING_USER_COUNT_RECIPE`、`SPRING_USER_CREATE_RECIPE`、`LLM_CODER_DRAFT`、`SAFE_PLANNING_FALLBACK`、`REPAIR_MISSING_TEST_DEPENDENCY`、`REPAIR_MISSING_JAVA_IMPORT` |
 | `status` | varchar(50) | `GENERATED`、`APPLIED`、`APPROVED`、`REJECTED` |
 | `created_at` | timestamp | 创建时间 |
 

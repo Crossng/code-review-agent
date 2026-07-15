@@ -3307,3 +3307,31 @@ PR 发布前置检查、审批错误提示、本地 PR 草稿正文和 commit me
 
 - 继续推进真实模型编码、失败修复循环和远端 GitHub PR 发布体验。
 - 在启用 GitHub token 的环境中补充远端 PR 创建与失败重试演示。
+
+## 2026-07-16, Slice 93 - 修复循环增强版
+
+RepairAgent 从单一的缺测试依赖修复扩展为 Maven 失败日志分流器：继续支持补 `spring-boot-starter-test`，并新增常见 Java 标准库缺 import 导致 `cannot find symbol` 编译失败时的确定性补 import 修复。
+
+### Added
+
+- `PatchRepairService.repairMavenFailure` 作为统一修复入口，根据 Maven 日志自动选择可用修复策略。
+- 保留 `REPAIR_MISSING_TEST_DEPENDENCY` 修复路径，并将修复 summary 中文化。
+- 新增 `REPAIR_MISSING_JAVA_IMPORT` 修复路径：从 Maven 编译日志识别缺失符号、定位 `src/main/java` 或 `src/test/java` 文件、映射常见 Java 标准库 import，并生成合并后的第二版 patch。
+- `AgentTaskService` 的修复循环改用通用 `repairMavenFailure`，后续可继续挂接更多 RepairAgent 策略。
+- 单元测试覆盖缺测试依赖修复、缺 `java.util.Objects` import 修复，以及 Agent 运行修复入口调用。
+- PRD、MVP scope、Agent workflow、database、sandbox/GitHub 和验收文档同步 RepairAgent 新能力边界。
+
+### Verified
+
+- `mvn -q -Dmaven.repo.local=../.m2 -Dtest=PatchRepairServiceTest,AgentTaskServiceRegenerationTest test` passes, including `git apply --check` for the repaired Java import patch.
+- `mvn -q -Dmaven.repo.local=../.m2 test` passes.
+- `npm run build` passes.
+- `node --check scripts/browser-smoke.mjs` and `bash -n scripts/browser-smoke.sh` pass.
+- `git diff --check` passes.
+- `./scripts/browser-smoke.sh` passes with the existing end-to-end project/task/Agent/approval/PR flow intact.
+- Docker Compose PostgreSQL and Redis remain healthy; smoke cleanup leaves `0` temporary smoke users, `0` Controller API doc snapshots and `0` Agent run report snapshots.
+
+### Next
+
+- 继续推进真实模型编码和远端 GitHub PR 发布演示。
+- 继续扩展 RepairAgent 到断言失败、编译错误和可由检索上下文定位的文件级修复。

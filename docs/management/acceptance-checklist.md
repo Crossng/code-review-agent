@@ -38,7 +38,7 @@
 | AC-011 | 工具调用可审计 | `tool_call_log` 可按 run 查询，`GET /api/agent/runs/{runId}/tool-calls` 返回脱敏输入、输出摘要、状态和耗时 |
 | AC-011b | 模型调用可追踪 | `model_call_log` 可按 run 查询，`GET /api/agent/runs/{runId}/model-calls` 返回脱敏 prompt、response 摘要、模型名、token 和耗时 |
 | AC-011c | Patch 风险审查可见 | `review_patch` step 输出 `riskLevel`、`summary` 和 findings；前端 Patch 面板展示 `Automated review`，包含新增接口缺鉴权、分页边界和测试覆盖提示 |
-| AC-011d | RepairAgent 修复循环可追踪 | Maven 测试因缺少测试依赖失败时，任务进入 `REPAIRING`，`repair_patch` step/model call 生成补充 `spring-boot-starter-test` 的新 patch，并重新执行沙箱应用与 `mvn -q test`；最多尝试 2 次 |
+| AC-011d | RepairAgent 修复循环可追踪 | Maven 测试因缺少测试依赖或常见 Java 标准库缺 import 编译失败时，任务进入 `REPAIRING`，`repair_patch` step/model call 生成补充 `spring-boot-starter-test` 或补 import 的新 patch，并重新执行沙箱应用与 `mvn -q test`；最多尝试 2 次 |
 | AC-011e | 任务事件流可订阅 | `GET /api/agent/tasks/{id}/stream` 返回 `text/event-stream`，包含 `TASK_SNAPSHOT`、`STEP_SNAPSHOT`、运行中的 `TASK_UPDATED`/`STEP_RECORDED` 和 `STREAM_COMPLETE`；非任务 owner 不能订阅；前端运行任务时显示 stream 状态并以 SSE 事件触发任务详情刷新，断线后保留轮询兜底 |
 | AC-011f | Coder 配置可见且脱敏 | `GET /api/settings/coder` 需要鉴权，返回 mode、provider、ready、model、API base URL、key 是否配置、fixture 是否配置、缺失项和支持模式；响应和前端都不展示 API key、fixture response、organization 或 project 原文；控制台展示 `CoderSettingsPanel` 并在默认 `disabled` 模式下显示 recipe/fallback 可用 |
 | AC-011g | GitHub 发布配置可见且脱敏 | `GET /api/settings/github` 需要鉴权，返回 provider、ready、publishMode、API base URL、token 是否配置、远程发布是否启用、本地草稿模式和缺失项；响应和前端都不展示 GitHub token 原文；控制台展示 `GitHubSettingsPanel` 并在默认 `LOCAL_DRAFT_ONLY` 模式下显示本地 branch/commit/`DRAFT_READY` 流程可用 |
