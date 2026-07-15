@@ -34,12 +34,12 @@
 - 验证 `/api/internal/agent-worker/runs/{run_id}/context`、`/project/files`、`/project/file`、`/project/search` 与 `/project/symbols` 路径、`X-RepoPilot-Worker-Token` header 和 query 参数。
 - 将证据写入 `output/agent-worker-tool-smoke/last-run.json`。
 
-`agent-worker-node-smoke.sh` 用于验证 Python Agent Worker 的初始节点执行。它会：
+`agent-worker-node-smoke.sh` 用于验证 Python Agent Worker 的初始与检索节点执行。它会：
 
 - 启动本地后端 HTTP stub 和真实 FastAPI worker。
 - 使用 callback token 调用 `POST /runs/{run_id}/start`。
-- 验证 Worker 后台执行 `load_task_context` 和确定性 `plan_task`。
-- 验证 Worker 拉取 context、files、symbols、search，并回写两个 SUCCESS step。
+- 验证 Worker 后台执行 `load_task_context`、确定性 `plan_task` 和 `retrieve_context`。
+- 验证 Worker 拉取 context、files、symbols、search、file，并回写三个 SUCCESS step。
 - 将证据写入 `output/agent-worker-node-smoke/last-run.json`。
 
 ## Real Token Demo Check

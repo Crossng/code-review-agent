@@ -5,15 +5,22 @@ from app.clients.backend_api import BackendApiClient
 from app.schemas import AgentRunStartRequest, AgentStepRecordRequest
 
 QUERY_TOKEN_PATTERN = re.compile(r"[A-Za-z][A-Za-z0-9_]{2,}|[\u4e00-\u9fff]{2,}")
+SEARCH_LIMIT_PER_QUERY = 4
+MAX_RETRIEVED_RESULTS = 12
+MAX_READ_FILES = 3
+CONTENT_PREVIEW_CHARS = 1200
+SEARCH_PREVIEW_CHARS = 500
 
 
 def run_initial_nodes_safely(run_id: int, request: AgentRunStartRequest) -> None:
     client = BackendApiClient()
     current_step = "load_task_context"
     try:
-        context = load_task_context(run_id, request, client)
+        loaded_context = load_task_context(run_id, request, client)
         current_step = "plan_task"
-        plan_task(run_id, context, request, client)
+        plan_output = plan_task(run_id, loaded_context, request, client)
+        current_step = "retrieve_context"
+        retrieve_context(run_id, loaded_context, plan_output, request, client)
     except Exception as error:  # noqa: BLE001 - background task must not crash the worker process
         try:
             client.record_step(
@@ -118,6 +125,62 @@ def plan_task(
     return output
 
 
+def retrieve_context(
+    run_id: int,
+    loaded_context: dict[str, Any],
+    plan_output: dict[str, Any],
+    request: AgentRunStartRequest,
+    client: Optional[BackendApiClient] = None,
+) -> dict[str, Any]:
+    backend = client or BackendApiClient()
+    context = loaded_context["context"]
+    queries = retrieval_queries(plan_output, context, request)
+    search_runs = []
+    all_results = []
+    for query in queries:
+        search_response = backend.search_code(run_id, query, limit=SEARCH_LIMIT_PER_QUERY)
+        results = list(search_response.get("results") or [])
+        all_results.extend(results)
+        search_runs.append(
+            {
+                "query": search_response.get("query", query),
+                "resultCount": len(results),
+                "topFiles": unique_values(result.get("filePath") for result in results)[:5],
+            }
+        )
+
+    results = summarize_search_results(dedupe_search_results(all_results)[:MAX_RETRIEVED_RESULTS])
+    read_files = []
+    for file_path in unique_values(result.get("filePath") for result in results)[:MAX_READ_FILES]:
+        file_response = backend.read_project_file(run_id, file_path)
+        read_files.append(summarize_file_content(file_response))
+
+    output = {
+        "summary": f"已检索 {len(queries)} 个 query，命中 {len(results)} 个去重代码片段，读取 {len(read_files)} 个关键文件预览。",
+        "queries": queries,
+        "resultCountByQuery": {search["query"]: search["resultCount"] for search in search_runs},
+        "searchRuns": search_runs,
+        "uniqueResultCount": len(results),
+        "results": results,
+        "readFiles": read_files,
+    }
+    backend.record_step(
+        run_id,
+        AgentStepRecordRequest(
+            step_name="retrieve_context",
+            status="SUCCESS",
+            input={
+                "runId": run_id,
+                "queries": queries,
+                "limitPerQuery": SEARCH_LIMIT_PER_QUERY,
+                "source": "agent-worker",
+            },
+            output=output,
+        ),
+    )
+    return output
+
+
 def candidate_queries(*values: Optional[str]) -> list[str]:
     queries: list[str] = []
     for value in values:
@@ -202,6 +265,81 @@ def sample_symbols(symbols: list[dict[str, Any]]) -> list[dict[str, Any]]:
         }
         for symbol in symbols[:12]
     ]
+
+
+def retrieval_queries(
+    plan_output: dict[str, Any],
+    context: dict[str, Any],
+    request: AgentRunStartRequest,
+) -> list[str]:
+    queries: list[str] = []
+    for query in plan_output.get("searchQueries", []):
+        if query is not None:
+            add_query(queries, str(query))
+    if not queries:
+        queries = candidate_queries(context.get("title"), context.get("description"), request.user_request)
+    return queries[:5]
+
+
+def dedupe_search_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    deduped = []
+    seen = set()
+    for result in results:
+        key = result_identity(result)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(result)
+    return deduped
+
+
+def result_identity(result: dict[str, Any]) -> tuple[Any, ...]:
+    chunk_id = result.get("chunkId")
+    if chunk_id is not None:
+        return ("chunk", chunk_id)
+    return (
+        "location",
+        result.get("filePath"),
+        result.get("startLine"),
+        result.get("endLine"),
+        result.get("symbolName"),
+    )
+
+
+def summarize_search_results(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "chunkId": result.get("chunkId"),
+            "filePath": result.get("filePath"),
+            "chunkType": result.get("chunkType"),
+            "symbolType": result.get("symbolType"),
+            "symbolName": result.get("symbolName"),
+            "qualifiedName": result.get("qualifiedName"),
+            "startLine": result.get("startLine"),
+            "endLine": result.get("endLine"),
+            "summary": result.get("summary"),
+            "preview": text_preview(result.get("preview"), SEARCH_PREVIEW_CHARS),
+        }
+        for result in results
+    ]
+
+
+def summarize_file_content(file_response: dict[str, Any]) -> dict[str, Any]:
+    content = file_response.get("content")
+    return {
+        "path": file_response.get("path"),
+        "size": file_response.get("size"),
+        "contentPreview": text_preview(content, CONTENT_PREVIEW_CHARS),
+    }
+
+
+def text_preview(value: Any, limit: int) -> str:
+    if value is None:
+        return ""
+    text = str(value).replace("\r\n", "\n")
+    if len(text) <= limit:
+        return text
+    return text[:limit].rstrip() + "\n..."
 
 
 def add_query(queries: list[str], value: Optional[str]) -> None:

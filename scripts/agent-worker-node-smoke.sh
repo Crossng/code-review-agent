@@ -8,7 +8,7 @@ LOG_DIR="$ROOT_DIR/target/agent-worker-node-smoke/logs"
 
 usage() {
   cat <<'EOF'
-RepoPilot Agent Worker 初始节点 smoke
+RepoPilot Agent Worker 初始与检索节点 smoke
 
 用法:
   ./scripts/agent-worker-node-smoke.sh
@@ -16,8 +16,8 @@ RepoPilot Agent Worker 初始节点 smoke
 说明:
   - 启动本地后端 HTTP stub 和真实 Agent Worker。
   - 调用 /runs/{run_id}/start。
-  - 验证 Worker 后台执行 load_task_context 和 plan_task。
-  - 校验 Worker 拉取 context/files/symbols/search，并回写两个 SUCCESS step。
+  - 验证 Worker 后台执行 load_task_context、plan_task 和 retrieve_context。
+  - 校验 Worker 拉取 context/files/symbols/search/file，并回写三个 SUCCESS step。
   - 运行证据写入 output/agent-worker-node-smoke/last-run.json。
 EOF
 }
@@ -29,7 +29,7 @@ fi
 
 mkdir -p "$ARTIFACT_DIR" "$LOG_DIR"
 
-echo "RepoPilot Agent Worker 初始节点 smoke"
+echo "RepoPilot Agent Worker 初始与检索节点 smoke"
 
 PYTHONPATH="$ROOT_DIR/agent-worker" python3 - "$ROOT_DIR" "$SUMMARY_JSON" "$LOG_DIR" <<'PY'
 import json
@@ -132,8 +132,62 @@ class BackendStubHandler(BaseHTTPRequestHandler):
                         "endLine": 36,
                         "summary": "User Controller",
                         "preview": f"Controller context for {query_text}",
+                    },
+                    {
+                        "chunkId": 78,
+                        "filePath": "src/main/java/com/example/demo/user/UserService.java",
+                        "chunkType": "SYMBOL",
+                        "symbolType": "SERVICE",
+                        "symbolName": "UserService",
+                        "qualifiedName": "com.example.demo.user.UserService",
+                        "startLine": 1,
+                        "endLine": 52,
+                        "summary": "User Service",
+                        "preview": f"Service context for {query_text}",
                     }
                 ],
+            }
+        elif parsed.path.endswith("/project/file"):
+            file_path = query.get("path", [""])[0]
+            contents = {
+                "src/main/java/com/example/demo/user/UserController.java": """
+package com.example.demo.user;
+
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+class UserController {
+    private final UserService userService;
+
+    @GetMapping("/users")
+    Object listUsers() {
+        return userService.listUsers();
+    }
+}
+""".strip(),
+                "src/main/java/com/example/demo/user/UserService.java": """
+package com.example.demo.user;
+
+import org.springframework.stereotype.Service;
+
+@Service
+class UserService {
+    Object listUsers() {
+        return java.util.List.of();
+    }
+}
+""".strip(),
+            }
+            if file_path not in contents:
+                self.send_response(404)
+                self.end_headers()
+                return
+            content = contents[file_path]
+            data = {
+                "path": file_path,
+                "size": len(content.encode("utf-8")),
+                "content": content,
             }
         else:
             self.send_response(404)
@@ -239,7 +293,7 @@ try:
     )
 
     deadline = time.time() + 10
-    while len(captured["steps"]) < 2 and time.time() < deadline:
+    while len(captured["steps"]) < 3 and time.time() < deadline:
         time.sleep(0.1)
 finally:
     worker.terminate()
@@ -256,8 +310,8 @@ if health.get("status") != "UP":
     raise SystemExit(f"worker health mismatch: {health}")
 if start.get("run_id") != 606 or start.get("accepted") is not True or start.get("status") != "QUEUED":
     raise SystemExit(f"worker start mismatch: {start}")
-if len(captured["steps"]) < 2:
-    raise SystemExit(f"expected two worker step callbacks, got {captured['steps']}")
+if len(captured["steps"]) < 3:
+    raise SystemExit(f"expected three worker step callbacks, got {captured['steps']}")
 if any(event["token"] != "node-smoke-token" for event in captured["gets"] + captured["steps"]):
     raise SystemExit("worker internal token header mismatch")
 
@@ -267,24 +321,34 @@ for expected in [
     "/api/internal/agent-worker/runs/606/project/files",
     "/api/internal/agent-worker/runs/606/project/symbols",
     "/api/internal/agent-worker/runs/606/project/search",
+    "/api/internal/agent-worker/runs/606/project/file",
 ]:
     if expected not in get_paths:
         raise SystemExit(f"missing backend tool request {expected}: {get_paths}")
 
 step_by_name = {event["body"]["step_name"]: event["body"] for event in captured["steps"]}
-if set(step_by_name) != {"load_task_context", "plan_task"}:
+if set(step_by_name) != {"load_task_context", "plan_task", "retrieve_context"}:
     raise SystemExit(f"step names mismatch: {list(step_by_name)}")
 if step_by_name["load_task_context"].get("status") != "SUCCESS":
     raise SystemExit(f"load_task_context status mismatch: {step_by_name['load_task_context']}")
 if step_by_name["plan_task"].get("status") != "SUCCESS":
     raise SystemExit(f"plan_task status mismatch: {step_by_name['plan_task']}")
+if step_by_name["retrieve_context"].get("status") != "SUCCESS":
+    raise SystemExit(f"retrieve_context status mismatch: {step_by_name['retrieve_context']}")
 
 load_output = step_by_name["load_task_context"].get("output", {})
 plan_output = step_by_name["plan_task"].get("output", {})
+retrieve_output = step_by_name["retrieve_context"].get("output", {})
 if load_output.get("repoFullName") != "demo/repo" or load_output.get("fileCount") != 4:
     raise SystemExit(f"load_task_context output mismatch: {load_output}")
 if "searchQueries" not in plan_output or len(plan_output.get("steps", [])) < 5:
     raise SystemExit(f"plan_task output mismatch: {plan_output}")
+if retrieve_output.get("uniqueResultCount") != 2 or len(retrieve_output.get("readFiles", [])) != 2:
+    raise SystemExit(f"retrieve_context output mismatch: {retrieve_output}")
+if "给 User 模块新增分页查询接口" not in retrieve_output.get("queries", []):
+    raise SystemExit(f"retrieve_context queries mismatch: {retrieve_output}")
+if not any(file.get("path", "").endswith("UserController.java") for file in retrieve_output.get("readFiles", [])):
+    raise SystemExit(f"retrieve_context readFiles mismatch: {retrieve_output}")
 
 summary = {
     "generatedAt": datetime.now(timezone.utc).isoformat(),
@@ -321,9 +385,15 @@ summary = {
         "stepCount": len(plan_output["steps"]),
         "searchQueries": plan_output["searchQueries"],
     },
+    "retrieveContext": {
+        "summary": retrieve_output["summary"],
+        "queries": retrieve_output["queries"],
+        "uniqueResultCount": retrieve_output["uniqueResultCount"],
+        "readFiles": [file["path"] for file in retrieve_output["readFiles"]],
+    },
 }
 summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-print("Agent Worker 初始节点验证通过。")
+print("Agent Worker 初始与检索节点验证通过。")
 print(f"Steps: {', '.join(step['stepName'] for step in summary['steps'])}")
 print(f"证据文件: {summary_path}")
 PY

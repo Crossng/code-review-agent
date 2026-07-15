@@ -43,8 +43,8 @@ The node smoke script checks:
 
 - A real FastAPI worker starts with a local backend stub.
 - `POST /runs/{run_id}/start` schedules initial worker nodes when `REPOPILOT_AGENT_WORKER_CALLBACK_TOKEN` is configured.
-- The worker reads run context/files/symbols/search through the backend tool bridge.
-- The worker records `load_task_context` and deterministic `plan_task` SUCCESS steps.
+- The worker reads run context/files/symbols/search/file through the backend tool bridge.
+- The worker records `load_task_context`, deterministic `plan_task` and `retrieve_context` SUCCESS steps.
 - Evidence is written to `output/agent-worker-node-smoke/last-run.json`.
 
 ## Backend Start Bridge
@@ -116,11 +116,12 @@ When `REPOPILOT_AGENT_WORKER_CALLBACK_TOKEN` is configured, `/runs/{run_id}/star
 
 1. `load_task_context` reads run/task/project context, file samples and symbol samples, then records a SUCCESS step.
 2. `plan_task` builds a deterministic Spring implementation plan, runs a few code searches for evidence, then records a SUCCESS step.
+3. `retrieve_context` reuses plan search queries, deduplicates code chunks, reads key file previews and records a SUCCESS step.
 
 If no callback token is configured, `/start` remains a pure contract endpoint and does not run background nodes. This keeps local smoke tests and bridge-disabled development quiet.
 
 Next implementation steps:
 
 1. Promote the deterministic initial-node runner into a real LangGraph graph.
-2. Implement `retrieve_context` in Python Worker using `search_code(...)` and `read_project_file(...)`.
-3. Persist tool call and model call events back to the Spring Boot backend.
+2. Persist tool call and model call events back to the Spring Boot backend.
+3. Start migrating `generate_patch` from the Spring Boot fallback executor into the Python Worker.
