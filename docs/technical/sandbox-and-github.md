@@ -106,6 +106,8 @@ REPOPILOT_GITHUB_API_BASE_URL=https://api.github.com
 
 真实远端 PR 演示前可运行 `./scripts/real-token-demo-check.sh` 做只读体检；默认模式会提示 Docker、PostgreSQL/Redis、沙箱镜像、Maven cache、`REPOPILOT_GITHUB_ENABLED=true` 和 `REPOPILOT_GITHUB_TOKEN`/`GITHUB_TOKEN` 是否到位但不失败，`--strict` 模式会在 Docker 或远端 PR 缺项时返回非 0。需要顺手启动基础依赖时可加 `--start-deps`。脚本只展示 token 是否配置，不打印 token 或 Authorization header。
 
+真实 GitHub PR 发布演示可运行 `./scripts/real-github-pr-demo.sh`。该脚本要求显式设置 `REPOPILOT_REAL_GITHUB_PR_CONFIRM=create-pr`、`REPOPILOT_REAL_GITHUB_PR_REPO_URL`、`REPOPILOT_GITHUB_ENABLED=true` 和 GitHub token，然后创建临时用户和指定 GitHub 项目，生成稳定的 User count API patch，自动审批，通过 PR preflight 后真实 push `repopilot/task-{taskId}` 分支并创建远端 PR。脚本会清理 RepoPilot 本地临时业务数据，但不会关闭远端 PR 或删除远端分支；演示时应使用可丢弃的公开仓库，且仓库内容应与 `examples/demo-spring-repo` 结构一致。当前 clone 阶段不注入 token，私有仓库需要本机 Git 已有读取凭据。
+
 `GET /api/settings/github` 提供当前 GitHub 发布配置的只读脱敏状态，前端可展示 `LOCAL_DRAFT_ONLY` 或 `REMOTE_GITHUB_PR`、API base URL、token 是否配置和缺失项，但不返回 token 原文。
 
 `GET /api/tasks/{id}/pull-request/preflight` 提供任务级 PR 发布前置检查，覆盖任务状态、patch 审批、沙箱测试、本地草稿准备、远程 GitHub 仓库资格和 token 配置。该接口只读，不创建分支或 PR，供控制台在审批前后展示 blocker 和 warning。

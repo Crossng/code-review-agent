@@ -57,6 +57,35 @@ export REPOPILOT_CODER_MODEL=...
 
 如果已有后端在运行，脚本会先通过 `GET /api/settings/coder` 检查后端实际 Coder 配置；若不是 `OPENAI_COMPATIBLE` 且 ready，则直接失败并提示重启后端。脚本不会打印模型 key、GitHub token 或 Authorization header。
 
+## Real GitHub PR Demo
+
+```bash
+./scripts/real-github-pr-demo.sh
+```
+
+该脚本用于真实 GitHub token 环境下跑远端 PR 发布演示。它会真实 push 分支并创建 PR，因此默认需要显式确认：
+
+```bash
+export REPOPILOT_REAL_GITHUB_PR_CONFIRM=create-pr
+export REPOPILOT_REAL_GITHUB_PR_REPO_URL=https://github.com/<owner>/<demo-repo>.git
+export REPOPILOT_GITHUB_ENABLED=true
+export REPOPILOT_GITHUB_TOKEN=...
+./scripts/real-github-pr-demo.sh
+```
+
+该脚本会：
+
+- 启动 PostgreSQL 和 Redis。
+- 若 `REPOPILOT_BACKEND_URL` 对应的后端未运行，则用当前 shell 的 GitHub 发布环境变量临时启动后端。
+- 注册临时用户，创建指定 GitHub 项目，执行 clone 和 index。
+- 创建默认任务“新增 User count API”，使用本地 recipe 生成稳定 patch 并通过 Docker 沙箱测试。
+- 自动审批已测试通过的 patch，检查 PR preflight，然后调用 `/api/tasks/{taskId}/pull-request`。
+- 验证 PR 记录为 `OPEN`，包含 PR number、URL、target branch、commit sha、`remotePushedAt` 和 `openedAt`。
+- 将脱敏后的运行证据写入 `output/real-github-pr-demo/last-run.json`。
+- 清理本次演示创建的临时用户、项目、任务、运行、补丁、测试、审批和本地 PR 记录。
+
+请使用可丢弃的公开演示仓库，仓库内容应与 `examples/demo-spring-repo` 结构一致。当前 clone 阶段不注入 token；私有仓库需要本机 Git 已有读取凭据。远端 PR、远端分支不会由脚本自动关闭或删除，便于演示和留存证据。脚本不会打印 GitHub token、模型 key 或 Authorization header。
+
 ## Browser Smoke
 
 ```bash
