@@ -22,8 +22,14 @@ import com.repopilot.agent.domain.AgentTaskType;
 import com.repopilot.agent.repository.AgentRunRepository;
 import com.repopilot.agent.repository.AgentStepRepository;
 import com.repopilot.agent.repository.AgentTaskRepository;
+import com.repopilot.modelcall.domain.ModelCallLog;
+import com.repopilot.modelcall.domain.ModelCallStatus;
+import com.repopilot.modelcall.repository.ModelCallLogRepository;
 import com.repopilot.project.domain.Project;
 import com.repopilot.project.repository.ProjectRepository;
+import com.repopilot.toolcall.domain.ToolCallLog;
+import com.repopilot.toolcall.domain.ToolCallStatus;
+import com.repopilot.toolcall.repository.ToolCallLogRepository;
 import com.repopilot.user.domain.User;
 import com.repopilot.user.repository.UserRepository;
 import org.junit.jupiter.api.AfterEach;
@@ -61,6 +67,12 @@ class AgentWorkerCallbackControllerIntegrationTest {
     @Autowired
     private AgentStepRepository agentStepRepository;
 
+    @Autowired
+    private ToolCallLogRepository toolCallLogRepository;
+
+    @Autowired
+    private ModelCallLogRepository modelCallLogRepository;
+
     private String email;
     private Project project;
     private AgentTask task;
@@ -88,6 +100,8 @@ class AgentWorkerCallbackControllerIntegrationTest {
     @AfterEach
     void tearDown() {
         if (run != null && run.getId() != null) {
+            toolCallLogRepository.deleteAll(toolCallLogRepository.findByAgentRunIdOrderByStartedAtAsc(run.getId()));
+            modelCallLogRepository.deleteAll(modelCallLogRepository.findByAgentRunIdOrderByStartedAtAsc(run.getId()));
             agentStepRepository.deleteAll(agentStepRepository.findByAgentRunIdOrderByStartedAtAsc(run.getId()));
         }
         if (task != null && task.getId() != null) {
@@ -158,6 +172,104 @@ class AgentWorkerCallbackControllerIntegrationTest {
                 .andExpect(jsonPath("$.code").value("AGENT_WORKER_CALLBACK_FORBIDDEN"));
 
         assertThat(agentStepRepository.findByAgentRunIdOrderByStartedAtAsc(run.getId())).isEmpty();
+    }
+
+    @Test
+    void recordToolCallRequiresCallbackTokenAndPersistsSanitizedToolEvidence() throws Exception {
+        Map<String, Object> request = Map.of(
+                "tool_name", "read_project_file",
+                "status", "SUCCESS",
+                "input", Map.of(
+                        "path", "src/main/java/com/example/UserController.java",
+                        "authorization", "Bearer worker-api-key-value"
+                ),
+                "output", Map.of("path", "src/main/java/com/example/UserController.java", "size", 2048),
+                "duration_ms", 17
+        );
+
+        mockMvc.perform(post("/api/internal/agent-worker/runs/{runId}/tool-calls", run.getId())
+                        .header(AgentWorkerCallbackController.CALLBACK_TOKEN_HEADER, "test-worker-callback-token")
+                        .contentType(APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.toolName").value("read_project_file"))
+                .andExpect(jsonPath("$.data.status").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.durationMs").value(17));
+
+        List<ToolCallLog> logs = toolCallLogRepository.findByAgentRunIdOrderByStartedAtAsc(run.getId());
+        assertThat(logs).hasSize(1);
+        ToolCallLog log = logs.get(0);
+        assertThat(log.getToolName()).isEqualTo("read_project_file");
+        assertThat(log.getStatus()).isEqualTo(ToolCallStatus.SUCCESS);
+        assertThat(log.getDurationMs()).isEqualTo(17);
+        assertThat(log.getInputJson()).contains("[REDACTED]");
+        assertThat(log.getInputJson()).doesNotContain("worker-api-key-value");
+        assertThat(jsonNode(log.getOutputJson()).path("size").asInt()).isEqualTo(2048);
+    }
+
+    @Test
+    void recordToolCallRejectsInvalidCallbackTokenBeforeJwtAuthentication() throws Exception {
+        Map<String, Object> request = Map.of(
+                "tool_name", "search_code",
+                "status", "FAILED",
+                "input", Map.of("query", "User"),
+                "error_message", "tool failed"
+        );
+
+        mockMvc.perform(post("/api/internal/agent-worker/runs/{runId}/tool-calls", run.getId())
+                        .header(AgentWorkerCallbackController.CALLBACK_TOKEN_HEADER, "wrong-token")
+                        .contentType(APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value("AGENT_WORKER_CALLBACK_FORBIDDEN"));
+
+        assertThat(toolCallLogRepository.findByAgentRunIdOrderByStartedAtAsc(run.getId())).isEmpty();
+    }
+
+    @Test
+    void recordModelCallRequiresCallbackTokenAndPersistsSanitizedModelEvidence() throws Exception {
+        Map<String, Object> request = Map.of(
+                "step_name", "generate_patch",
+                "model_provider", "OPENAI_COMPATIBLE",
+                "model_name", "gpt-test-coder",
+                "status", "SUCCESS",
+                "prompt", Map.of(
+                        "instruction", "Generate a safe patch",
+                        "api_key", "worker-api-key-value"
+                ),
+                "response", Map.of("summary", "Generated draft patch"),
+                "prompt_tokens", 12,
+                "completion_tokens", 8,
+                "total_tokens", 20,
+                "duration_ms", 33
+        );
+
+        mockMvc.perform(post("/api/internal/agent-worker/runs/{runId}/model-calls", run.getId())
+                        .header(AgentWorkerCallbackController.CALLBACK_TOKEN_HEADER, "test-worker-callback-token")
+                        .contentType(APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.stepName").value("generate_patch"))
+                .andExpect(jsonPath("$.data.modelProvider").value("OPENAI_COMPATIBLE"))
+                .andExpect(jsonPath("$.data.modelName").value("gpt-test-coder"))
+                .andExpect(jsonPath("$.data.totalTokens").value(20));
+
+        List<ModelCallLog> logs = modelCallLogRepository.findByAgentRunIdOrderByStartedAtAsc(run.getId());
+        assertThat(logs).hasSize(1);
+        ModelCallLog log = logs.get(0);
+        assertThat(log.getStepName()).isEqualTo("generate_patch");
+        assertThat(log.getModelProvider()).isEqualTo("OPENAI_COMPATIBLE");
+        assertThat(log.getModelName()).isEqualTo("gpt-test-coder");
+        assertThat(log.getStatus()).isEqualTo(ModelCallStatus.SUCCESS);
+        assertThat(log.getPromptTokens()).isEqualTo(12);
+        assertThat(log.getCompletionTokens()).isEqualTo(8);
+        assertThat(log.getTotalTokens()).isEqualTo(20);
+        assertThat(log.getPromptJson()).contains("[REDACTED]");
+        assertThat(log.getPromptJson()).doesNotContain("worker-api-key-value");
+        assertThat(jsonNode(log.getResponseJson()).path("summary").asText()).isEqualTo("Generated draft patch");
     }
 
     @Test

@@ -23,8 +23,10 @@
 
 - 启动本地 HTTP stub。
 - 调用 `BackendApiClient.record_step(...)`。
+- 调用 `BackendApiClient.record_tool_call(...)`。
+- 调用 `BackendApiClient.record_model_call(...)`。
 - 调用 `BackendApiClient.update_status(...)`。
-- 验证 `/api/internal/agent-worker/runs/{run_id}/steps` 与 `/api/internal/agent-worker/runs/{run_id}/status` 路径、`X-RepoPilot-Worker-Token` header、step JSON 和 status JSON。
+- 验证 `/api/internal/agent-worker/runs/{run_id}/steps`、`/tool-calls`、`/model-calls` 与 `/status` 路径、`X-RepoPilot-Worker-Token` header、step/tool/model/status JSON。
 - 将证据写入 `output/agent-worker-callback-smoke/last-run.json`。
 
 `agent-worker-tool-smoke.sh` 用于验证 Python Agent Worker 的后端工具读取 client。它会：

@@ -48,6 +48,8 @@ X-RepoPilot-Worker-Token: <worker-callback-token>
 | 方法 | 路径 | 功能 |
 | --- | --- | --- |
 | `POST` | `/internal/agent-worker/runs/{runId}/steps` | Agent Worker 回写 run step 证据 |
+| `POST` | `/internal/agent-worker/runs/{runId}/tool-calls` | Agent Worker 回写工具调用审计 |
+| `POST` | `/internal/agent-worker/runs/{runId}/model-calls` | Agent Worker 回写模型调用审计 |
 | `POST` | `/internal/agent-worker/runs/{runId}/status` | Agent Worker 回写 task/run 状态 |
 | `GET` | `/internal/agent-worker/runs/{runId}/context` | Agent Worker 读取 run/task/project 上下文 |
 | `GET` | `/internal/agent-worker/runs/{runId}/project/files?maxDepth=6` | Agent Worker 按 run 读取项目文件树 |
@@ -73,6 +75,49 @@ Step 请求：
 ```
 
 响应返回标准 `AgentStepResponse`，其中 `inputJson` / `outputJson` 为落库后的 JSON 字符串。后端保存 step 后会发布 `STEP_RECORDED` 事件，前端已订阅的任务 SSE 可收到回写结果。
+
+Tool call 请求：
+
+```json
+{
+  "tool_name": "read_project_file",
+  "status": "SUCCESS",
+  "input": {
+    "path": "src/main/java/com/example/UserController.java"
+  },
+  "output": {
+    "size": 2048
+  },
+  "duration_ms": 12,
+  "error_message": null
+}
+```
+
+响应返回标准 `ToolCallLogResponse`。后端会写入既有 `tool_call_log` 表，并复用本地 executor 的 JSON 截断和敏感字段脱敏逻辑。
+
+Model call 请求：
+
+```json
+{
+  "step_name": "generate_patch",
+  "model_provider": "OPENAI_COMPATIBLE",
+  "model_name": "gpt-test-coder",
+  "status": "SUCCESS",
+  "prompt": {
+    "instruction": "Generate a safe patch"
+  },
+  "response": {
+    "summary": "Generated draft patch"
+  },
+  "prompt_tokens": 12,
+  "completion_tokens": 8,
+  "total_tokens": 20,
+  "duration_ms": 33,
+  "error_message": null
+}
+```
+
+响应返回标准 `ModelCallLogResponse`。后端会写入既有 `model_call_log` 表；未传 token 数时按 JSON 长度估算，传入 token 数时保留 Worker/模型网关上报的统计。
 
 Status 请求：
 

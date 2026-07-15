@@ -232,6 +232,15 @@ GET /api/internal/agent-worker/runs/{runId}/project/symbols?type=CONTROLLER
 | `duration_ms` | 耗时 |
 | `error_message` | 失败原因 |
 
+当前 MVP 中，Python Agent Worker 可通过内部审计回写接口写入工具调用和模型调用审计：
+
+```text
+POST /api/internal/agent-worker/runs/{runId}/tool-calls
+POST /api/internal/agent-worker/runs/{runId}/model-calls
+```
+
+这两个接口继续使用 `X-RepoPilot-Worker-Token`，后端按 `runId` 绑定到已有 `agent_run`，并复用本地 executor 的 JSON 截断和敏感字段脱敏逻辑。
+
 ## 5. 安全规则
 
 - 工具默认只能访问项目工作区。

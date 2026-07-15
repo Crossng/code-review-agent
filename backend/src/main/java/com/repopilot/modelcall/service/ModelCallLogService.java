@@ -133,6 +133,57 @@ public class ModelCallLogService {
         }
     }
 
+    public ModelCallLog recordExternal(
+            AgentRun run,
+            String stepName,
+            String modelProvider,
+            String modelName,
+            Object prompt,
+            Object response,
+            ModelCallStatus status,
+            Integer promptTokens,
+            Integer completionTokens,
+            Integer totalTokens,
+            Integer durationMs,
+            String errorMessage,
+            Instant startedAt,
+            Instant finishedAt
+    ) {
+        ModelMetadata metadata = normalize(new ModelMetadata(modelProvider, modelName), DEFAULT_PROVIDER, DEFAULT_MODEL);
+        String promptJson = jsonOrNull(prompt);
+        String responseJson = jsonOrNull(response);
+        int normalizedPromptTokens = nonNegative(promptTokens, estimateTokens(promptJson));
+        int normalizedCompletionTokens = nonNegative(completionTokens, estimateTokens(responseJson));
+        int normalizedTotalTokens = nonNegative(totalTokens, normalizedPromptTokens + normalizedCompletionTokens);
+        Instant normalizedStartedAt = startedAt == null ? Instant.now() : startedAt;
+        Instant normalizedFinishedAt = finishedAt == null
+                ? normalizedStartedAt.plusMillis(nonNegative(durationMs, 0))
+                : finishedAt;
+        int normalizedDurationMs = nonNegative(
+                durationMs,
+                (int) Math.min(
+                        Integer.MAX_VALUE,
+                        Math.max(0, Duration.between(normalizedStartedAt, normalizedFinishedAt).toMillis())
+                )
+        );
+        return modelCallLogRepository.save(new ModelCallLog(
+                run,
+                stepName,
+                metadata.provider(),
+                metadata.modelName(),
+                promptJson,
+                responseJson,
+                status,
+                normalizedPromptTokens,
+                normalizedCompletionTokens,
+                normalizedTotalTokens,
+                normalizedDurationMs,
+                errorMessage,
+                normalizedStartedAt,
+                normalizedFinishedAt
+        ));
+    }
+
     private ModelMetadata normalize(ModelMetadata metadata, String fallbackProvider, String fallbackModel) {
         if (metadata == null) {
             return new ModelMetadata(fallbackProvider, fallbackModel);
@@ -176,6 +227,16 @@ public class ModelCallLogService {
                 startedAt,
                 finishedAt
         ));
+    }
+
+    private String jsonOrNull(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof JsonNode node && node.isNull()) {
+            return null;
+        }
+        return json(value);
     }
 
     private String json(Object value) {
@@ -232,6 +293,13 @@ public class ModelCallLogService {
             return 0;
         }
         return Math.max(1, (int) Math.ceil(json.length() / 4.0));
+    }
+
+    private int nonNegative(Integer value, int fallback) {
+        if (value == null) {
+            return Math.max(0, fallback);
+        }
+        return Math.max(0, value);
     }
 
     @FunctionalInterface

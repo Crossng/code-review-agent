@@ -2,6 +2,8 @@ package com.repopilot.agent.worker;
 
 import com.repopilot.agent.dto.AgentStepResponse;
 import com.repopilot.common.ApiResponse;
+import com.repopilot.modelcall.dto.ModelCallLogResponse;
+import com.repopilot.toolcall.dto.ToolCallLogResponse;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -27,6 +29,24 @@ public class AgentWorkerCallbackController {
             @Valid @RequestBody AgentWorkerStepRecordRequest request
     ) {
         return ApiResponse.ok(callbackService.recordStep(runId, callbackToken, request));
+    }
+
+    @PostMapping("/api/internal/agent-worker/runs/{runId}/tool-calls")
+    public ApiResponse<ToolCallLogResponse> recordToolCall(
+            @PathVariable Long runId,
+            @RequestHeader(name = CALLBACK_TOKEN_HEADER, required = false) String callbackToken,
+            @Valid @RequestBody AgentWorkerToolCallRecordRequest request
+    ) {
+        return ApiResponse.ok(callbackService.recordToolCall(runId, callbackToken, request));
+    }
+
+    @PostMapping("/api/internal/agent-worker/runs/{runId}/model-calls")
+    public ApiResponse<ModelCallLogResponse> recordModelCall(
+            @PathVariable Long runId,
+            @RequestHeader(name = CALLBACK_TOKEN_HEADER, required = false) String callbackToken,
+            @Valid @RequestBody AgentWorkerModelCallRecordRequest request
+    ) {
+        return ApiResponse.ok(callbackService.recordModelCall(runId, callbackToken, request));
     }
 
     @PostMapping("/api/internal/agent-worker/runs/{runId}/status")

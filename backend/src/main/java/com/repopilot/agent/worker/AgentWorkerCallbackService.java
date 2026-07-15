@@ -12,7 +12,11 @@ import com.repopilot.agent.repository.AgentRunRepository;
 import com.repopilot.agent.repository.AgentStepRepository;
 import com.repopilot.agent.repository.AgentTaskRepository;
 import com.repopilot.common.ApiException;
+import com.repopilot.modelcall.dto.ModelCallLogResponse;
+import com.repopilot.modelcall.service.ModelCallLogService;
 import com.repopilot.notification.service.TaskStreamService;
+import com.repopilot.toolcall.dto.ToolCallLogResponse;
+import com.repopilot.toolcall.service.ToolCallLogService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +28,8 @@ public class AgentWorkerCallbackService {
     private final AgentRunRepository agentRunRepository;
     private final AgentTaskRepository agentTaskRepository;
     private final AgentStepRepository agentStepRepository;
+    private final ToolCallLogService toolCallLogService;
+    private final ModelCallLogService modelCallLogService;
     private final TaskStreamService taskStreamService;
     private final ObjectMapper objectMapper;
 
@@ -32,6 +38,8 @@ public class AgentWorkerCallbackService {
             AgentRunRepository agentRunRepository,
             AgentTaskRepository agentTaskRepository,
             AgentStepRepository agentStepRepository,
+            ToolCallLogService toolCallLogService,
+            ModelCallLogService modelCallLogService,
             TaskStreamService taskStreamService,
             ObjectMapper objectMapper
     ) {
@@ -39,6 +47,8 @@ public class AgentWorkerCallbackService {
         this.agentRunRepository = agentRunRepository;
         this.agentTaskRepository = agentTaskRepository;
         this.agentStepRepository = agentStepRepository;
+        this.toolCallLogService = toolCallLogService;
+        this.modelCallLogService = modelCallLogService;
         this.taskStreamService = taskStreamService;
         this.objectMapper = objectMapper;
     }
@@ -61,6 +71,53 @@ public class AgentWorkerCallbackService {
     }
 
     @Transactional
+    public ToolCallLogResponse recordToolCall(
+            Long runId,
+            String callbackToken,
+            AgentWorkerToolCallRecordRequest request
+    ) {
+        tokenGuard.requireValidToken(callbackToken);
+        AgentRun run = requireRun(runId);
+        return ToolCallLogResponse.from(toolCallLogService.recordExternal(
+                run,
+                request.toolName(),
+                request.input(),
+                request.output(),
+                request.status(),
+                request.durationMs(),
+                request.errorMessage(),
+                request.startedAt(),
+                request.finishedAt()
+        ));
+    }
+
+    @Transactional
+    public ModelCallLogResponse recordModelCall(
+            Long runId,
+            String callbackToken,
+            AgentWorkerModelCallRecordRequest request
+    ) {
+        tokenGuard.requireValidToken(callbackToken);
+        AgentRun run = requireRun(runId);
+        return ModelCallLogResponse.from(modelCallLogService.recordExternal(
+                run,
+                request.stepName(),
+                request.modelProvider(),
+                request.modelName(),
+                request.prompt(),
+                request.response(),
+                request.status(),
+                request.promptTokens(),
+                request.completionTokens(),
+                request.totalTokens(),
+                request.durationMs(),
+                request.errorMessage(),
+                request.startedAt(),
+                request.finishedAt()
+        ));
+    }
+
+    @Transactional
     public AgentWorkerRunStatusUpdateResponse updateStatus(
             Long runId,
             String callbackToken,
@@ -74,8 +131,7 @@ public class AgentWorkerCallbackService {
                     "Agent Worker status update must include task_status or run_status"
             );
         }
-        AgentRun run = agentRunRepository.findById(runId)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "AGENT_RUN_NOT_FOUND", "Agent run not found"));
+        AgentRun run = requireRun(runId);
         AgentTask task = run.getAgentTask();
         if (request.taskStatus() != null) {
             task.setStatus(request.taskStatus());
@@ -90,6 +146,11 @@ public class AgentWorkerCallbackService {
             taskStreamService.publishStreamComplete(savedTask, savedRun, streamMessage(request));
         }
         return AgentWorkerRunStatusUpdateResponse.from(savedTask, savedRun, request.completeStream());
+    }
+
+    private AgentRun requireRun(Long runId) {
+        return agentRunRepository.findById(runId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "AGENT_RUN_NOT_FOUND", "Agent run not found"));
     }
 
     private void applyRunStatus(AgentRun run, AgentRunStatus status, String errorMessage) {

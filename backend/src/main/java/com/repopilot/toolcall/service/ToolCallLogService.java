@@ -54,7 +54,42 @@ public class ToolCallLogService {
         }
     }
 
-    private void save(
+    public ToolCallLog recordExternal(
+            AgentRun run,
+            String toolName,
+            Object input,
+            Object output,
+            ToolCallStatus status,
+            Integer durationMs,
+            String errorMessage,
+            Instant startedAt,
+            Instant finishedAt
+    ) {
+        Instant normalizedStartedAt = startedAt == null ? Instant.now() : startedAt;
+        Instant normalizedFinishedAt = finishedAt == null
+                ? normalizedStartedAt.plusMillis(nonNegative(durationMs, 0))
+                : finishedAt;
+        int normalizedDurationMs = nonNegative(
+                durationMs,
+                (int) Math.min(
+                        Integer.MAX_VALUE,
+                        Math.max(0, Duration.between(normalizedStartedAt, normalizedFinishedAt).toMillis())
+                )
+        );
+        return toolCallLogRepository.save(new ToolCallLog(
+                run,
+                toolName,
+                jsonOrNull(input),
+                jsonOrNull(output),
+                status,
+                normalizedDurationMs,
+                errorMessage,
+                normalizedStartedAt,
+                normalizedFinishedAt
+        ));
+    }
+
+    private ToolCallLog save(
             AgentRun run,
             String toolName,
             Object input,
@@ -65,7 +100,7 @@ public class ToolCallLogService {
     ) {
         Instant finishedAt = Instant.now();
         long duration = Duration.between(startedAt, finishedAt).toMillis();
-        toolCallLogRepository.save(new ToolCallLog(
+        return toolCallLogRepository.save(new ToolCallLog(
                 run,
                 toolName,
                 input == null ? null : json(input),
@@ -76,6 +111,16 @@ public class ToolCallLogService {
                 startedAt,
                 finishedAt
         ));
+    }
+
+    private String jsonOrNull(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof JsonNode node && node.isNull()) {
+            return null;
+        }
+        return json(value);
     }
 
     private String json(Object value) {
@@ -123,6 +168,13 @@ public class ToolCallLogService {
                 || normalized.contains("secret")
                 || normalized.contains("password")
                 || normalized.contains("authorization");
+    }
+
+    private int nonNegative(Integer value, int fallback) {
+        if (value == null) {
+            return Math.max(0, fallback);
+        }
+        return Math.max(0, value);
     }
 
     @FunctionalInterface

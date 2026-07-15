@@ -27,9 +27,11 @@ The contract smoke script checks:
 The callback smoke script checks:
 
 - `BackendApiClient` posts to `/api/internal/agent-worker/runs/{run_id}/steps`.
+- `BackendApiClient` posts to `/api/internal/agent-worker/runs/{run_id}/tool-calls`.
+- `BackendApiClient` posts to `/api/internal/agent-worker/runs/{run_id}/model-calls`.
 - `BackendApiClient` posts to `/api/internal/agent-worker/runs/{run_id}/status`.
 - `X-RepoPilot-Worker-Token` is attached.
-- Step and status payloads use the backend callback contract.
+- Step, tool call, model call and status payloads use the backend callback contract.
 - Evidence is written to `output/agent-worker-callback-smoke/last-run.json`.
 
 The tool smoke script checks:
@@ -89,6 +91,45 @@ BackendApiClient().update_status(
 
 The backend requires `X-RepoPilot-Worker-Token`, configured by `REPOPILOT_AGENT_WORKER_CALLBACK_TOKEN`.
 
+## Backend Audit Callback
+
+Worker nodes can also write tool call and model call audit records through `BackendApiClient`:
+
+```python
+from app.clients.backend_api import BackendApiClient
+from app.schemas import AgentModelCallRecordRequest, AgentToolCallRecordRequest
+
+client = BackendApiClient()
+
+client.record_tool_call(
+    run_id=303,
+    tool_call=AgentToolCallRecordRequest(
+        tool_name="read_project_file",
+        status="SUCCESS",
+        input={"path": "src/main/java/com/example/demo/user/UserController.java"},
+        output={"size": 2048},
+        duration_ms=12,
+    ),
+)
+
+client.record_model_call(
+    run_id=303,
+    model_call=AgentModelCallRecordRequest(
+        step_name="generate_patch",
+        model_provider="OPENAI_COMPATIBLE",
+        model_name="gpt-test-coder",
+        status="SUCCESS",
+        prompt={"instruction": "Generate a safe patch"},
+        response={"summary": "Generated draft patch"},
+        prompt_tokens=12,
+        completion_tokens=8,
+        total_tokens=20,
+    ),
+)
+```
+
+The Spring Boot backend stores these records in the existing tool/model call audit tables and applies the same sensitive-field redaction used by the local executor.
+
 ## Backend Tool Bridge
 
 Worker nodes can also read run-scoped repository context through the same internal token:
@@ -123,5 +164,5 @@ If no callback token is configured, `/start` remains a pure contract endpoint an
 Next implementation steps:
 
 1. Promote the deterministic initial-node runner into a real LangGraph graph.
-2. Persist tool call and model call events back to the Spring Boot backend.
+2. Attach Worker tool reads and future model calls to the audit callback automatically.
 3. Start migrating `generate_patch` from the Spring Boot fallback executor into the Python Worker.
