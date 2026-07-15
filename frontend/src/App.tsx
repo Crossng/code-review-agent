@@ -658,6 +658,9 @@ export function App() {
   const canApprove = selectedTask?.status === "WAITING_HUMAN_APPROVAL" && details.patch !== null;
   const canRegeneratePatch = selectedTask !== null && regeneratableStatuses.has(selectedTask.status);
   const canPreparePr = details.pullRequestPreflight?.canPrepare ?? false;
+  const isRetryingPullRequest = selectedTask?.status === "FAILED_PR_CREATION" || details.pullRequest?.status === "FAILED";
+  const preparePrActionLabel = isRetryingPullRequest ? "重试发布 PR" : "准备 PR";
+  const preparePrBusyLabel = isRetryingPullRequest ? "正在重试发布 PR" : "正在准备 PR";
   const shouldPollSelectedTask = selectedTask !== null && runningStatuses.has(selectedTask.status);
   const taskStreamLabel = streamLabel(selectedTask, taskStreamState);
 
@@ -1598,6 +1601,7 @@ export function App() {
                   canRun={canRun}
                   canCancel={canCancel}
                   canPreparePr={canPreparePr}
+                  preparePrActionLabel={preparePrActionLabel}
                   streamLabel={taskStreamLabel}
                   busy={busy !== null}
                   onRun={() => void withBusy("正在启动任务", async () => {
@@ -1610,7 +1614,7 @@ export function App() {
                     await cancelTask(token, selectedTask.id);
                     await refreshSelectedTask(false);
                   })}
-                  onPreparePr={() => void withBusy("正在准备 PR", async () => {
+                  onPreparePr={() => void withBusy(preparePrBusyLabel, async () => {
                     if (!selectedTask) return;
                     await preparePullRequest(token, selectedTask.id);
                     await refreshSelectedTask();
@@ -2577,6 +2581,7 @@ function TaskSummary({
   canRun,
   canCancel,
   canPreparePr,
+  preparePrActionLabel,
   streamLabel,
   busy,
   onRun,
@@ -2588,6 +2593,7 @@ function TaskSummary({
   canRun: boolean;
   canCancel: boolean;
   canPreparePr: boolean;
+  preparePrActionLabel: string;
   streamLabel: string | null;
   busy: boolean;
   onRun: () => void;
@@ -2618,7 +2624,7 @@ function TaskSummary({
           <div className="buttonRow">
             <button className="primaryButton" type="button" onClick={onRun} disabled={!canRun || busy}>运行任务</button>
             <button className="ghostButton dangerButton" type="button" onClick={onCancel} disabled={!canCancel || busy}>取消任务</button>
-            <button className="primaryButton" type="button" onClick={onPreparePr} disabled={!canPreparePr || busy}>准备 PR</button>
+            <button className="primaryButton" type="button" onClick={onPreparePr} disabled={!canPreparePr || busy}>{preparePrActionLabel}</button>
           </div>
         </>
       ) : <EmptyText text="从列表里选择一个 Agent 任务。" />}
@@ -3029,6 +3035,58 @@ function ApprovalPanel({
   );
 }
 
+type PullRequestFailureExplanation = {
+  title: string;
+  reason: string;
+  nextStep: string;
+  originalMessage: string;
+};
+
+function explainPullRequestFailure(
+  pullRequest: PullRequestRecord,
+  preflight: PullRequestPreflight | null
+): PullRequestFailureExplanation | null {
+  if (pullRequest.status !== "FAILED" && !pullRequest.errorMessage) {
+    return null;
+  }
+  const originalMessage = pullRequest.errorMessage || "远端 PR 发布没有返回具体错误。";
+  const normalized = originalMessage.toLowerCase();
+  let title = "PR 发布失败";
+  let reason = "RepoPilot 已保留本地分支和提交，远端发布还没有完成。";
+  let nextStep = "处理错误原因后，可以在任务详情里点击“重试发布 PR”。";
+
+  if (normalized.includes("token") || originalMessage.includes("尚未配置 token")) {
+    title = "远端发布缺少 GitHub token";
+    reason = "已启用远端 GitHub 发布，但后端运行环境还没有可用的 GitHub token。";
+    nextStep = "配置 REPOPILOT_GITHUB_TOKEN 或 GITHUB_TOKEN 后，重启后端并点击“重试发布 PR”。";
+  } else if (originalMessage.includes("GITHUB_BRANCH_PUSH_FAILED") || normalized.includes("push")) {
+    title = "target branch 推送失败";
+    reason = "RepoPilot 已准备本地分支和提交，但推送到 origin 时失败。";
+    nextStep = "检查仓库 origin、分支权限和网络后，再点击“重试发布 PR”。";
+  } else if (originalMessage.includes("GITHUB_PR_CREATE_FAILED") || originalMessage.includes("GitHub 返回 HTTP")) {
+    title = "GitHub PR 创建失败";
+    reason = "target branch 已进入远端发布流程，但 GitHub PR API 没有成功创建 PR。";
+    nextStep = "检查 GitHub token 权限、API base URL、仓库权限和返回状态后，再点击“重试发布 PR”。";
+  }
+
+  if (preflight && !preflight.canPrepare && preflight.blockers.length > 0) {
+    nextStep = "先处理发布前置检查阻塞项：" + preflight.blockers.join(" ");
+  }
+
+  return { title, reason, nextStep, originalMessage };
+}
+
+function PullRequestFailureNotice({ failure }: { failure: PullRequestFailureExplanation }) {
+  return (
+    <div className="prFailureBox" role="alert">
+      <strong>{failure.title}</strong>
+      <span>{failure.reason}</span>
+      <span>{failure.nextStep}</span>
+      <code>{failure.originalMessage}</code>
+    </div>
+  );
+}
+
 function PullRequestPanel({
   pullRequest,
   preflight
@@ -3036,6 +3094,7 @@ function PullRequestPanel({
   pullRequest: PullRequestRecord | null;
   preflight: PullRequestPreflight | null;
 }) {
+  const failure = pullRequest ? explainPullRequestFailure(pullRequest, preflight) : null;
   return (
     <section className="panel" id="pr">
       <div className="panelHeader">
@@ -3055,7 +3114,7 @@ function PullRequestPanel({
             <Meta label="打开时间" value={pullRequest.openedAt ? formatDate(pullRequest.openedAt) : "未打开"} />
           </div>
           {pullRequest.url ? <a className="externalLink" href={pullRequest.url} target="_blank" rel="noreferrer">打开 PR</a> : null}
-          {pullRequest.errorMessage ? <div className="errorBox">{pullRequest.errorMessage}</div> : null}
+          {failure ? <PullRequestFailureNotice failure={failure} /> : null}
           <pre className="logBlock">{pullRequest.body || "还没有 PR 正文记录。"}</pre>
         </>
       ) : <EmptyText text="补丁测试通过并完成审批后，就可以准备 PR。" />}

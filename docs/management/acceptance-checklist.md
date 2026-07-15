@@ -34,7 +34,7 @@
 | AC-008 | 系统可以在沙箱运行测试 | `test_run` 记录 exit code 和日志；沙箱应用前执行 `validate_patch_safety`，拒绝路径穿越、绝对路径、保留目录和二进制 patch；分页 demo patch、User id 参数校验 demo patch、User count demo patch 与 User create demo patch 都在沙箱中执行 `mvn -q test` 通过 |
 | AC-009 | 未审批不能创建 PR | API 返回 `PATCH_NOT_APPROVED` |
 | AC-010 | 审批后可以准备 PR | 未开启 GitHub 发布时生成 `pull_request_record.status=DRAFT_READY`、target branch 和 commit，并将 task 标为 `DONE` 释放项目写入槽；开启 GitHub 发布并提供 token 后生成 `OPEN` 记录且 `pull_request_record.url` 可打开；远端发布路径通过本地 bare Git origin + GitHub API stub 验证真实 `git push`、PR 请求体和失败记录重试 |
-| AC-010b | PR 发布前置检查可见 | `GET /api/tasks/{id}/pull-request/preflight` 需要鉴权，返回 task、patch、test、local draft、remote GitHub 的 `PASS`/`PENDING`/`BLOCKED`/`WARN` 检查项和中文 label/message/blockers；前端 PR 面板展示 preflight，审批前显示“需要先审批已测试通过的补丁”的 blocker，审批且测试通过后显示本地 branch/commit 可准备，准备完成后显示已有 `DRAFT_READY` 记录 |
+| AC-010b | PR 发布前置检查可见 | `GET /api/tasks/{id}/pull-request/preflight` 需要鉴权，返回 task、patch、test、local draft、remote GitHub 的 `PASS`/`PENDING`/`BLOCKED`/`WARN` 检查项和中文 label/message/blockers；前端 PR 面板展示 preflight，审批前显示“需要先审批已测试通过的补丁”的 blocker，审批且测试通过后显示本地 branch/commit 可准备，准备完成后显示已有 `DRAFT_READY` 记录；远端发布失败时展示中文失败解释、下一步、原始错误，并把任务详情按钮切换为“重试发布 PR” |
 | AC-011 | 工具调用可审计 | `tool_call_log` 可按 run 查询，`GET /api/agent/runs/{runId}/tool-calls` 返回脱敏输入、输出摘要、状态和耗时 |
 | AC-011b | 模型调用可追踪 | `model_call_log` 可按 run 查询，`GET /api/agent/runs/{runId}/model-calls` 返回脱敏 prompt、response 摘要、模型名、token 和耗时 |
 | AC-011c | Patch 风险审查可见 | `review_patch` step 输出 `riskLevel`、`summary` 和 findings；前端 Patch 面板展示 `Automated review`，包含新增接口缺鉴权、分页边界和测试覆盖提示 |

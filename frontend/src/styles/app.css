@@ -411,6 +411,42 @@ h2 {
   font-weight: 750;
 }
 
+.prFailureBox {
+  background: var(--danger-soft);
+  border: 1px solid rgba(180, 51, 51, 0.45);
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+  min-width: 0;
+  padding: 12px;
+}
+
+.prFailureBox strong {
+  color: var(--danger);
+  font-size: 0.9rem;
+}
+
+.prFailureBox span,
+.prFailureBox code {
+  overflow-wrap: anywhere;
+}
+
+.prFailureBox span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.prFailureBox code {
+  background: white;
+  border: 1px solid rgba(180, 51, 51, 0.2);
+  border-radius: 6px;
+  color: var(--danger);
+  font-family: var(--mono);
+  font-size: 0.76rem;
+  padding: 7px 8px;
+}
+
 .pill,
 .badge {
   border: 1px solid var(--accent);
