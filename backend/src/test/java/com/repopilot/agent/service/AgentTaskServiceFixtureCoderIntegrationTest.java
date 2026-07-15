@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.io.IOException;
@@ -30,6 +32,7 @@ import com.repopilot.agent.repository.AgentStepRepository;
 import com.repopilot.agent.repository.AgentTaskRepository;
 import com.repopilot.indexer.dto.CodeSearchResponse;
 import com.repopilot.indexer.service.CodeSearchService;
+import com.repopilot.modelcall.domain.ModelCallLog;
 import com.repopilot.modelcall.repository.ModelCallLogRepository;
 import com.repopilot.modelcall.service.ModelCallLogService;
 import com.repopilot.notification.service.TaskStreamService;
@@ -54,6 +57,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.Mock;
+import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.task.SyncTaskExecutor;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -236,10 +240,21 @@ class AgentTaskServiceFixtureCoderIntegrationTest {
         assertThat(run.getStatus()).isEqualTo(AgentRunStatus.SUCCESS);
         assertThat(fixture.task().getStatus()).isEqualTo(AgentTaskStatus.WAITING_HUMAN_APPROVAL);
         assertThat(patch.getStatus()).isEqualTo(PatchStatus.APPLIED);
+        assertThat(patch.getGenerationProvider()).isEqualTo("LOCAL_FIXTURE");
+        assertThat(patch.getGenerationModel()).isEqualTo("fixture-coder");
         assertThat(patch.getDiffContent())
                 .startsWith("diff --git a/README.md b/README.md")
                 .contains("Fixture Coder Patch")
                 .doesNotContain("```");
+        ArgumentCaptor<ModelCallLog> modelCallCaptor = ArgumentCaptor.forClass(ModelCallLog.class);
+        verify(modelCallLogRepository, atLeastOnce()).save(modelCallCaptor.capture());
+        assertThat(modelCallCaptor.getAllValues())
+                .anySatisfy(call -> {
+                    assertThat(call.getStepName()).isEqualTo("generate_patch");
+                    assertThat(call.getModelProvider()).isEqualTo("LOCAL_FIXTURE");
+                    assertThat(call.getModelName()).isEqualTo("fixture-coder");
+                    assertThat(call.getResponseJson()).contains("\"generationProvider\":\"LOCAL_FIXTURE\"");
+                });
         assertThat(savedTestRuns)
                 .hasSize(1)
                 .allSatisfy(testRun -> {

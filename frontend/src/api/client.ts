@@ -308,6 +308,8 @@ export type PatchRecord = {
   diffContent: string;
   summary: string | null;
   generationMode: string;
+  generationProvider: string;
+  generationModel: string | null;
   changedFiles: PatchChangedFile[];
   status: string;
   createdAt: string;

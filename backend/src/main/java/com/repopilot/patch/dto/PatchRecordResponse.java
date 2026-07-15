@@ -15,6 +15,8 @@ public record PatchRecordResponse(
         String diffContent,
         String summary,
         String generationMode,
+        String generationProvider,
+        String generationModel,
         List<PatchChangedFileResponse> changedFiles,
         PatchStatus status,
         Instant createdAt
@@ -30,6 +32,8 @@ public record PatchRecordResponse(
                 patch.getDiffContent(),
                 patch.getSummary(),
                 patch.getGenerationMode(),
+                patch.getGenerationProvider(),
+                patch.getGenerationModel(),
                 PatchChangedFileResponse.fromDiff(patch.getDiffContent()),
                 patch.getStatus(),
                 patch.getCreatedAt()

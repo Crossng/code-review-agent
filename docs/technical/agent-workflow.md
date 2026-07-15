@@ -122,7 +122,7 @@ LLM CoderAgent 的 raw response 必须满足以下契约，才能进入 `patch_r
 | `fixture` | 使用 `repopilot.coder.fixture-response` 作为 raw Coder response，走 `CoderPatchOutputParser` 并生成 `LLM_CODER_DRAFT` |
 | `openai` / `openai-compatible` | 调用 `${repopilot.coder.api-base-url}/chat/completions`，使用 `repopilot.coder.api-key`、`repopilot.coder.model`、检索上下文和严格 diff-only prompt 生成 raw Coder response，再统一进入 `CoderPatchOutputParser` |
 
-所有真实模型输出都必须复用同一个 `CoderModelClient` 接口，输出 raw response 后统一进入 parser、安全预检、沙箱测试和 review。未配置 key 或 model 时，`openai-compatible` 模式会在 patch 生成阶段返回配置错误，不会绕过安全链路。
+所有真实模型输出都必须复用同一个 `CoderModelClient` 接口，输出 raw response 后统一进入 parser、安全预检、沙箱测试和 review。未配置 key 或 model 时，`openai-compatible` 模式会在 patch 生成阶段返回配置错误，不会绕过安全链路。成功生成的 patch 会记录 `generationProvider` 和 `generationModel`，并同步进入 `generate_patch` 的 step output、运行报告和 model call 审计，方便区分本地 recipe、fixture 和真实 OpenAI-compatible Coder。
 
 `GET /api/settings/coder` 提供当前 Coder 模型入口的只读脱敏状态，前端可展示 mode、provider、model、API base URL、key 是否配置、fixture 是否配置、缺失项和支持模式，但不返回 API key、fixture response、organization 或 project 原文。
 
@@ -203,7 +203,7 @@ MVP 使用项目级写入槽保护本地工作区：启动 run、重新生成 pa
 
 - `plan_task` 展示 planner 摘要、计划步骤和检索 query。
 - `retrieve_context` 展示命中代码 chunk 数、query 命中数和关键文件/符号/行号。
-- `generate_patch` 展示 patch id、状态、分支、摘要和 `generationMode`。
+- `generate_patch` 展示 patch id、状态、分支、摘要、`generationMode`、`generationProvider` 和 `generationModel`。
 - `validate_patch_safety` 展示 diff 安全门是否通过。
 - `run_tests` 展示沙箱命令、退出码、耗时和日志摘要。
 - `review_patch` 展示风险等级、审查摘要和 findings。

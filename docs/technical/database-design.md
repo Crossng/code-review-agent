@@ -196,6 +196,8 @@ MVP 使用 PostgreSQL 作为主数据库，并启用 pgvector 存储代码向量
 | `diff_content` | text | unified diff |
 | `summary` | text | 修改摘要 |
 | `generation_mode` | varchar(100) | 生成路径，例如 `SPRING_USER_PAGINATION_RECIPE`、`SPRING_USER_ID_VALIDATION_RECIPE`、`SPRING_USER_COUNT_RECIPE`、`SPRING_USER_CREATE_RECIPE`、`LLM_CODER_DRAFT`、`SAFE_PLANNING_FALLBACK`、`REPAIR_MISSING_TEST_DEPENDENCY`、`REPAIR_MISSING_JAVA_IMPORT` |
+| `generation_provider` | varchar(100) | 生成来源，例如 `LOCAL_RECIPE_CATALOG`、`LOCAL_FIXTURE`、`OPENAI_COMPATIBLE`、`SAFE_PLANNING_FALLBACK` |
+| `generation_model` | varchar(255) | 具体 recipe id、fixture 模型名、OpenAI-compatible 模型名或规划回退模型名 |
 | `status` | varchar(50) | `GENERATED`、`APPLIED`、`APPROVED`、`REJECTED` |
 | `created_at` | timestamp | 创建时间 |
 

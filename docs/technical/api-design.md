@@ -691,6 +691,8 @@ GET /api/agent/tasks?projectId=1&status=WAITING_HUMAN_APPROVAL&taskType=FEATURE&
   "status": "APPLIED",
   "summary": "新增 GET /api/users/page，并补齐 Service/Mapper 分页逻辑和单元测试。",
   "generationMode": "SPRING_USER_PAGINATION_RECIPE",
+  "generationProvider": "LOCAL_RECIPE_CATALOG",
+  "generationModel": "SPRING_USER_PAGINATION_RECIPE",
   "changedFiles": [
     {
       "path": "src/main/java/com/example/demo/user/UserController.java",
@@ -728,6 +730,8 @@ GET /api/agent/tasks?projectId=1&status=WAITING_HUMAN_APPROVAL&taskType=FEATURE&
   "status": "APPLIED",
   "summary": "新增 GET /api/users/page，并补齐 Service/Mapper 分页逻辑和单元测试。",
   "generationMode": "SPRING_USER_PAGINATION_RECIPE",
+  "generationProvider": "LOCAL_RECIPE_CATALOG",
+  "generationModel": "SPRING_USER_PAGINATION_RECIPE",
   "changedFiles": [
     {
       "path": "src/main/java/com/example/demo/user/UserController.java",
@@ -940,7 +944,7 @@ GET /api/agent/tasks?projectId=1&status=WAITING_HUMAN_APPROVAL&taskType=FEATURE&
 
 - 只能查询当前用户所属 task 的 run。
 - `promptJson` 中的 token、secret、password、authorization、api key 等敏感字段必须脱敏。
-- MVP 未接真实模型前使用 `LOCAL_PLACEHOLDER / deterministic-mvp` 记录规划、patch 生成和审查等模型型步骤。
+- 规则化 planner、repair 和 review 等本地步骤可继续使用 `LOCAL_PLACEHOLDER / deterministic-mvp`；`generate_patch` 成功后会按实际 patch 来源记录 provider/model，例如 `LOCAL_RECIPE_CATALOG / SPRING_USER_PAGINATION_RECIPE`、`LOCAL_FIXTURE / fixture-coder` 或 `OPENAI_COMPATIBLE / gpt-*`。
 - Token 计数在本地占位模式下为估算值，接入真实模型后应替换为供应商返回值。
 
 ## 10. 错误码

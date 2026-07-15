@@ -31,6 +31,10 @@ public class PatchGenerationService {
     public static final String MODE_SPRING_USER_CREATE_RECIPE = "SPRING_USER_CREATE_RECIPE";
     public static final String MODE_LLM_CODER_DRAFT = "LLM_CODER_DRAFT";
     public static final String MODE_SAFE_PLANNING_FALLBACK = "SAFE_PLANNING_FALLBACK";
+    public static final String PROVIDER_LOCAL_RECIPE_CATALOG = "LOCAL_RECIPE_CATALOG";
+    public static final String PROVIDER_MANUAL_CODER_OUTPUT = "MANUAL_CODER_OUTPUT";
+    public static final String PROVIDER_SAFE_PLANNING_FALLBACK = "SAFE_PLANNING_FALLBACK";
+    public static final String MODEL_RETRIEVAL_PLAN = "retrieval-plan-v1";
 
     private static final List<PatchRecipe> SPRING_RECIPES = List.of(
             new PatchRecipe(MODE_SPRING_USER_PAGINATION_RECIPE, PatchGenerationService::generateDemoUserPaginationPatch),
@@ -70,14 +74,16 @@ public class PatchGenerationService {
                     targetBranch,
                     patch.diff(),
                     patch.summary(),
-                    patch.generationMode()
+                    patch.generationMode(),
+                    patch.generationProvider(),
+                    patch.generationModel()
             ));
         }
         Optional<CoderModelClient.CoderModelResponse> coderModelResponse = coderModelClient.generatePatch(
                 CoderModelClient.CoderModelRequest.from(task, retrievedResults)
         );
         if (coderModelResponse.isPresent()) {
-            return generatePatchFromCoderOutput(task, run, coderModelResponse.get().rawOutput());
+            return generatePatchFromCoderOutput(task, run, coderModelResponse.get());
         }
         return generatePlanningPatch(task, run, retrievedResults, baseBranch, targetBranch);
     }
@@ -95,6 +101,19 @@ public class PatchGenerationService {
             AgentRun run,
             String rawCoderOutput
     ) {
+        return generatePatchFromCoderOutput(
+                task,
+                run,
+                new CoderModelClient.CoderModelResponse(PROVIDER_MANUAL_CODER_OUTPUT, null, rawCoderOutput)
+        );
+    }
+
+    public PatchRecord generatePatchFromCoderOutput(
+            AgentTask task,
+            AgentRun run,
+            CoderModelClient.CoderModelResponse coderModelResponse
+    ) {
+        String rawCoderOutput = coderModelResponse.rawOutput();
         CoderPatchOutputParser.ParsedCoderPatch parsedPatch = coderPatchOutputParser.parse(rawCoderOutput);
         return patchRecordRepository.save(new PatchRecord(
                 task,
@@ -103,7 +122,9 @@ public class PatchGenerationService {
                 "repopilot/task-" + task.getId(),
                 parsedPatch.diffContent(),
                 "LLM Coder 草稿：已解析任务 #" + task.getId() + " 的 unified diff。",
-                MODE_LLM_CODER_DRAFT
+                MODE_LLM_CODER_DRAFT,
+                coderModelResponse.provider(),
+                coderModelResponse.model()
         ));
     }
 
@@ -125,7 +146,9 @@ public class PatchGenerationService {
                 targetBranch,
                 diff,
                 summary,
-                MODE_SAFE_PLANNING_FALLBACK
+                MODE_SAFE_PLANNING_FALLBACK,
+                PROVIDER_SAFE_PLANNING_FALLBACK,
+                MODEL_RETRIEVAL_PLAN
         ));
     }
 
@@ -1069,7 +1092,17 @@ public class PatchGenerationService {
     private record PatchRecipe(String name, PatchRecipeGenerator generator) {
     }
 
-    private record GeneratedPatch(String diff, String summary, String generationMode) {
+    private record GeneratedPatch(
+            String diff,
+            String summary,
+            String generationMode,
+            String generationProvider,
+            String generationModel
+    ) {
+
+        GeneratedPatch(String diff, String summary, String generationMode) {
+            this(diff, summary, generationMode, PROVIDER_LOCAL_RECIPE_CATALOG, generationMode);
+        }
     }
 
     @FunctionalInterface

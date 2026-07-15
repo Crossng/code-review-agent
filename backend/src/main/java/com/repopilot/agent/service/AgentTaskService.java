@@ -286,6 +286,10 @@ public class AgentTaskService {
                 "generate_patch",
                 patchPrompt,
                 () -> patchGenerationService.generatePatch(task, run, retrieval.results()),
+                generatedPatch -> new ModelCallLogService.ModelMetadata(
+                        generatedPatch.getGenerationProvider(),
+                        generatedPatch.getGenerationModel()
+                ),
                 PatchOutput::from
         );
         if (stopIfCancelled(task, run, cancellationAware)) {
@@ -738,16 +742,25 @@ public class AgentTaskService {
                 longText(output, "patchId", "补丁 #"),
                 text(output, "status", null),
                 text(output, "generationMode", null),
+                text(output, "generationProvider", null),
+                modelFact(output),
                 branchPair(output)
         );
         String generationMode = text(output, "generationMode", "");
+        String generationProvider = text(output, "generationProvider", "");
+        String generationModel = text(output, "generationModel", "");
+        List<String> highlights = compactList(
+                generationMode.isBlank() ? null : "生成模式：" + generationMode,
+                generationProvider.isBlank() ? null : "生成来源：" + generationProvider,
+                generationModel.isBlank() ? null : "模型：" + generationModel
+        );
         sections.add(section(
                 "patch",
                 "生成的补丁产物",
                 step,
                 text(output, "summary", "Coder 已生成补丁产物。"),
                 facts,
-                generationMode.isBlank() ? List.of() : List.of("生成模式：" + generationMode)
+                highlights
         ));
     }
 
@@ -952,6 +965,11 @@ public class AgentTaskService {
         String base = text(node, "baseBranch", null);
         String target = text(node, "targetBranch", null);
         return base == null || target == null ? null : base + " -> " + target;
+    }
+
+    private String modelFact(JsonNode node) {
+        String model = text(node, "generationModel", null);
+        return model == null ? null : "模型：" + model;
     }
 
     private String truncate(String value, int maxLength) {
@@ -1227,7 +1245,9 @@ public class AgentTaskService {
             String baseBranch,
             String targetBranch,
             String summary,
-            String generationMode
+            String generationMode,
+            String generationProvider,
+            String generationModel
     ) {
 
         static PatchOutput from(PatchRecord patch) {
@@ -1237,7 +1257,9 @@ public class AgentTaskService {
                     patch.getBaseBranch(),
                     patch.getTargetBranch(),
                     patch.getSummary(),
-                    patch.getGenerationMode()
+                    patch.getGenerationMode(),
+                    patch.getGenerationProvider(),
+                    patch.getGenerationModel()
             );
         }
     }

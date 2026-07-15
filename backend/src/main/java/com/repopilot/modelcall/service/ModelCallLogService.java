@@ -56,16 +56,59 @@ public class ModelCallLogService {
             ModelAction<T> action,
             Function<T, Object> responseSummary
     ) {
+        return recordWithMetadata(
+                run,
+                stepName,
+                modelProvider,
+                modelName,
+                prompt,
+                action,
+                output -> new ModelMetadata(modelProvider, modelName),
+                responseSummary
+        );
+    }
+
+    public <T> T record(
+            AgentRun run,
+            String stepName,
+            Object prompt,
+            ModelAction<T> action,
+            Function<T, ModelMetadata> modelMetadata,
+            Function<T, Object> responseSummary
+    ) {
+        return recordWithMetadata(
+                run,
+                stepName,
+                DEFAULT_PROVIDER,
+                DEFAULT_MODEL,
+                prompt,
+                action,
+                modelMetadata,
+                responseSummary
+        );
+    }
+
+    private <T> T recordWithMetadata(
+            AgentRun run,
+            String stepName,
+            String fallbackProvider,
+            String fallbackModel,
+            Object prompt,
+            ModelAction<T> action,
+            Function<T, ModelMetadata> modelMetadata,
+            Function<T, Object> responseSummary
+    ) {
         Instant startedAt = Instant.now();
         String promptJson = prompt == null ? null : json(prompt);
         try {
             T output = action.execute();
+            ModelMetadata metadata = normalize(modelMetadata.apply(output), fallbackProvider, fallbackModel);
             String responseJson = json(responseSummary.apply(output));
             save(
                     run,
                     stepName,
-                    modelProvider,
-                    modelName,
+                    metadata.provider(),
+                    metadata.modelName(),
                     promptJson,
                     responseJson,
                     ModelCallStatus.SUCCESS,
@@ -78,8 +121,8 @@ public class ModelCallLogService {
             save(
                     run,
                     stepName,
-                    modelProvider,
-                    modelName,
+                    fallbackProvider,
+                    fallbackModel,
                     promptJson,
                     json(Map.of("error", message)),
                     ModelCallStatus.FAILED,
@@ -88,6 +131,19 @@ public class ModelCallLogService {
             );
             throw exception;
         }
+    }
+
+    private ModelMetadata normalize(ModelMetadata metadata, String fallbackProvider, String fallbackModel) {
+        if (metadata == null) {
+            return new ModelMetadata(fallbackProvider, fallbackModel);
+        }
+        String provider = metadata.provider() == null || metadata.provider().isBlank()
+                ? fallbackProvider
+                : metadata.provider().trim();
+        String modelName = metadata.modelName() == null || metadata.modelName().isBlank()
+                ? fallbackModel
+                : metadata.modelName().trim();
+        return new ModelMetadata(provider, modelName);
     }
 
     private void save(
@@ -181,5 +237,8 @@ public class ModelCallLogService {
     @FunctionalInterface
     public interface ModelAction<T> {
         T execute();
+    }
+
+    public record ModelMetadata(String provider, String modelName) {
     }
 }

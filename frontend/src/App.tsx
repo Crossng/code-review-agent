@@ -2878,6 +2878,8 @@ function PatchPanel({ patch, review }: { patch: PatchRecord | null; review: Patc
             <Meta label="目标分支" value={patch.targetBranch} />
             <Meta label="补丁" value={`#${patch.id}`} />
             <Meta label="生成模式" value={patch.generationMode} />
+            <Meta label="生成来源" value={patch.generationProvider} />
+            {patch.generationModel ? <Meta label="模型" value={patch.generationModel} /> : null}
           </div>
           <p className="description">{patch.summary}</p>
           <PatchRiskReviewSummary review={review} />
@@ -3247,6 +3249,8 @@ function agentEvidenceFromSteps(steps: AgentStep[]): AgentEvidenceItem[] {
     const output = parseJsonObject(patchStep.outputJson);
     const patchId = numberField(output, "patchId");
     const mode = stringField(output, "generationMode");
+    const provider = stringField(output, "generationProvider");
+    const model = stringField(output, "generationModel");
     items.push({
       key: "patch",
       label: "生成的补丁产物",
@@ -3258,9 +3262,15 @@ function agentEvidenceFromSteps(steps: AgentStep[]): AgentEvidenceItem[] {
         patchId ? `补丁 #${patchId}` : null,
         stringField(output, "status"),
         mode,
+        provider,
+        model ? `模型：${model}` : null,
         branchPair(output)
       ]),
-      highlights: mode ? [`生成模式：${mode}`] : []
+      highlights: compactStrings([
+        mode ? `生成模式：${mode}` : null,
+        provider ? `生成来源：${provider}` : null,
+        model ? `模型：${model}` : null
+      ])
     });
   }
 

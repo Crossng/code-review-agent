@@ -48,6 +48,12 @@ public class PatchRecord {
     @Column(name = "generation_mode", nullable = false)
     private String generationMode;
 
+    @Column(name = "generation_provider", nullable = false)
+    private String generationProvider;
+
+    @Column(name = "generation_model")
+    private String generationModel;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private PatchStatus status;
@@ -78,6 +84,20 @@ public class PatchRecord {
             String summary,
             String generationMode
     ) {
+        this(agentTask, agentRun, baseBranch, targetBranch, diffContent, summary, generationMode, "UNKNOWN", null);
+    }
+
+    public PatchRecord(
+            AgentTask agentTask,
+            AgentRun agentRun,
+            String baseBranch,
+            String targetBranch,
+            String diffContent,
+            String summary,
+            String generationMode,
+            String generationProvider,
+            String generationModel
+    ) {
         this.agentTask = agentTask;
         this.agentRun = agentRun;
         this.baseBranch = baseBranch;
@@ -85,6 +105,8 @@ public class PatchRecord {
         this.diffContent = diffContent;
         this.summary = summary;
         this.generationMode = generationMode == null || generationMode.isBlank() ? "UNKNOWN" : generationMode;
+        this.generationProvider = generationProvider == null || generationProvider.isBlank() ? "UNKNOWN" : generationProvider;
+        this.generationModel = generationModel == null || generationModel.isBlank() ? null : generationModel;
         this.status = PatchStatus.GENERATED;
     }
 
@@ -123,6 +145,14 @@ public class PatchRecord {
 
     public String getGenerationMode() {
         return generationMode;
+    }
+
+    public String getGenerationProvider() {
+        return generationProvider;
+    }
+
+    public String getGenerationModel() {
+        return generationModel;
     }
 
     public PatchStatus getStatus() {
