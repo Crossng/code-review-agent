@@ -2,6 +2,7 @@ package com.repopilot.notification.controller;
 
 import com.repopilot.auth.security.UserPrincipal;
 import com.repopilot.notification.service.TaskStreamService;
+import java.nio.charset.StandardCharsets;
 import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -16,6 +17,8 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 @RequestMapping("/api/agent/tasks")
 public class TaskStreamController {
 
+    private static final MediaType TEXT_EVENT_STREAM_UTF8 = new MediaType("text", "event-stream", StandardCharsets.UTF_8);
+
     private final TaskStreamService taskStreamService;
 
     public TaskStreamController(TaskStreamService taskStreamService) {
@@ -28,7 +31,7 @@ public class TaskStreamController {
             @AuthenticationPrincipal UserPrincipal principal
     ) {
         return ResponseEntity.ok()
-                .contentType(MediaType.TEXT_EVENT_STREAM)
+                .contentType(TEXT_EVENT_STREAM_UTF8)
                 .cacheControl(CacheControl.noCache())
                 .body(taskStreamService.stream(id, principal.getId()));
     }

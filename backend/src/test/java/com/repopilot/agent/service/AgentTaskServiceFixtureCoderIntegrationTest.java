@@ -271,7 +271,7 @@ class AgentTaskServiceFixtureCoderIntegrationTest {
                 .anySatisfy(step -> {
                     assertThat(step.getStepName()).isEqualTo("review_patch");
                     assertThat(step.getStatus()).isEqualTo(AgentStepStatus.SUCCESS);
-                    assertThat(step.getOutputJson()).contains("No automated patch review findings.");
+                    assertThat(step.getOutputJson()).contains("没有自动审查发现。");
                 });
         Path sandboxReadme = tempDir.resolve("workspace")
                 .resolve("runs")

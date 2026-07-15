@@ -48,7 +48,7 @@ class PatchRiskReviewServiceTest {
         PatchRiskReviewService.PatchRiskReview review = service.review(patch, passedTestRun(patch));
 
         assertThat(review.riskLevel()).isEqualTo("MEDIUM");
-        assertThat(review.summary()).contains("highest risk is MEDIUM");
+        assertThat(review.summary()).contains("最高风险等级为 MEDIUM");
         assertThat(review.findings())
                 .extracting(PatchRiskReviewService.PatchRiskFinding::code)
                 .contains(
@@ -56,6 +56,9 @@ class PatchRiskReviewServiceTest {
                         "PAGINATION_BOUNDS_NORMALIZED",
                         "TEST_COVERAGE_PRESENT"
                 );
+        assertThat(review.findings())
+                .extracting(PatchRiskReviewService.PatchRiskFinding::message)
+                .contains("新增 Controller 接口没有显式鉴权注解。");
     }
 
     @Test

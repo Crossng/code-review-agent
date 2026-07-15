@@ -60,7 +60,7 @@ class PatchGenerationServiceTest {
 
         PatchRecord patch = patchGenerationService.generatePatch(task, run, List.of());
 
-        assertThat(patch.getSummary()).isEqualTo("Adds GET /api/users/page with service/mapper pagination and unit tests.");
+        assertThat(patch.getSummary()).isEqualTo("新增 GET /api/users/page，并补齐 Service/Mapper 分页逻辑和单元测试。");
         assertThat(patch.getGenerationMode()).isEqualTo(PatchGenerationService.MODE_SPRING_USER_PAGINATION_RECIPE);
         assertThat(patch.getDiffContent())
                 .contains("+++ b/pom.xml")
@@ -89,7 +89,7 @@ class PatchGenerationServiceTest {
 
         PatchRecord patch = patchGenerationService.generatePatch(task, run, List.of());
 
-        assertThat(patch.getSummary()).isEqualTo("Adds User id validation guard with unit tests.");
+        assertThat(patch.getSummary()).isEqualTo("新增 User id 参数校验保护，并补齐单元测试。");
         assertThat(patch.getGenerationMode()).isEqualTo(PatchGenerationService.MODE_SPRING_USER_ID_VALIDATION_RECIPE);
         assertThat(patch.getDiffContent())
                 .contains("+++ b/pom.xml")
@@ -115,7 +115,7 @@ class PatchGenerationServiceTest {
 
         PatchRecord patch = patchGenerationService.generatePatch(task, run, List.of());
 
-        assertThat(patch.getSummary()).isEqualTo("Adds GET /api/users/count with service/mapper count logic and unit tests.");
+        assertThat(patch.getSummary()).isEqualTo("新增 GET /api/users/count，并补齐 Service/Mapper 计数逻辑和单元测试。");
         assertThat(patch.getGenerationMode()).isEqualTo(PatchGenerationService.MODE_SPRING_USER_COUNT_RECIPE);
         assertThat(patch.getDiffContent())
                 .contains("+++ b/pom.xml")
@@ -145,7 +145,7 @@ class PatchGenerationServiceTest {
         PatchRecord patch = patchGenerationService.generatePatch(task, run, List.of());
 
         assertThat(patch.getSummary())
-                .isEqualTo("Adds POST /api/users with create request DTO, service/mapper creation logic, and unit tests.");
+                .isEqualTo("新增 POST /api/users、创建请求 DTO、Service/Mapper 创建逻辑和单元测试。");
         assertThat(patch.getGenerationMode()).isEqualTo(PatchGenerationService.MODE_SPRING_USER_CREATE_RECIPE);
         assertThat(patch.getDiffContent())
                 .contains("+++ b/pom.xml")
@@ -189,7 +189,7 @@ class PatchGenerationServiceTest {
 
         PatchRecord patch = patchGenerationService.generatePatch(task, run, List.of());
 
-        assertThat(patch.getSummary()).isEqualTo("Adds User id validation guard with unit tests.");
+        assertThat(patch.getSummary()).isEqualTo("新增 User id 参数校验保护，并补齐单元测试。");
         assertThat(patch.getDiffContent())
                 .doesNotContain("+++ b/pom.xml")
                 .contains("+++ b/src/main/java/com/example/demo/user/UserService.java")
@@ -229,7 +229,7 @@ class PatchGenerationServiceTest {
 
         PatchRecord patch = patchGenerationService.generatePatch(task, run, List.of());
 
-        assertThat(patch.getSummary()).isEqualTo("Adds User id validation guard with unit tests.");
+        assertThat(patch.getSummary()).isEqualTo("新增 User id 参数校验保护，并补齐单元测试。");
         assertThat(patch.getDiffContent())
                 .contains("--- a/src/test/java/com/example/demo/user/UserServiceTest.java")
                 .contains("+++ b/src/test/java/com/example/demo/user/UserServiceTest.java")
@@ -359,24 +359,24 @@ class PatchGenerationServiceTest {
 
         PatchRecord patch = patchGenerationService.generatePatch(task, run, retrievedResults);
 
-        assertThat(patch.getSummary()).contains("Safe retrieval-grounded Coder plan");
+        assertThat(patch.getSummary()).contains("安全规划回退");
         assertThat(patch.getGenerationMode()).isEqualTo(PatchGenerationService.MODE_SAFE_PLANNING_FALLBACK);
         assertThat(patch.getDiffContent())
                 .contains(".repopilot/task-")
-                .contains("# RepoPilot Task")
-                .contains("Coder Plan")
-                .contains("Generation mode: `SAFE_PLANNING_FALLBACK`")
-                .contains("Retrieved chunks: 2")
-                .contains("## Candidate Files From Retrieval")
+                .contains("# RepoPilot 任务")
+                .contains("Coder 实施计划")
+                .contains("生成模式：`SAFE_PLANNING_FALLBACK`")
+                .contains("检索片段数：2")
+                .contains("## 检索得到的候选文件")
                 .contains("`src/main/java/com/example/demo/BannerController.java`")
                 .contains("com.example.demo.BannerController")
                 .contains("12-32")
                 .contains("Handles banner display endpoints \\| includes current headline.")
                 .contains("`src/test/java/com/example/demo/BannerControllerTest.java`")
-                .contains("## Suggested Edit Sequence")
-                .contains("Draft the smallest unified diff")
-                .contains("## Guardrails For The Next Coder Pass")
-                .contains("Run PatchRiskReview before human approval.");
+                .contains("## 建议编辑顺序")
+                .contains("起草满足需求的最小 unified diff")
+                .contains("## 下一轮 Coder 的护栏")
+                .contains("人工审批前运行 PatchRiskReview。");
     }
 
     @Test
@@ -394,7 +394,7 @@ class PatchGenerationServiceTest {
                 ```
                 """);
 
-        assertThat(patch.getSummary()).isEqualTo("LLM Coder draft: parsed unified diff for task #" + task.getId());
+        assertThat(patch.getSummary()).isEqualTo("LLM Coder 草稿：已解析任务 #" + task.getId() + " 的 unified diff。");
         assertThat(patch.getGenerationMode()).isEqualTo(PatchGenerationService.MODE_LLM_CODER_DRAFT);
         assertThat(patch.getBaseBranch()).isEqualTo("main");
         assertThat(patch.getTargetBranch()).isEqualTo("repopilot/task-" + task.getId());

@@ -315,7 +315,7 @@ class AgentTaskServiceRegenerationTest {
         AgentRun run = agentTaskService.run(fixture.task().getId(), fixture.user().getId());
 
         assertThat(run.getStatus()).isEqualTo(AgentRunStatus.FAILED);
-        assertThat(run.getErrorMessage()).contains("Patch diff failed safety validation");
+        assertThat(run.getErrorMessage()).contains("补丁 diff 未通过安全预检");
         assertThat(fixture.task().getStatus()).isEqualTo(AgentTaskStatus.FAILED_PATCH_GENERATION);
         verify(sandboxTestService, never()).prepareWorkspace(any(), any());
         ArgumentCaptor<AgentStep> stepCaptor = ArgumentCaptor.forClass(AgentStep.class);
@@ -324,7 +324,7 @@ class AgentTaskServiceRegenerationTest {
                 .anySatisfy(step -> {
                     assertThat(step.getStepName()).isEqualTo("validate_patch_safety");
                     assertThat(step.getStatus()).isEqualTo(AgentStepStatus.FAILED);
-                    assertThat(step.getErrorMessage()).isEqualTo("Patch diff failed safety validation");
+                    assertThat(step.getErrorMessage()).isEqualTo("补丁 diff 未通过安全预检");
                 });
     }
 

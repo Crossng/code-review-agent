@@ -59,7 +59,7 @@ public class PatchRiskReviewService {
             findings.add(new PatchRiskFinding(
                     "MEDIUM",
                     "NEW_CONTROLLER_ENDPOINT_WITHOUT_AUTH",
-                    "New Controller endpoint does not include an explicit authorization annotation.",
+                    "新增 Controller 接口没有显式鉴权注解。",
                     newEndpoints.get(0).filePath()
             ));
         }
@@ -85,7 +85,7 @@ public class PatchRiskReviewService {
             findings.add(new PatchRiskFinding(
                     "LOW",
                     "PAGINATION_BOUNDS_NORMALIZED",
-                    "Pagination inputs are bounded or normalized before use.",
+                    "分页输入在使用前已经做了边界限制或归一化。",
                     firstControllerPath(addedLines)
             ));
             return;
@@ -93,7 +93,7 @@ public class PatchRiskReviewService {
         findings.add(new PatchRiskFinding(
                 "MEDIUM",
                 "PAGINATION_PARAMETER_WITHOUT_BOUNDS",
-                "Pagination query parameters were added without visible lower or upper bounds.",
+                "新增分页查询参数，但没有看到明确的上下界约束。",
                 firstControllerPath(addedLines)
         ));
     }
@@ -112,7 +112,7 @@ public class PatchRiskReviewService {
                 .ifPresent(line -> findings.add(new PatchRiskFinding(
                         "HIGH",
                         "SQL_ACCESS_REQUIRES_REVIEW",
-                        "Patch adds direct query or statement construction; review parameter binding and injection safety.",
+                        "补丁新增了直接查询或 statement 构造，需要复核参数绑定和注入风险。",
                         line.filePath()
                 )));
     }
@@ -134,7 +134,7 @@ public class PatchRiskReviewService {
             findings.add(new PatchRiskFinding(
                     "INFO",
                     "TEST_COVERAGE_PRESENT",
-                    "Patch includes test changes and the sandbox test run passed.",
+                    "补丁包含测试变更，且沙箱测试已通过。",
                     changedFiles.stream()
                             .map(PatchChangedFileResponse::path)
                             .filter(path -> path != null && path.startsWith("src/test/"))
@@ -147,7 +147,7 @@ public class PatchRiskReviewService {
             findings.add(new PatchRiskFinding(
                     "MEDIUM",
                     "TEST_COVERAGE_MISSING",
-                    "Patch changes production code without adding or modifying tests.",
+                    "补丁修改了生产代码，但没有新增或修改测试。",
                     null
             ));
         }
@@ -189,15 +189,15 @@ public class PatchRiskReviewService {
 
     private String summary(String riskLevel, List<PatchRiskFinding> findings) {
         if (findings.isEmpty()) {
-            return "No automated patch review findings.";
+            return "没有自动审查发现。";
         }
         long actionableFindings = findings.stream()
                 .filter(finding -> !"INFO".equals(finding.severity()))
                 .count();
         if (actionableFindings == 0) {
-            return "Automated review found informational findings only.";
+            return "自动审查只发现信息性提示。";
         }
-        return "Automated review found " + actionableFindings + " actionable finding(s); highest risk is " + riskLevel + ".";
+        return "自动审查发现 " + actionableFindings + " 个需要处理的风险点，最高风险等级为 " + riskLevel + "。";
     }
 
     private int severityRank(String severity) {

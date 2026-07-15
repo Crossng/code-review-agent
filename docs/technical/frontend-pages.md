@@ -72,10 +72,10 @@ Agent 执行页必须特别处理长任务状态：
 - 运行中任务通过 `GET /api/agent/tasks/{id}/stream` SSE 实时刷新状态、步骤、patch、测试和审计面板。
 - 日志流中断时显示 fallback 状态，并继续通过任务详情接口轮询。
 - 任务详情应把 `agent_step.inputJson`/`outputJson` 的稳定字段解析为 `AgentEvidencePanel`，在原始审计 JSON 之外展示计划摘要、检索命中、patch 生成结果、patch 安全门、沙箱测试结果、自动审查和人工审批 checkpoint。
-- 任务存在 current run 时，任务详情应通过 `GET /api/agent/tasks/{id}/run-report` 加载可复制/下载的 Markdown run report；没有 current run 时按钮禁用并保持空状态。任务详情还应通过 `GET /api/agent/tasks/{id}/run-report/snapshots?limit=5` 展示最近运行报告快照，可通过 `POST /api/agent/tasks/{id}/run-report/snapshots` 保存当前报告，并从历史快照复制或下载保存时的 Markdown。
-- 任务详情主链路的导航、状态卡、步骤时间线、Agent 证据、模型/工具审计、补丁、沙箱测试、人工审批和 PR 前置检查使用中文产品文案；后端枚举、step name、recipe id 和导出的 Markdown 报告标题保留工程原文，便于排查和对接 API。
+- 任务存在 current run 时，任务详情应通过 `GET /api/agent/tasks/{id}/run-report` 加载可复制/下载的中文 Markdown run report；没有 current run 时按钮禁用并保持空状态。任务详情还应通过 `GET /api/agent/tasks/{id}/run-report/snapshots?limit=5` 展示最近运行报告快照，可通过 `POST /api/agent/tasks/{id}/run-report/snapshots` 保存当前报告，并从历史快照复制或下载保存时的 Markdown。
+- 任务详情主链路的导航、状态卡、步骤时间线、Agent 证据、模型/工具审计、补丁、沙箱测试、人工审批和 PR 前置检查使用中文产品文案；运行报告 Markdown 的标题、段落、事实和重点使用中文，后端枚举、step name、recipe id、命令和路径保留工程原文，便于排查和对接 API。
 - 工作台概览、Agent 运行表现、最近任务活动、Coder 配置、GitHub 发布配置和沙箱运行时配置使用中文产品文案；配置枚举、provider、mode 和 readiness badge 保留工程原文，便于和环境变量、后端响应对应。
-- 登录、项目接入、项目筛选、任务创建、任务筛选、仓库洞察、Controller API 风险视图、接口文档快照和代码搜索使用中文产品文案；仓库名、Java 符号、HTTP 方法、风险码、后端状态枚举和后端生成的 Markdown 内容保留工程原文，便于和代码及 API 响应一一对应。
+- 登录、项目接入、项目筛选、任务创建、任务筛选、仓库洞察、Controller API 风险视图、接口文档快照和代码搜索使用中文产品文案；仓库名、Java 符号、HTTP 方法、风险码、后端状态枚举和 Controller API Markdown 内容保留工程原文，便于和代码及 API 响应一一对应。
 
 ## 5. 核心组件
 

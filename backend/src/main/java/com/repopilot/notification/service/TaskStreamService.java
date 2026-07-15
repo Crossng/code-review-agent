@@ -104,17 +104,17 @@ public class TaskStreamService {
         AgentTask task = getAuthorizedTask(taskId, userId);
         List<AgentEventResponse> events = new ArrayList<>();
         AgentRun run = task.getCurrentRun();
-        events.add(taskEvent("TASK_SNAPSHOT", task, run, "Task " + task.getStatus().name()));
+        events.add(taskEvent("TASK_SNAPSHOT", task, run, "任务 " + task.getStatus().name()));
         if (run != null) {
             agentStepRepository.findByAgentRunIdOrderByStartedAtAsc(run.getId())
                     .forEach(step -> events.add(stepEvent("STEP_SNAPSHOT", task, run, step)));
         }
-        events.add(completeEvent(task, run, "Snapshot stream complete"));
+        events.add(completeEvent(task, run, "快照流已完成"));
         return events;
     }
 
     public void publishTaskUpdated(AgentTask task, AgentRun run) {
-        publish(task.getId(), taskEvent("TASK_UPDATED", task, run, "Task " + task.getStatus().name()), false);
+        publish(task.getId(), taskEvent("TASK_UPDATED", task, run, "任务 " + task.getStatus().name()), false);
     }
 
     public void publishStepRecorded(AgentTask task, AgentRun run, AgentStep step) {

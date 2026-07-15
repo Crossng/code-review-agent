@@ -611,16 +611,16 @@ GET /api/agent/tasks?projectId=1&status=WAITING_HUMAN_APPROVAL&taskType=FEATURE&
   "sections": [
     {
       "key": "planner",
-      "title": "Planner task plan",
+      "title": "任务规划",
       "stepName": "plan_task",
       "status": "SUCCESS",
       "finishedAt": "2026-07-15T12:00:10Z",
-      "summary": "Prepare implementation context for: Add User pagination API",
-      "facts": ["Search queries: Add User pagination API, pagination"],
-      "highlights": ["1. Retrieve repository context - Search indexed code chunks"]
+      "summary": "为任务准备实现上下文：Add User pagination API",
+      "facts": ["检索词：Add User pagination API, pagination"],
+      "highlights": ["1. 检索仓库上下文 - 检索已索引代码片段"]
     }
   ],
-  "markdown": "# RepoPilot Agent Run Report\n\n..."
+  "markdown": "# RepoPilot Agent 运行报告\n\n..."
 }
 ```
 
@@ -689,7 +689,7 @@ GET /api/agent/tasks?projectId=1&status=WAITING_HUMAN_APPROVAL&taskType=FEATURE&
   "baseBranch": "main",
   "targetBranch": "repopilot/task-1001",
   "status": "APPLIED",
-  "summary": "Adds GET /api/users/page with service/mapper pagination and unit tests.",
+  "summary": "新增 GET /api/users/page，并补齐 Service/Mapper 分页逻辑和单元测试。",
   "generationMode": "SPRING_USER_PAGINATION_RECIPE",
   "changedFiles": [
     {
@@ -726,7 +726,7 @@ GET /api/agent/tasks?projectId=1&status=WAITING_HUMAN_APPROVAL&taskType=FEATURE&
   "baseBranch": "main",
   "targetBranch": "repopilot/task-1001",
   "status": "APPLIED",
-  "summary": "Adds GET /api/users/page with service/mapper pagination and unit tests.",
+  "summary": "新增 GET /api/users/page，并补齐 Service/Mapper 分页逻辑和单元测试。",
   "generationMode": "SPRING_USER_PAGINATION_RECIPE",
   "changedFiles": [
     {
@@ -922,7 +922,7 @@ GET /api/agent/tasks?projectId=1&status=WAITING_HUMAN_APPROVAL&taskType=FEATURE&
     "modelProvider": "LOCAL_PLACEHOLDER",
     "modelName": "deterministic-mvp",
     "promptJson": "{\"title\":\"新增 User 分页查询接口\"}",
-    "responseJson": "{\"summary\":\"Prepare implementation context\"}",
+    "responseJson": "{\"summary\":\"为任务准备实现上下文\"}",
     "status": "SUCCESS",
     "promptTokens": 12,
     "completionTokens": 20,

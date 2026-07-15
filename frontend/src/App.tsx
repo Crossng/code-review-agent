@@ -589,13 +589,13 @@ function streamLabel(task: AgentTask | null, state: TaskStreamState) {
     return null;
   }
   if (state === "live") {
-    return "Live stream";
+    return "实时流";
   }
   if (state === "connecting") {
-    return "Connecting stream";
+    return "正在连接实时流";
   }
   if (state === "fallback") {
-    return "Polling fallback";
+    return "轮询兜底";
   }
   return null;
 }
@@ -821,7 +821,7 @@ export function App() {
         return;
       }
       setTaskStreamState("fallback");
-      setMessage(`Task stream switched to polling fallback: ${formatError(error)}`);
+      setMessage(`任务实时流已切换为轮询兜底：${formatError(error)}`);
     });
 
     return () => {

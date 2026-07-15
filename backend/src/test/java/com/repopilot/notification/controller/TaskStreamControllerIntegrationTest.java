@@ -12,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.UUID;
 
@@ -122,7 +123,7 @@ class TaskStreamControllerIntegrationTest {
                 .andExpect(status().isOk())
                 .andReturn();
 
-        String stream = dispatchedResult.getResponse().getContentAsString();
+        String stream = dispatchedResult.getResponse().getContentAsString(StandardCharsets.UTF_8);
         assertThat(dispatchedResult.getResponse().getContentType()).contains(TEXT_EVENT_STREAM_VALUE);
         assertThat(stream)
                 .contains("event:task_snapshot")
@@ -160,7 +161,7 @@ class TaskStreamControllerIntegrationTest {
         run.markSuccess();
         run = agentRunRepository.save(run);
         taskStreamService.publishTaskUpdated(task, run);
-        taskStreamService.publishStreamComplete(task, run, "Agent run reached human approval");
+        taskStreamService.publishStreamComplete(task, run, "Agent 运行已进入人工审批");
 
         MvcResult dispatchedResult = mockMvc.perform(asyncDispatch(result))
                 .andExpect(status().isOk())
@@ -169,13 +170,15 @@ class TaskStreamControllerIntegrationTest {
         assertThat(stream)
                 .contains("event:task_snapshot")
                 .contains("\"taskStatus\":\"GENERATING_PATCH\"")
+                .contains("\"message\":\"任务 GENERATING_PATCH\"")
                 .contains("event:step_recorded")
                 .contains("\"eventType\":\"STEP_RECORDED\"")
                 .contains("\"stepName\":\"review_patch\"")
                 .contains("event:task_updated")
                 .contains("\"runStatus\":\"SUCCESS\"")
+                .contains("\"message\":\"任务 WAITING_HUMAN_APPROVAL\"")
                 .contains("event:stream_complete")
-                .contains("\"message\":\"Agent run reached human approval\"");
+                .contains("\"message\":\"Agent 运行已进入人工审批\"");
     }
 
     private void createTaskRunAndSteps(User owner) {

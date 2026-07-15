@@ -171,12 +171,12 @@ class AgentTaskControllerIntegrationTest {
                 AgentStepStatus.SUCCESS,
                 json(Map.of("title", task.getTitle())),
                 json(Map.of(
-                        "summary", "Prepare implementation context for: Add User pagination API",
+                        "summary", "为任务准备实现上下文：Add User pagination API",
                         "searchQueries", List.of("Add User pagination API", "pagination"),
                         "steps", List.of(Map.of(
                                 "order", 1,
-                                "title", "Retrieve repository context",
-                                "reason", "Search indexed code chunks"
+                                "title", "检索仓库上下文",
+                                "reason", "检索已索引代码片段"
                         ))
                 ))
         ));
@@ -194,7 +194,7 @@ class AgentTaskControllerIntegrationTest {
                                 "qualifiedName", "UserController#listUsers",
                                 "startLine", 12,
                                 "endLine", 20,
-                                "summary", "Existing User listing endpoint"
+                                "summary", "现有 User 列表接口"
                         ))
                 ))
         ));
@@ -208,7 +208,7 @@ class AgentTaskControllerIntegrationTest {
                         "status", "APPLIED",
                         "baseBranch", "main",
                         "targetBranch", "repopilot/task-1",
-                        "summary", "Adds GET /api/users/page",
+                        "summary", "新增 GET /api/users/page",
                         "generationMode", "SPRING_USER_PAGINATION_RECIPE"
                 ))
         ));
@@ -217,7 +217,7 @@ class AgentTaskControllerIntegrationTest {
                 "validate_patch_safety",
                 AgentStepStatus.SUCCESS,
                 json(Map.of("patchId", 42)),
-                json(Map.of("safe", true, "reasons", List.of("All diff paths stay inside the repository")))
+                json(Map.of("safe", true, "reasons", List.of("所有 diff 路径都在仓库内")))
         ));
         agentStepRepository.save(new AgentStep(
                 run,
@@ -231,7 +231,7 @@ class AgentTaskControllerIntegrationTest {
                         "command", "mvn -q test",
                         "exitCode", 0,
                         "durationMs", 1200,
-                        "logExcerpt", "Tests passed"
+                        "logExcerpt", "测试通过"
                 ))
         ));
         agentStepRepository.save(new AgentStep(
@@ -241,7 +241,7 @@ class AgentTaskControllerIntegrationTest {
                 json(Map.of("patchId", 42, "testRunId", 5)),
                 json(Map.of(
                         "riskLevel", "LOW",
-                        "summary", "No automated patch review findings.",
+                        "summary", "没有自动审查发现。",
                         "findings", List.of()
                 ))
         ));
@@ -261,13 +261,14 @@ class AgentTaskControllerIntegrationTest {
                 .andExpect(jsonPath("$.data.runId").value(run.getId()))
                 .andExpect(jsonPath("$.data.sections.length()").value(7))
                 .andExpect(jsonPath("$.data.sections[0].key").value("planner"))
+                .andExpect(jsonPath("$.data.sections[0].title").value("任务规划"))
                 .andExpect(jsonPath("$.data.sections[1].key").value("retrieval"))
-                .andExpect(jsonPath("$.data.sections[1].facts[0]").value("Unique chunks: 1"))
+                .andExpect(jsonPath("$.data.sections[1].facts[0]").value("去重代码片段：1"))
                 .andExpect(jsonPath("$.data.sections[2].facts[2]").value("SPRING_USER_PAGINATION_RECIPE"))
-                .andExpect(jsonPath("$.data.sections[4].summary").value("Tests passed"))
-                .andExpect(jsonPath("$.data.markdown").value(containsString("# RepoPilot Agent Run Report")))
-                .andExpect(jsonPath("$.data.markdown").value(containsString("## Planner task plan")))
-                .andExpect(jsonPath("$.data.markdown").value(containsString("## Retrieved code context")))
+                .andExpect(jsonPath("$.data.sections[4].summary").value("测试通过"))
+                .andExpect(jsonPath("$.data.markdown").value(containsString("# RepoPilot Agent 运行报告")))
+                .andExpect(jsonPath("$.data.markdown").value(containsString("## 任务规划")))
+                .andExpect(jsonPath("$.data.markdown").value(containsString("## 检索到的代码上下文")))
                 .andExpect(jsonPath("$.data.markdown").value(containsString("SPRING_USER_PAGINATION_RECIPE")));
 
         MvcResult snapshotResult = mockMvc.perform(post("/api/agent/tasks/{id}/run-report/snapshots", task.getId())
@@ -277,7 +278,7 @@ class AgentTaskControllerIntegrationTest {
                 .andExpect(jsonPath("$.data.taskId").value(task.getId()))
                 .andExpect(jsonPath("$.data.runId").value(run.getId()))
                 .andExpect(jsonPath("$.data.sectionCount").value(7))
-                .andExpect(jsonPath("$.data.markdown").value(containsString("# RepoPilot Agent Run Report")))
+                .andExpect(jsonPath("$.data.markdown").value(containsString("# RepoPilot Agent 运行报告")))
                 .andReturn();
         long snapshotId = objectMapper.readTree(snapshotResult.getResponse().getContentAsString())
                 .path("data")
@@ -295,8 +296,8 @@ class AgentTaskControllerIntegrationTest {
                         .header(AUTHORIZATION, bearer(ownerToken)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value(snapshotId))
-                .andExpect(jsonPath("$.data.markdown").value(containsString("## Sandbox test result")))
-                .andExpect(jsonPath("$.data.markdown").value(containsString("## Automated patch review")));
+                .andExpect(jsonPath("$.data.markdown").value(containsString("## 沙箱测试结果")))
+                .andExpect(jsonPath("$.data.markdown").value(containsString("## 自动补丁审查")));
 
         mockMvc.perform(get("/api/agent/tasks/{id}/run-report", task.getId())
                         .header(AUTHORIZATION, bearer(otherToken)))

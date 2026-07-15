@@ -243,7 +243,7 @@ public class AgentTaskService {
             run.markFailed(exception.getMessage());
             saveTaskProgress(task, run);
             saveRunProgress(task, run);
-            completeTaskStream(task, run, "Agent run failed unexpectedly");
+            completeTaskStream(task, run, "Agent 运行意外失败");
         });
     }
 
@@ -322,10 +322,10 @@ public class AgentTaskService {
                 }
                 if (repairAttempt >= MAX_REPAIR_ATTEMPTS) {
                     task.setStatus(AgentTaskStatus.FAILED_TEST);
-                    run.markFailed("Maven tests failed in sandbox after " + MAX_REPAIR_ATTEMPTS + " repair attempt(s)");
+                    run.markFailed("沙箱 Maven 测试失败，已用完 " + MAX_REPAIR_ATTEMPTS + " 次修复尝试");
                     saveTaskProgress(task, run);
                     saveRunProgress(task, run);
-                    completeTaskStream(task, run, "Agent run failed after repair attempts");
+                    completeTaskStream(task, run, "Agent 运行在修复尝试后失败");
                     return new RunExecution(run, patch);
                 }
                 int attemptNumber = repairAttempt + 1;
@@ -376,10 +376,10 @@ public class AgentTaskService {
                             repairException.getMessage()
                     );
                     task.setStatus(AgentTaskStatus.FAILED_TEST);
-                    run.markFailed("Maven tests failed in sandbox; RepairAgent could not repair: " + repairException.getMessage());
+                    run.markFailed("沙箱 Maven 测试失败，RepairAgent 未能修复：" + repairException.getMessage());
                     saveTaskProgress(task, run);
                     saveRunProgress(task, run);
-                    completeTaskStream(task, run, "Agent run failed during repair");
+                    completeTaskStream(task, run, "Agent 运行在修复阶段失败");
                     return new RunExecution(run, failedPatch);
                 }
             }
@@ -388,10 +388,10 @@ public class AgentTaskService {
             }
             if (passedTestRun == null) {
                 task.setStatus(AgentTaskStatus.FAILED_TEST);
-                run.markFailed("Maven tests failed in sandbox");
+                run.markFailed("沙箱 Maven 测试失败");
                 saveTaskProgress(task, run);
                 saveRunProgress(task, run);
-                completeTaskStream(task, run, "Agent run failed in sandbox tests");
+                completeTaskStream(task, run, "Agent 运行在沙箱测试阶段失败");
                 return new RunExecution(run, patch);
             }
             task.setStatus(AgentTaskStatus.REVIEWING_PATCH);
@@ -430,7 +430,7 @@ public class AgentTaskService {
             run.markFailed(exception.getMessage());
             saveTaskProgress(task, run);
             saveRunProgress(task, run);
-            completeTaskStream(task, run, "Agent run failed while applying patch");
+            completeTaskStream(task, run, "Agent 运行在应用补丁时失败");
             return new RunExecution(run, patch);
         }
 
@@ -448,7 +448,7 @@ public class AgentTaskService {
         );
         run.markSuccess();
         saveRunProgress(task, run);
-        completeTaskStream(task, run, "Agent run reached human approval");
+        completeTaskStream(task, run, "Agent 运行已进入人工审批");
         return new RunExecution(run, patch);
     }
 
@@ -474,13 +474,13 @@ public class AgentTaskService {
                     AgentStepStatus.FAILED,
                     Map.of("patchId", patch.getId()),
                     safetyReport,
-                    "Patch diff failed safety validation"
+                    "补丁 diff 未通过安全预检"
             );
             task.setStatus(AgentTaskStatus.FAILED_PATCH_GENERATION);
-            run.markFailed("Patch diff failed safety validation");
+            run.markFailed("补丁 diff 未通过安全预检");
             saveTaskProgress(task, run);
             saveRunProgress(task, run);
-            completeTaskStream(task, run, "Agent run failed during patch safety validation");
+            completeTaskStream(task, run, "Agent 运行在补丁安全预检阶段失败");
             return new PatchValidation(null, true, false);
         }
         saveStep(run, "validate_patch_safety", AgentStepStatus.SUCCESS, Map.of("patchId", patch.getId()), safetyReport);
@@ -514,13 +514,13 @@ public class AgentTaskService {
                     AgentStepStatus.FAILED,
                     Map.of("patchId", patch.getId(), "patchPath", workspace.patchPath().toString()),
                     SandboxCommandOutput.from(applyResult),
-                    "Patch application failed in sandbox"
+                    "补丁在沙箱中应用失败"
             );
             task.setStatus(AgentTaskStatus.FAILED_PATCH_GENERATION);
-            run.markFailed("Patch application failed in sandbox");
+            run.markFailed("补丁在沙箱中应用失败");
             saveTaskProgress(task, run);
             saveRunProgress(task, run);
-            completeTaskStream(task, run, "Agent run failed while applying patch");
+            completeTaskStream(task, run, "Agent 运行在应用补丁时失败");
             return new PatchValidation(null, true, false);
         }
         patch.markApplied();
@@ -555,7 +555,7 @@ public class AgentTaskService {
                     AgentStepStatus.FAILED,
                     Map.of("patchId", patch.getId(), "command", "mvn -q test"),
                     TestRunOutput.from(testRun),
-                    "Maven tests failed in sandbox"
+                    "沙箱 Maven 测试失败"
             );
             return new PatchValidation(testRun, false, false);
         }
@@ -576,11 +576,11 @@ public class AgentTaskService {
         AgentTask savedTask = agentTaskRepository.save(task);
         AgentRun run = savedTask.getCurrentRun();
         if (run != null && run.getStatus() == AgentRunStatus.RUNNING) {
-            run.markCancelled("Task cancelled by user");
+            run.markCancelled("用户已取消任务");
             agentRunRepository.save(run);
         }
         taskStreamService.publishTaskUpdated(savedTask, run);
-        completeTaskStream(savedTask, run, "Task cancelled");
+        completeTaskStream(savedTask, run, "任务已取消");
         return savedTask;
     }
 
@@ -682,16 +682,16 @@ public class AgentTaskService {
         for (int index = 0; index < planSteps.size() && index < 5; index++) {
             JsonNode planStep = planSteps.get(index);
             int order = intValue(planStep, "order", index + 1);
-            String title = text(planStep, "title", "Plan step");
+            String title = text(planStep, "title", "计划步骤");
             String reason = text(planStep, "reason", "");
             highlights.add(reason.isBlank() ? order + ". " + title : order + ". " + title + " - " + reason);
         }
         sections.add(section(
                 "planner",
-                "Planner task plan",
+                "任务规划",
                 step,
-                text(output, "summary", "Planner produced an implementation plan."),
-                queries.isEmpty() ? List.of() : List.of("Search queries: " + summarizeList(queries, 4)),
+                text(output, "summary", "Planner 已生成实现计划。"),
+                queries.isEmpty() ? List.of() : List.of("检索词：" + summarizeList(queries, 4)),
                 highlights
         ));
     }
@@ -704,8 +704,8 @@ public class AgentTaskService {
         List<JsonNode> results = array(output, "results");
         List<String> queries = stringArray(output, "queries");
         List<String> facts = new ArrayList<>();
-        facts.add("Unique chunks: " + results.size());
-        facts.add("Queries: " + queries.size());
+        facts.add("去重代码片段：" + results.size());
+        facts.add("检索词数量：" + queries.size());
         facts.addAll(resultCountFacts(output).stream().limit(4).toList());
         List<String> highlights = results.stream()
                 .limit(5)
@@ -721,9 +721,9 @@ public class AgentTaskService {
                 .toList();
         sections.add(section(
                 "retrieval",
-                "Retrieved code context",
+                "检索到的代码上下文",
                 step,
-                "Matched " + results.size() + " unique code chunks across " + queries.size() + " queries.",
+                "通过 " + queries.size() + " 个检索词命中 " + results.size() + " 个去重代码片段。",
                 facts,
                 highlights
         ));
@@ -735,7 +735,7 @@ public class AgentTaskService {
         }
         JsonNode output = jsonNode(step.getOutputJson());
         List<String> facts = compactList(
-                longText(output, "patchId", "Patch #"),
+                longText(output, "patchId", "补丁 #"),
                 text(output, "status", null),
                 text(output, "generationMode", null),
                 branchPair(output)
@@ -743,11 +743,11 @@ public class AgentTaskService {
         String generationMode = text(output, "generationMode", "");
         sections.add(section(
                 "patch",
-                "Generated patch artifact",
+                "生成的补丁产物",
                 step,
-                text(output, "summary", "Coder generated a patch artifact."),
+                text(output, "summary", "Coder 已生成补丁产物。"),
                 facts,
-                generationMode.isBlank() ? List.of() : List.of("Generation mode: " + generationMode)
+                generationMode.isBlank() ? List.of() : List.of("生成模式：" + generationMode)
         ));
     }
 
@@ -759,9 +759,9 @@ public class AgentTaskService {
         String safe = output.has("safe") && output.path("safe").isBoolean() ? String.valueOf(output.path("safe").asBoolean()) : null;
         sections.add(section(
                 "safety",
-                "Patch safety gate",
+                "补丁安全门",
                 step,
-                safe == null ? "Patch safety validation completed." : "Patch safety validation marked the diff safe=" + safe + ".",
+                safe == null ? "补丁安全预检已完成。" : "补丁安全预检判定 diff 为" + ("true".equals(safe) ? "安全" : "不安全") + "。",
                 safe == null ? List.of() : List.of("safe=" + safe),
                 stringArray(output, "reasons").stream().limit(4).toList()
         ));
@@ -774,14 +774,14 @@ public class AgentTaskService {
         JsonNode output = jsonNode(step.getOutputJson());
         sections.add(section(
                 "tests",
-                "Sandbox test result",
+                "沙箱测试结果",
                 step,
-                text(output, "logExcerpt", "Sandbox test execution completed."),
+                text(output, "logExcerpt", "沙箱测试执行已完成。"),
                 compactList(
                         text(output, "command", null),
                         text(output, "status", null),
                         output.has("durationMs") && output.path("durationMs").isNumber() ? output.path("durationMs").asInt() + " ms" : null,
-                        output.has("exitCode") && output.path("exitCode").isNumber() ? "exit " + output.path("exitCode").asInt() : null
+                        output.has("exitCode") && output.path("exitCode").isNumber() ? "退出码 " + output.path("exitCode").asInt() : null
                 ),
                 List.of()
         ));
@@ -794,7 +794,7 @@ public class AgentTaskService {
         JsonNode output = jsonNode(step.getOutputJson());
         List<JsonNode> findings = array(output, "findings");
         List<String> highlights = findings.isEmpty()
-                ? List.of("No automated review findings.")
+                ? List.of("没有自动审查发现。")
                 : findings.stream()
                 .limit(5)
                 .map(finding -> String.join(" - ", compactList(
@@ -805,9 +805,9 @@ public class AgentTaskService {
                 .toList();
         sections.add(section(
                 "review",
-                "Automated patch review",
+                "自动补丁审查",
                 step,
-                text(output, "summary", "Automated patch review completed."),
+                text(output, "summary", "自动补丁审查已完成。"),
                 compactList(text(output, "riskLevel", null)),
                 highlights
         ));
@@ -820,10 +820,10 @@ public class AgentTaskService {
         JsonNode input = jsonNode(step.getInputJson());
         sections.add(section(
                 "approval",
-                "Human approval checkpoint",
+                "人工审批检查点",
                 step,
-                "The run stopped before PR creation so a human can review and approve the patch.",
-                compactList(longText(input, "patchId", "Patch #"), text(input, "status", null)),
+                "本次运行已在创建 PR 前暂停，等待人工审查并审批补丁。",
+                compactList(longText(input, "patchId", "补丁 #"), text(input, "status", null)),
                 List.of()
         ));
     }
@@ -932,7 +932,7 @@ public class AgentTaskService {
 
     private String summarizeList(List<String> values, int maxItems) {
         List<String> visible = values.stream().limit(maxItems).toList();
-        String suffix = values.size() > maxItems ? " +" + (values.size() - maxItems) + " more" : "";
+        String suffix = values.size() > maxItems ? "，另 " + (values.size() - maxItems) + " 个" : "";
         return String.join(", ", visible) + suffix;
     }
 
@@ -965,15 +965,15 @@ public class AgentTaskService {
             List<AgentRunReportSectionResponse> sections
     ) {
         StringBuilder markdown = new StringBuilder();
-        markdown.append("# RepoPilot Agent Run Report\n\n");
-        markdown.append("- Task: #").append(task.getId()).append(" ").append(task.getTitle()).append("\n");
-        markdown.append("- Project: ").append(task.getProject().getRepoFullName()).append("\n");
-        markdown.append("- Task type: ").append(task.getTaskType()).append("\n");
-        markdown.append("- Task status: ").append(task.getStatus()).append("\n");
-        markdown.append("- Run: #").append(run.getId()).append(" ").append(run.getStatus()).append("\n");
-        markdown.append("- Started: ").append(run.getStartedAt()).append("\n");
-        markdown.append("- Finished: ").append(run.getFinishedAt() == null ? "Not finished" : run.getFinishedAt()).append("\n");
-        markdown.append("- Generated: ").append(generatedAt).append("\n\n");
+        markdown.append("# RepoPilot Agent 运行报告\n\n");
+        markdown.append("- 任务：#").append(task.getId()).append(" ").append(task.getTitle()).append("\n");
+        markdown.append("- 项目：").append(task.getProject().getRepoFullName()).append("\n");
+        markdown.append("- 任务类型：").append(task.getTaskType()).append("\n");
+        markdown.append("- 任务状态：").append(task.getStatus()).append("\n");
+        markdown.append("- 运行：#").append(run.getId()).append(" ").append(run.getStatus()).append("\n");
+        markdown.append("- 开始时间：").append(run.getStartedAt()).append("\n");
+        markdown.append("- 完成时间：").append(run.getFinishedAt() == null ? "未完成" : run.getFinishedAt()).append("\n");
+        markdown.append("- 报告生成时间：").append(generatedAt).append("\n\n");
         for (AgentRunReportSectionResponse section : sections) {
             markdown.append("## ").append(section.title()).append("\n\n");
             markdown.append("_").append(section.stepName()).append(" / ").append(section.status());
@@ -982,8 +982,8 @@ public class AgentTaskService {
             }
             markdown.append("_\n\n");
             markdown.append(section.summary()).append("\n\n");
-            appendMarkdownList(markdown, "Facts", section.facts());
-            appendMarkdownList(markdown, "Highlights", section.highlights());
+            appendMarkdownList(markdown, "事实", section.facts());
+            appendMarkdownList(markdown, "重点", section.highlights());
         }
         return markdown.toString();
     }
@@ -1008,10 +1008,10 @@ public class AgentTaskService {
             return false;
         }
         task.setStatus(AgentTaskStatus.CANCELLED);
-        run.markCancelled("Agent run cancelled");
+        run.markCancelled("Agent 运行已取消");
         saveTaskProgress(task, run);
         saveRunProgress(task, run);
-        completeTaskStream(task, run, "Agent run cancelled");
+        completeTaskStream(task, run, "Agent 运行已取消");
         return true;
     }
 
@@ -1057,17 +1057,17 @@ public class AgentTaskService {
     private PlanOutput plan(AgentTask task) {
         List<String> queries = candidateQueries(task);
         List<PlanStep> steps = List.of(
-                new PlanStep(1, "Load task and project context", "Bind the run to project " + task.getProject().getId()),
-                new PlanStep(2, "Retrieve repository context", "Search indexed code chunks using " + queries),
-                new PlanStep(3, "Generate a Spring-aware unified diff", "Evaluate supported Spring Coder recipes before falling back to a retrieval-grounded safe Coder plan"),
-                new PlanStep(4, "Validate patch safety", "Reject unsafe diff paths before sandbox application"),
-                new PlanStep(5, "Run Maven validation", "Apply the diff in a Docker sandbox and execute mvn test")
+                new PlanStep(1, "加载任务和项目上下文", "将本次运行绑定到项目 #" + task.getProject().getId()),
+                new PlanStep(2, "检索仓库上下文", "使用 " + queries + " 检索已索引代码片段"),
+                new PlanStep(3, "生成 Spring 感知的 unified diff", "优先评估内置 Spring Coder recipe，再回退到基于检索上下文的安全 Coder 计划"),
+                new PlanStep(4, "校验补丁安全性", "沙箱应用前拒绝不安全 diff 路径"),
+                new PlanStep(5, "运行 Maven 验证", "在 Docker 沙箱应用 diff 并执行 mvn test")
         );
         return new PlanOutput(
-                "Prepare implementation context for: " + task.getTitle(),
+                "为任务准备实现上下文：" + task.getTitle(),
                 steps,
                 queries,
-                "Use retrieved Controller/Service/Mapper/Entity chunks before generating any patch."
+                "生成补丁前优先使用检索到的 Controller/Service/Mapper/Entity 代码片段。"
         );
     }
 

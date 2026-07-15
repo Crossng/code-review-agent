@@ -390,7 +390,7 @@ try {
   await taskDetail.getByRole("heading", { name: /#\d+ Add User pagination API/ }).waitFor();
 
   await clickAndWaitForIdle(page, taskDetail.getByRole("button", { name: "运行任务" }));
-  await taskDetail.getByText(/Connecting stream|Live stream/).first().waitFor({ timeout: 15000 });
+  await taskDetail.getByText(/正在连接实时流|实时流/).first().waitFor({ timeout: 15000 });
   await waitForBadge(taskDetail, "WAITING_HUMAN_APPROVAL");
   await expectDashboardMetric(page, overview, "待审批", "1");
   await expectDashboardMetric(page, runMetrics, "运行次数", "1");
@@ -457,9 +457,9 @@ try {
   await taskDetail.getByText("已复制当前运行报告").waitFor();
   await page.waitForFunction(() =>
     navigator.clipboard.readText().then((text) =>
-      text.includes("# RepoPilot Agent Run Report")
-        && text.includes("## Planner task plan")
-        && text.includes("## Retrieved code context")
+      text.includes("# RepoPilot Agent 运行报告")
+        && text.includes("## 任务规划")
+        && text.includes("## 检索到的代码上下文")
         && text.includes("SPRING_USER_PAGINATION_RECIPE")
     ).catch(() => false)
   );
@@ -477,9 +477,9 @@ try {
   }
   const downloadedRunReport = await readFile(runReportPath, "utf8");
   if (
-    !downloadedRunReport.includes("# RepoPilot Agent Run Report")
-    || !downloadedRunReport.includes("## Sandbox test result")
-    || !downloadedRunReport.includes("## Automated patch review")
+    !downloadedRunReport.includes("# RepoPilot Agent 运行报告")
+    || !downloadedRunReport.includes("## 沙箱测试结果")
+    || !downloadedRunReport.includes("## 自动补丁审查")
   ) {
     throw new Error("Downloaded Agent run report did not include the expected Markdown sections.");
   }
@@ -497,9 +497,9 @@ try {
   await taskDetail.getByText(`已复制快照 #${runReportSnapshotId}`).waitFor();
   await page.waitForFunction(() =>
     navigator.clipboard.readText().then((text) =>
-      text.includes("# RepoPilot Agent Run Report")
-        && text.includes("## Planner task plan")
-        && text.includes("## Automated patch review")
+      text.includes("# RepoPilot Agent 运行报告")
+        && text.includes("## 任务规划")
+        && text.includes("## 自动补丁审查")
     ).catch(() => false)
   );
   const snapshotReportDownloadResponse = waitForAgentRunReportSnapshotDetail(page, runReportSnapshotId);
@@ -518,15 +518,15 @@ try {
   }
   const downloadedRunReportSnapshot = await readFile(snapshotReportPath, "utf8");
   if (
-    !downloadedRunReportSnapshot.includes("# RepoPilot Agent Run Report")
-    || !downloadedRunReportSnapshot.includes("## Sandbox test result")
+    !downloadedRunReportSnapshot.includes("# RepoPilot Agent 运行报告")
+    || !downloadedRunReportSnapshot.includes("## 沙箱测试结果")
     || !downloadedRunReportSnapshot.includes("SPRING_USER_PAGINATION_RECIPE")
   ) {
     throw new Error("Downloaded Agent run report snapshot did not include the expected Markdown content.");
   }
   await taskDetail.getByText("工具调用审计").waitFor();
   await taskDetail.getByText("模型调用审计").waitFor();
-  await taskDetail.getByText("Adds GET /api/users/page").first().waitFor();
+  await taskDetail.getByText("新增 GET /api/users/page").first().waitFor();
   await taskDetail.getByText("SPRING_USER_PAGINATION_RECIPE").first().waitFor();
   await taskDetail.getByText("Maven 测试运行").waitFor();
   await taskDetail.getByText("PASSED").first().waitFor();
@@ -555,7 +555,7 @@ try {
   await waitForMetaValueChange(page, taskSummary, "运行", firstRunId);
   await waitForMetaValueChange(page, patchPanel, "补丁", firstPatchId);
   await waitForMetaValueChange(page, testPanel, "测试运行", firstTestRunId);
-  await taskDetail.getByText("Adds GET /api/users/page").first().waitFor();
+  await taskDetail.getByText("新增 GET /api/users/page").first().waitFor();
   await taskDetail.getByText("PASSED").first().waitFor();
   const automatedReview = patchPanel.getByLabel("自动审查");
   await automatedReview.getByText("NEW_CONTROLLER_ENDPOINT_WITHOUT_AUTH").waitFor();
@@ -589,7 +589,7 @@ try {
 
   await clickAndWaitForIdle(page, taskDetail.getByRole("button", { name: "运行任务" }));
   await waitForBadge(taskDetail, "WAITING_HUMAN_APPROVAL");
-  await taskDetail.getByText("Adds User id validation guard with unit tests.").first().waitFor();
+  await taskDetail.getByText("新增 User id 参数校验保护").first().waitFor();
   await taskDetail.getByText("User id must be positive").first().waitFor();
   await taskDetail.getByText("getUserRejectsNonPositiveId").first().waitFor();
   await taskDetail.getByText("PASSED").first().waitFor();
@@ -611,7 +611,7 @@ try {
 
   await clickAndWaitForIdle(page, taskDetail.getByRole("button", { name: "运行任务" }));
   await waitForBadge(taskDetail, "WAITING_HUMAN_APPROVAL");
-  await taskDetail.getByText("Adds GET /api/users/count").first().waitFor();
+  await taskDetail.getByText("新增 GET /api/users/count").first().waitFor();
   await taskDetail.getByText("SPRING_USER_COUNT_RECIPE").first().waitFor();
   await taskDetail.getByText("countUsersReturnsTotalNumberOfUsers").first().waitFor();
   await taskDetail.getByText("PASSED").first().waitFor();
@@ -632,7 +632,7 @@ try {
 
   await clickAndWaitForIdle(page, taskDetail.getByRole("button", { name: "运行任务" }));
   await waitForBadge(taskDetail, "WAITING_HUMAN_APPROVAL");
-  await taskDetail.getByText("Adds POST /api/users").first().waitFor();
+  await taskDetail.getByText("新增 POST /api/users").first().waitFor();
   await taskDetail.getByText("SPRING_USER_CREATE_RECIPE").first().waitFor();
   await taskDetail.getByText("CreateUserRequest").first().waitFor();
   await taskDetail.getByText("createUserReturnsCreatedUser").first().waitFor();

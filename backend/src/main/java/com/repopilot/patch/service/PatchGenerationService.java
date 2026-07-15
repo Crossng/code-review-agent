@@ -102,7 +102,7 @@ public class PatchGenerationService {
                 task.getProject().getDefaultBranch(),
                 "repopilot/task-" + task.getId(),
                 parsedPatch.diffContent(),
-                "LLM Coder draft: parsed unified diff for task #" + task.getId(),
+                "LLM Coder 草稿：已解析任务 #" + task.getId() + " 的 unified diff。",
                 MODE_LLM_CODER_DRAFT
         ));
     }
@@ -117,7 +117,7 @@ public class PatchGenerationService {
         String filePath = ".repopilot/task-" + task.getId() + "-plan.md";
         List<String> lines = planLines(task, run, retrievedResults);
         String diff = newFileDiff(filePath, lines);
-        String summary = "Safe retrieval-grounded Coder plan: adds RepoPilot planning notes for task #" + task.getId();
+        String summary = "安全规划回退：为任务 #" + task.getId() + " 生成基于检索上下文的 RepoPilot 实施计划。";
         return patchRecordRepository.save(new PatchRecord(
                 task,
                 run,
@@ -189,7 +189,7 @@ public class PatchGenerationService {
         diff.append(newFileDiff(testPath, lines(USER_SERVICE_TEST)));
         return Optional.of(new GeneratedPatch(
                 diff.toString(),
-                "Adds GET /api/users/page with service/mapper pagination and unit tests.",
+                "新增 GET /api/users/page，并补齐 Service/Mapper 分页逻辑和单元测试。",
                 MODE_SPRING_USER_PAGINATION_RECIPE
         ));
     }
@@ -237,7 +237,7 @@ public class PatchGenerationService {
         }
         return Optional.of(new GeneratedPatch(
                 diff.toString(),
-                "Adds User id validation guard with unit tests.",
+                "新增 User id 参数校验保护，并补齐单元测试。",
                 MODE_SPRING_USER_ID_VALIDATION_RECIPE
         ));
     }
@@ -301,7 +301,7 @@ public class PatchGenerationService {
         }
         return Optional.of(new GeneratedPatch(
                 diff.toString(),
-                "Adds GET /api/users/count with service/mapper count logic and unit tests.",
+                "新增 GET /api/users/count，并补齐 Service/Mapper 计数逻辑和单元测试。",
                 MODE_SPRING_USER_COUNT_RECIPE
         ));
     }
@@ -370,7 +370,7 @@ public class PatchGenerationService {
         }
         return Optional.of(new GeneratedPatch(
                 diff.toString(),
-                "Adds POST /api/users with create request DTO, service/mapper creation logic, and unit tests.",
+                "新增 POST /api/users、创建请求 DTO、Service/Mapper 创建逻辑和单元测试。",
                 MODE_SPRING_USER_CREATE_RECIPE
         ));
     }
@@ -903,29 +903,29 @@ public class PatchGenerationService {
 
     private List<String> planLines(AgentTask task, AgentRun run, List<CodeSearchResultResponse> retrievedResults) {
         List<String> lines = new java.util.ArrayList<>();
-        lines.add("# RepoPilot Task " + task.getId() + " Coder Plan");
+        lines.add("# RepoPilot 任务 " + task.getId() + " Coder 实施计划");
         lines.add("");
-        lines.add("- Run: " + run.getId());
-        lines.add("- Type: " + task.getTaskType());
-        lines.add("- Title: " + task.getTitle());
-        lines.add("- Project: " + task.getProject().getRepoFullName());
-        lines.add("- Generation mode: `" + MODE_SAFE_PLANNING_FALLBACK + "`");
-        lines.add("- Retrieved chunks: " + retrievedResults.size());
+        lines.add("- 运行：" + run.getId());
+        lines.add("- 类型：" + task.getTaskType());
+        lines.add("- 标题：" + task.getTitle());
+        lines.add("- 项目：" + task.getProject().getRepoFullName());
+        lines.add("- 生成模式：`" + MODE_SAFE_PLANNING_FALLBACK + "`");
+        lines.add("- 检索片段数：" + retrievedResults.size());
         lines.add("");
-        lines.add("## Request");
+        lines.add("## 需求");
         lines.add("");
         lines.add(task.getDescription() == null ? "" : task.getDescription());
         lines.add("");
-        lines.add("## Why No Code Was Changed");
+        lines.add("## 为什么没有直接改代码");
         lines.add("");
-        lines.add("No supported Spring Coder recipe matched this task, so RepoPilot generated a retrieval-grounded plan instead of editing source files. This keeps the run reviewable while preserving the context needed by a future LLM-backed CoderAgent.");
+        lines.add("当前任务没有命中已内置的 Spring Coder recipe，因此 RepoPilot 先生成基于检索上下文的实施计划，而不是直接编辑源码。这样可以保留可审查的运行结果，也为后续 LLM CoderAgent 接手提供足够上下文。");
         lines.add("");
-        lines.add("## Candidate Files From Retrieval");
+        lines.add("## 检索得到的候选文件");
         lines.add("");
         if (retrievedResults.isEmpty()) {
-            lines.add("- No indexed chunks were retrieved.");
+            lines.add("- 没有检索到已索引代码片段。");
         } else {
-            lines.add("| File | Chunk | Symbol | Lines | Context |");
+            lines.add("| 文件 | 片段 | 符号 | 行号 | 上下文 |");
             lines.add("| --- | --- | --- | --- | --- |");
             for (CodeSearchResultResponse result : retrievedResults.stream().limit(FALLBACK_CONTEXT_LIMIT).toList()) {
                 lines.add("| `" + markdownCell(result.filePath()) + "` | "
@@ -936,33 +936,33 @@ public class PatchGenerationService {
             }
         }
         lines.add("");
-        lines.add("## Suggested Edit Sequence");
+        lines.add("## 建议编辑顺序");
         lines.add("");
         if (retrievedResults.isEmpty()) {
-            lines.add("1. Re-run indexing or refine the task title/description so RetrieverAgent can find the target Controller, Service, Mapper, Entity, or test files.");
+            lines.add("1. 重新索引或细化任务标题/描述，让 RetrieverAgent 能找到目标 Controller、Service、Mapper、Entity 或测试文件。");
         } else {
             int order = 1;
             for (CodeSearchResultResponse result : retrievedResults.stream().limit(5).toList()) {
-                lines.add(order + ". Inspect `" + result.filePath() + "`"
+                lines.add(order + ". 先检查 `" + result.filePath() + "`"
                         + suggestedContextSuffix(result)
-                        + " before drafting code changes.");
+                        + "，再起草代码变更。");
                 order++;
             }
-            lines.add(order + ". Draft the smallest unified diff that satisfies the request and updates or adds focused tests.");
+            lines.add(order + ". 起草满足需求的最小 unified diff，并同步新增或更新聚焦测试。");
         }
         lines.add("");
-        lines.add("## Guardrails For The Next Coder Pass");
+        lines.add("## 下一轮 Coder 的护栏");
         lines.add("");
-        lines.add("- Prefer existing Controller, Service, Mapper, Entity, and test patterns from the retrieved files.");
-        lines.add("- Keep edits scoped to the requested behavior and avoid unrelated refactors.");
-        lines.add("- Add or update tests for the changed behavior before asking SandboxAgent to run Maven.");
-        lines.add("- If the task requires a new endpoint, review authentication, validation, and request/response DTO risks.");
+        lines.add("- 优先沿用检索文件中的 Controller、Service、Mapper、Entity 和测试写法。");
+        lines.add("- 变更范围限定在用户请求的行为内，避免顺手重构。");
+        lines.add("- 请求 SandboxAgent 运行 Maven 前，先为变更行为新增或更新测试。");
+        lines.add("- 如果任务需要新增接口，复核鉴权、参数校验、request/response DTO 风险。");
         lines.add("");
-        lines.add("## Required Validation");
+        lines.add("## 必需验证");
         lines.add("");
-        lines.add("- Apply the generated diff in the sandbox.");
-        lines.add("- Run `mvn -q test`.");
-        lines.add("- Run PatchRiskReview before human approval.");
+        lines.add("- 在沙箱应用生成的 diff。");
+        lines.add("- 运行 `mvn -q test`。");
+        lines.add("- 人工审批前运行 PatchRiskReview。");
         return lines;
     }
 
@@ -1004,12 +1004,12 @@ public class PatchGenerationService {
             return "";
         }
         if ("file".equals(symbol)) {
-            return " around lines " + lineSpan;
+            return " 的 " + lineSpan + " 行附近";
         }
         if ("-".equals(lineSpan)) {
-            return " for `" + symbol + "`";
+            return " 中的 `" + symbol + "`";
         }
-        return " for `" + symbol + "` around lines " + lineSpan;
+        return " 中的 `" + symbol + "`，位置在 " + lineSpan + " 行附近";
     }
 
     private String markdownCell(String value) {
