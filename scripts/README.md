@@ -2,6 +2,20 @@
 
 后续放本地开发、索引、演示、清理脚本。MVP 阶段优先保持脚本短小、可读、可重复执行。
 
+## Agent Worker Smoke
+
+```bash
+./scripts/agent-worker-smoke.sh
+```
+
+该脚本用于验证 Python Agent Worker 的最小服务契约。它会：
+
+- 检查 `fastapi`、`uvicorn`、`pydantic` 和 `pydantic_settings` 依赖是否可导入。
+- 若 `REPOPILOT_AGENT_WORKER_URL` 已有 worker，则复用；否则临时启动 `agent-worker/app/main.py`。
+- 验证 `GET /health` 返回 `status=UP` 和 `service=agent-worker`。
+- 验证 `POST /runs/303/start` 返回 `accepted=true`、`status=QUEUED` 和 MVP graph node 清单。
+- 将证据写入 `output/agent-worker-smoke/last-run.json`。
+
 ## Real Token Demo Check
 
 ```bash

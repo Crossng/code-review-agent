@@ -59,6 +59,8 @@ stateDiagram-v2
 | `wait_approval` | 暂停等待人工审批 | Backend API |
 | `create_pr` | 创建 PR | `create_branch`, `commit_changes`, `create_pull_request` |
 
+Python Agent Worker 当前提供最小服务契约：`GET /health` 返回 worker 健康状态，`POST /runs/{runId}/start` 接收 run 启动请求并返回 MVP graph node 清单。`./scripts/agent-worker-smoke.sh` 会启动或复用 worker，验证该契约并把证据写入 `output/agent-worker-smoke/last-run.json`。当前主执行链路仍由 Spring Boot 后台 executor 承担；后续再把节点执行逐步迁移到 LangGraph worker，并通过 Backend API 回写 step、tool call、model call 和 task 状态。
+
 ## 5. AgentRunState
 
 ```json

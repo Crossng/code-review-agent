@@ -47,6 +47,7 @@
 | AC-011h3 | 真实 token 演示检查可运行 | `./scripts/real-token-demo-check.sh` 默认只读检查项目文件、本机命令、Docker/Compose、沙箱镜像、Maven cache、后端/前端端口、真实 Coder 和远端 GitHub PR 环境变量，缺少真实 token 时只提示不失败；`--strict` 模式在 Docker、真实 Coder 或远端 PR 缺项时返回非 0；`--start-deps` 可先启动 PostgreSQL/Redis；脚本只展示 key/token 是否配置，不打印 GitHub token、模型 key 或 Authorization header |
 | AC-011h4 | 真实 Coder API 演示可运行 | `./scripts/real-coder-demo.sh` 在真实 `OPENAI_COMPATIBLE` Coder 配置 ready 时创建临时用户、本地 demo 项目和一个不会命中本地 recipe 的小任务，运行 Agent 到 `WAITING_HUMAN_APPROVAL`，验证 `generationMode=LLM_CODER_DRAFT`、`generationProvider=OPENAI_COMPATIBLE`、成功的 `generate_patch` model call、`validate_patch_safety`、沙箱 `mvn -q test`、`review_patch` 和预期新增 `.repopilot/real-coder-demo-note.md`；无真实 Coder 配置且后端未运行时脚本返回非 0 并提示缺少环境变量；脚本输出和证据文件不包含模型 key、GitHub token 或 Authorization header，并清理临时业务数据 |
 | AC-011h5 | 真实 GitHub PR 演示可运行 | `./scripts/real-github-pr-demo.sh` 必须显式设置 `REPOPILOT_REAL_GITHUB_PR_CONFIRM=create-pr`、`REPOPILOT_REAL_GITHUB_PR_REPO_URL`、`REPOPILOT_GITHUB_ENABLED=true` 和 GitHub token 才会执行；配置就绪时脚本创建临时用户、指定 GitHub demo 项目和 User count API 任务，验证 recipe patch、沙箱测试、自动审查、人工审批、PR preflight，随后真实 push `repopilot/task-{taskId}` 分支并创建 `OPEN` PR；无确认/仓库/token 时脚本返回非 0 并说明缺项；脚本输出和证据文件不包含 GitHub token、模型 key 或 Authorization header，并清理 RepoPilot 本地临时业务数据；远端 PR 和远端分支由演示者保留或手动清理 |
+| AC-011h6 | Agent Worker 契约可验证 | `./scripts/agent-worker-smoke.sh` 可启动或复用 Python Agent Worker，验证 `GET /health` 返回 `status=UP` 和 `service=agent-worker`，验证 `POST /runs/303/start` 返回 `accepted=true`、`status=QUEUED` 和 MVP graph node 清单，并将证据写入 `output/agent-worker-smoke/last-run.json`；当前主执行链路仍由 Spring Boot executor 承担，后续再迁移到 LangGraph worker |
 | AC-011i | 工作台概览指标可见 | `GET /api/dashboard/summary` 需要鉴权，只统计当前用户项目、任务和 PR 记录；返回项目总数/READY/FAILED，任务总数/CREATED/运行中/待审批/DONE/失败/CANCELLED，PR 总数/`DRAFT_READY`/`OPEN`/`FAILED`；控制台展示 `DashboardSummaryPanel`，登录后显示空工作区指标，项目索引完成后更新项目 ready 计数，任务到达人工审批点后更新 waiting approval 计数 |
 | AC-011j | Agent 运行表现指标可见 | `GET /api/dashboard/run-metrics` 需要鉴权，只统计当前用户最近 1-30 天 `agent_run`；默认 7 天窗口返回 run 总数、成功/失败/取消/运行中数量、完成 run 数、平均耗时、成功率和每日趋势；控制台展示 `DashboardRunMetricsPanel`，登录后显示 0 runs，首个任务到达人工审批点后显示 runs=1、success rate=100% |
 | AC-011k | 跨项目活动流可见 | `GET /api/dashboard/activity` 需要鉴权，只统计当前用户任务下最近 `agent_step`，按完成/开始时间倒序返回，支持 `limit` 且不返回 step input/output JSON；控制台展示 `DashboardActivityPanel`，登录后显示无活动，首个任务到达人工审批点后显示 `waiting_human_approval` 活动 |
@@ -59,33 +60,34 @@
 | AC-011r | Agent 运行指标窗口可切换 | `DashboardRunMetricsPanel` 提供 7/14/30 天窗口选择；切换到 14 天时前端请求 `GET /api/dashboard/run-metrics?days=14` 并更新面板为 `Last 14 days`；URL 写入 `runMetricsDays=14`，刷新后选择器和指标窗口恢复 |
 | AC-011s | 活动流数量窗口可切换 | `DashboardActivityPanel` 提供 10/25/50 条数量选择；切换到 25 条时前端请求 `GET /api/dashboard/activity?limit=25` 并更新面板为 `0 of latest 25 events` 或对应活动数量；URL 写入 `activityLimit=25`，刷新后选择器和活动窗口恢复 |
 | AC-011t | 工作台概览链接可复制 | `DashboardSummaryPanel` 提供 `Copy overview link`；点击后通过剪贴板写入当前控制台 URL，包含当前 `runMetricsDays`、`activityLimit` 和 `#overview` 锚点，并显示可访问的复制状态提示 |
-| AC-012 | 全链路可演示 | `./scripts/real-token-demo-check.sh` 可先完成演示环境体检；有真实模型 token 时，`./scripts/real-coder-demo.sh` 可验证真实 `OPENAI_COMPATIBLE` Coder 到沙箱测试和人工审批暂停点的 API 级链路；有 GitHub token 和可丢弃 demo 仓库时，`./scripts/real-github-pr-demo.sh` 可验证真实远端分支 push 和 GitHub PR 创建；`./scripts/browser-smoke.sh` 从登录后的工作台概览、Agent run performance 7/14/30 天窗口切换与 URL 恢复、Recent task activity 10/25/50 条数量切换与 URL 恢复、overview 链接复制、演示就绪总览、Coder、GitHub 发布与 Sandbox 配置脱敏状态开始，继续完成仓库接入、项目搜索/状态筛选、项目视图 URL 恢复、项目视图链接复制、Controller API 风险视图、Controller API Markdown 文档复制和 `.md` 下载、代码检索、任务搜索/状态筛选、任务视图 URL 恢复、任务视图链接复制、Agent evidence、run report 复制和 `.md` 下载、运行报告快照保存/复制/下载、真实分页 patch、`changedFiles` 摘要、`validate_patch_safety` 预检、自动风险审查、沙箱测试、Regenerate 新版本校验、PR preflight blocker/ready 状态、人工审批和本地 `DRAFT_READY` PR 准备记录；随后创建 User id 参数校验任务并验证真实 guard patch、测试覆盖和沙箱测试通过；再创建 User count API 任务并验证 `SPRING_USER_COUNT_RECIPE`、真实 count patch、`changedFiles` 和沙箱测试通过；最后创建 User create API 任务并验证 `SPRING_USER_CREATE_RECIPE`、真实 create patch、DTO 文件、`changedFiles` 和沙箱测试通过 |
+| AC-012 | 全链路可演示 | `./scripts/agent-worker-smoke.sh` 可先验证 Python Agent Worker 契约；`./scripts/real-token-demo-check.sh` 可完成演示环境体检；有真实模型 token 时，`./scripts/real-coder-demo.sh` 可验证真实 `OPENAI_COMPATIBLE` Coder 到沙箱测试和人工审批暂停点的 API 级链路；有 GitHub token 和可丢弃 demo 仓库时，`./scripts/real-github-pr-demo.sh` 可验证真实远端分支 push 和 GitHub PR 创建；`./scripts/browser-smoke.sh` 从登录后的工作台概览、Agent run performance 7/14/30 天窗口切换与 URL 恢复、Recent task activity 10/25/50 条数量切换与 URL 恢复、overview 链接复制、演示就绪总览、Coder、GitHub 发布与 Sandbox 配置脱敏状态开始，继续完成仓库接入、项目搜索/状态筛选、项目视图 URL 恢复、项目视图链接复制、Controller API 风险视图、Controller API Markdown 文档复制和 `.md` 下载、代码检索、任务搜索/状态筛选、任务视图 URL 恢复、任务视图链接复制、Agent evidence、run report 复制和 `.md` 下载、运行报告快照保存/复制/下载、真实分页 patch、`changedFiles` 摘要、`validate_patch_safety` 预检、自动风险审查、沙箱测试、Regenerate 新版本校验、PR preflight blocker/ready 状态、人工审批和本地 `DRAFT_READY` PR 准备记录；随后创建 User id 参数校验任务并验证真实 guard patch、测试覆盖和沙箱测试通过；再创建 User count API 任务并验证 `SPRING_USER_COUNT_RECIPE`、真实 count patch、`changedFiles` 和沙箱测试通过；最后创建 User create API 任务并验证 `SPRING_USER_CREATE_RECIPE`、真实 create patch、DTO 文件、`changedFiles` 和沙箱测试通过 |
 
 ## 3. Demo 验收脚本
 
-1. 运行 `./scripts/real-token-demo-check.sh` 检查本地闭环、真实模型和远端 GitHub PR 演示前置项；正式真实 token 演示前使用 `--strict`。
-2. 有真实模型 token 时，运行 `./scripts/real-coder-demo.sh` 展示真实 `OPENAI_COMPATIBLE` Coder 从模型调用到沙箱测试和人工审批暂停点的 API 级端到端链路。
-3. 有 GitHub token 和可丢弃 demo 仓库时，运行 `./scripts/real-github-pr-demo.sh` 展示真实远端分支 push 和 GitHub PR 创建。
-4. 启动 Docker Compose。
-5. 注册并登录。
-6. 查看工作台概览、Agent run performance、Recent task activity、Coder、GitHub 发布与 Sandbox 配置状态，确认空工作区计数、run 计数/成功率、空活动流、mode、provider、ready、model/key/token、Docker、Maven cache 和 workspace 配置状态可见且无密钥明文。
-7. 添加 Spring Boot 示例仓库。
-8. Clone 成功后，使用项目搜索和 `READY` 状态筛选仓库行，确认 URL 写入 `projectStatus`、`projectQuery` 和 `projectId`，刷新页面后恢复筛选和 Repository insight 项目选择，复制当前项目视图链接并确认剪贴板 URL 包含项目筛选和 `projectId`，然后重置项目筛选。
-9. 触发索引。
-10. 创建任务：“给 User 模块新增分页查询接口”。
-11. 使用任务搜索筛选分页任务，确认 URL 写入 `taskQuery` 和 `taskId`，刷新页面后恢复任务筛选和任务详情；任务到审批点后按 `WAITING_HUMAN_APPROVAL` 状态筛选，再次刷新确认 `taskStatus`、`taskQuery` 和任务详情恢复，复制当前任务视图链接并确认剪贴板 URL 包含任务筛选和 `taskId`，然后重置任务筛选。
-12. 观察 Agent 步骤、Agent evidence 和日志流，复制、下载并保存当前 run report Markdown，再从运行报告快照复制和下载历史报告。
-13. 查看相关代码检索结果。
-14. 查看新增 `GET /api/users/page`、Service/Mapper 分页逻辑和 `UserServiceTest` 的 diff。
-15. 查看 Maven 测试日志。
-16. 查看 PR preflight，确认未审批 blocker。
-17. 点击 Approve。
-18. 查看 PR preflight，确认本地 branch/commit 可准备且远程 GitHub 状态可解释。
-19. 准备 PR，展示本地 target branch、commit、标题和描述。
-20. 再创建任务：“修复 User id 参数校验 bug”，查看 guard、`UserServiceTest` 和 Maven 测试结果。
-21. 再创建任务：“新增 User count API”，查看 `GET /api/users/count`、`countUsers`、`countAll`、`UserServiceTest` 和 Maven 测试结果。
-22. 再创建任务：“新增 User create API”，查看 `POST /api/users`、`CreateUserRequest`、`createUser`、`save`、`UserServiceTest` 和 Maven 测试结果。
-23. 在启用 GitHub 发布的环境中创建 GitHub PR，并打开 PR 链接展示标题、描述和修改文件。
+1. 运行 `./scripts/agent-worker-smoke.sh` 验证 Python Agent Worker 契约。
+2. 运行 `./scripts/real-token-demo-check.sh` 检查本地闭环、真实模型和远端 GitHub PR 演示前置项；正式真实 token 演示前使用 `--strict`。
+3. 有真实模型 token 时，运行 `./scripts/real-coder-demo.sh` 展示真实 `OPENAI_COMPATIBLE` Coder 从模型调用到沙箱测试和人工审批暂停点的 API 级端到端链路。
+4. 有 GitHub token 和可丢弃 demo 仓库时，运行 `./scripts/real-github-pr-demo.sh` 展示真实远端分支 push 和 GitHub PR 创建。
+5. 启动 Docker Compose。
+6. 注册并登录。
+7. 查看工作台概览、Agent run performance、Recent task activity、Coder、GitHub 发布与 Sandbox 配置状态，确认空工作区计数、run 计数/成功率、空活动流、mode、provider、ready、model/key/token、Docker、Maven cache 和 workspace 配置状态可见且无密钥明文。
+8. 添加 Spring Boot 示例仓库。
+9. Clone 成功后，使用项目搜索和 `READY` 状态筛选仓库行，确认 URL 写入 `projectStatus`、`projectQuery` 和 `projectId`，刷新页面后恢复筛选和 Repository insight 项目选择，复制当前项目视图链接并确认剪贴板 URL 包含项目筛选和 `projectId`，然后重置项目筛选。
+10. 触发索引。
+11. 创建任务：“给 User 模块新增分页查询接口”。
+12. 使用任务搜索筛选分页任务，确认 URL 写入 `taskQuery` 和 `taskId`，刷新页面后恢复任务筛选和任务详情；任务到审批点后按 `WAITING_HUMAN_APPROVAL` 状态筛选，再次刷新确认 `taskStatus`、`taskQuery` 和任务详情恢复，复制当前任务视图链接并确认剪贴板 URL 包含任务筛选和 `taskId`，然后重置任务筛选。
+13. 观察 Agent 步骤、Agent evidence 和日志流，复制、下载并保存当前 run report Markdown，再从运行报告快照复制和下载历史报告。
+14. 查看相关代码检索结果。
+15. 查看新增 `GET /api/users/page`、Service/Mapper 分页逻辑和 `UserServiceTest` 的 diff。
+16. 查看 Maven 测试日志。
+17. 查看 PR preflight，确认未审批 blocker。
+18. 点击 Approve。
+19. 查看 PR preflight，确认本地 branch/commit 可准备且远程 GitHub 状态可解释。
+20. 准备 PR，展示本地 target branch、commit、标题和描述。
+21. 再创建任务：“修复 User id 参数校验 bug”，查看 guard、`UserServiceTest` 和 Maven 测试结果。
+22. 再创建任务：“新增 User count API”，查看 `GET /api/users/count`、`countUsers`、`countAll`、`UserServiceTest` 和 Maven 测试结果。
+23. 再创建任务：“新增 User create API”，查看 `POST /api/users`、`CreateUserRequest`、`createUser`、`save`、`UserServiceTest` 和 Maven 测试结果。
+24. 在启用 GitHub 发布的环境中创建 GitHub PR，并打开 PR 链接展示标题、描述和修改文件。
 
 ## 4. 风险验收
 
