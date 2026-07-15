@@ -33,7 +33,7 @@ try {
   await registerForm.getByLabel("Email").fill(email);
   await registerForm.getByLabel("Password").fill(password);
   await registerForm.getByRole("button", { name: "Register" }).click();
-  await page.getByRole("button", { name: "Sign out" }).waitFor();
+  await page.getByRole("button", { name: "退出登录" }).waitFor();
   const overview = page.locator(".dashboardSummaryPanel");
   await overview.getByText("Workspace overview").waitFor();
   await expectDashboardMetric(page, overview, "Projects", "0/0 ready");
@@ -389,7 +389,7 @@ try {
   const taskDetail = page.locator(".detailStack");
   await taskDetail.getByRole("heading", { name: /#\d+ Add User pagination API/ }).waitFor();
 
-  await clickAndWaitForIdle(page, taskDetail.getByRole("button", { name: "Run task" }));
+  await clickAndWaitForIdle(page, taskDetail.getByRole("button", { name: "运行任务" }));
   await taskDetail.getByText(/Connecting stream|Live stream/).first().waitFor({ timeout: 15000 });
   await waitForBadge(taskDetail, "WAITING_HUMAN_APPROVAL");
   await expectDashboardMetric(page, overview, "Waiting approval", "1");
@@ -446,13 +446,13 @@ try {
   await taskDetail.getByText("plan_task").first().waitFor();
   await taskDetail.getByText("generate_patch").first().waitFor();
   await taskDetail.getByText("waiting_human_approval").first().waitFor();
-  await taskDetail.getByText("Agent evidence").waitFor();
-  await taskDetail.getByText("Planner task plan").waitFor();
-  await taskDetail.getByText("Retrieved code context").waitFor();
-  await taskDetail.getByText("Generated patch artifact").waitFor();
-  await taskDetail.getByText("Sandbox test result").waitFor();
-  await taskDetail.getByText("Automated patch review").waitFor();
-  await taskDetail.getByText("Human approval checkpoint").waitFor();
+  await taskDetail.getByText("Agent 执行证据").waitFor();
+  await taskDetail.getByText("任务规划").waitFor();
+  await taskDetail.getByText("检索到的代码上下文").waitFor();
+  await taskDetail.getByText("生成的补丁产物").waitFor();
+  await taskDetail.getByText("沙箱测试结果").waitFor();
+  await taskDetail.getByText("自动补丁审查").waitFor();
+  await taskDetail.getByText("人工审批检查点").waitFor();
   await taskDetail.getByRole("button", { name: "复制当前报告" }).click();
   await taskDetail.getByText("已复制当前运行报告").waitFor();
   await page.waitForFunction(() =>
@@ -524,58 +524,58 @@ try {
   ) {
     throw new Error("Downloaded Agent run report snapshot did not include the expected Markdown content.");
   }
-  await taskDetail.getByText("Tool call audit").waitFor();
-  await taskDetail.getByText("Model call audit").waitFor();
+  await taskDetail.getByText("工具调用审计").waitFor();
+  await taskDetail.getByText("模型调用审计").waitFor();
   await taskDetail.getByText("Adds GET /api/users/page").first().waitFor();
   await taskDetail.getByText("SPRING_USER_PAGINATION_RECIPE").first().waitFor();
-  await taskDetail.getByText("Maven test run").waitFor();
+  await taskDetail.getByText("Maven 测试运行").waitFor();
   await taskDetail.getByText("PASSED").first().waitFor();
   await taskDetail.getByText("run_maven_test").first().waitFor();
   await taskDetail.getByText("validate_patch_safety").first().waitFor();
   await taskDetail.getByText("review_patch").first().waitFor();
   const prPanel = taskDetail.locator("#pr");
-  await prPanel.getByText("Publishing preflight").waitFor();
+  await prPanel.getByText("发布前置检查").waitFor();
   await prPanel.getByText("Approve the tested patch before preparing a pull request.").first().waitFor();
   await assertTaskStreamSnapshot(page);
-  await taskDetail.getByRole("button", { name: "Regenerate" }).waitFor();
+  await taskDetail.getByRole("button", { name: "重新生成" }).waitFor();
   await page.waitForFunction(() => {
     const buttons = Array.from(document.querySelectorAll("button"));
-    return buttons.some((button) => button.textContent?.trim() === "Regenerate" && !button.disabled);
+    return buttons.some((button) => button.textContent?.trim() === "重新生成" && !button.disabled);
   });
 
-  const taskSummary = taskDetail.locator("section.panel").filter({ hasText: "Task detail" }).first();
+  const taskSummary = taskDetail.locator("section.panel").filter({ hasText: "任务详情" }).first();
   const patchPanel = taskDetail.locator("#patch");
-  const testPanel = taskDetail.locator("section.panel").filter({ hasText: "Maven test run" }).first();
-  const firstRunId = await metaValue(taskSummary, "Run");
-  const firstPatchId = await metaValue(patchPanel, "Patch");
-  const firstTestRunId = await metaValue(testPanel, "Test run");
+  const testPanel = taskDetail.locator("section.panel").filter({ hasText: "Maven 测试运行" }).first();
+  const firstRunId = await metaValue(taskSummary, "运行");
+  const firstPatchId = await metaValue(patchPanel, "补丁");
+  const firstTestRunId = await metaValue(testPanel, "测试运行");
 
-  await clickAndWaitForIdle(page, taskDetail.getByRole("button", { name: "Regenerate" }));
+  await clickAndWaitForIdle(page, taskDetail.getByRole("button", { name: "重新生成" }));
   await waitForBadge(taskDetail, "WAITING_HUMAN_APPROVAL");
-  await waitForMetaValueChange(page, taskSummary, "Run", firstRunId);
-  await waitForMetaValueChange(page, patchPanel, "Patch", firstPatchId);
-  await waitForMetaValueChange(page, testPanel, "Test run", firstTestRunId);
+  await waitForMetaValueChange(page, taskSummary, "运行", firstRunId);
+  await waitForMetaValueChange(page, patchPanel, "补丁", firstPatchId);
+  await waitForMetaValueChange(page, testPanel, "测试运行", firstTestRunId);
   await taskDetail.getByText("Adds GET /api/users/page").first().waitFor();
   await taskDetail.getByText("PASSED").first().waitFor();
-  const automatedReview = patchPanel.getByLabel("Automated review");
+  const automatedReview = patchPanel.getByLabel("自动审查");
   await automatedReview.getByText("NEW_CONTROLLER_ENDPOINT_WITHOUT_AUTH").waitFor();
   await automatedReview.getByText("PAGINATION_BOUNDS_NORMALIZED").waitFor();
   await automatedReview.getByText("TEST_COVERAGE_PRESENT").waitFor();
-  const changedFilesSummary = patchPanel.getByLabel("Changed files");
+  const changedFilesSummary = patchPanel.getByLabel("变更文件");
   await changedFilesSummary.getByText("src/main/java/com/example/demo/user/UserController.java").waitFor();
   await changedFilesSummary.getByText("src/test/java/com/example/demo/user/UserServiceTest.java").waitFor();
   await changedFilesSummary.getByText("ADDED").waitFor();
   await assertLatestPaginationPatchChangedFiles(page);
 
-  await clickAndWaitForIdle(page, taskDetail.getByRole("button", { name: "Approve" }));
+  await clickAndWaitForIdle(page, taskDetail.getByRole("button", { name: "通过审批" }));
   await waitForBadge(taskDetail, "CREATING_PULL_REQUEST");
   await taskDetail.getByText("APPROVE").first().waitFor();
   await prPanel.getByText("Local branch and commit can be prepared.").waitFor();
   await prPanel.getByText("Remote GitHub publishing is disabled; RepoPilot will stop at DRAFT_READY.").waitFor();
-  await clickAndWaitForIdle(page, taskDetail.getByRole("button", { name: "Prepare PR" }));
+  await clickAndWaitForIdle(page, taskDetail.getByRole("button", { name: "准备 PR" }));
   await waitForBadge(taskDetail, "DRAFT_READY");
   await taskDetail.getByText("repopilot/task-").first().waitFor();
-  await taskDetail.getByText("Not opened").first().waitFor();
+  await taskDetail.getByText("未打开").first().waitFor();
   await taskDetail.getByText("Prepared by RepoPilot.").first().waitFor();
   await prPanel.getByText("Pull request record has already been prepared.").waitFor();
 
@@ -587,15 +587,15 @@ try {
   await page.locator(".taskListItem").filter({ hasText: "Fix User id validation bug" }).waitFor();
   await taskDetail.getByRole("heading", { name: /#\d+ Fix User id validation bug/ }).waitFor();
 
-  await clickAndWaitForIdle(page, taskDetail.getByRole("button", { name: "Run task" }));
+  await clickAndWaitForIdle(page, taskDetail.getByRole("button", { name: "运行任务" }));
   await waitForBadge(taskDetail, "WAITING_HUMAN_APPROVAL");
   await taskDetail.getByText("Adds User id validation guard with unit tests.").first().waitFor();
   await taskDetail.getByText("User id must be positive").first().waitFor();
   await taskDetail.getByText("getUserRejectsNonPositiveId").first().waitFor();
   await taskDetail.getByText("PASSED").first().waitFor();
-  const validationReview = patchPanel.getByLabel("Automated review");
+  const validationReview = patchPanel.getByLabel("自动审查");
   await validationReview.getByText("TEST_COVERAGE_PRESENT").waitFor();
-  const validationChangedFiles = patchPanel.getByLabel("Changed files");
+  const validationChangedFiles = patchPanel.getByLabel("变更文件");
   await validationChangedFiles.getByText("src/main/java/com/example/demo/user/UserService.java").waitFor();
   await validationChangedFiles.getByText("src/test/java/com/example/demo/user/UserServiceTest.java").waitFor();
   await validationChangedFiles.getByText("ADDED").waitFor();
@@ -609,13 +609,13 @@ try {
   await page.locator(".taskListItem").filter({ hasText: "Add User count API" }).waitFor();
   await taskDetail.getByRole("heading", { name: /#\d+ Add User count API/ }).waitFor();
 
-  await clickAndWaitForIdle(page, taskDetail.getByRole("button", { name: "Run task" }));
+  await clickAndWaitForIdle(page, taskDetail.getByRole("button", { name: "运行任务" }));
   await waitForBadge(taskDetail, "WAITING_HUMAN_APPROVAL");
   await taskDetail.getByText("Adds GET /api/users/count").first().waitFor();
   await taskDetail.getByText("SPRING_USER_COUNT_RECIPE").first().waitFor();
   await taskDetail.getByText("countUsersReturnsTotalNumberOfUsers").first().waitFor();
   await taskDetail.getByText("PASSED").first().waitFor();
-  const countChangedFiles = patchPanel.getByLabel("Changed files");
+  const countChangedFiles = patchPanel.getByLabel("变更文件");
   await countChangedFiles.getByText("src/main/java/com/example/demo/user/UserController.java").waitFor();
   await countChangedFiles.getByText("src/main/java/com/example/demo/user/UserService.java").waitFor();
   await countChangedFiles.getByText("src/main/java/com/example/demo/user/UserMapper.java").waitFor();
@@ -630,7 +630,7 @@ try {
   await page.locator(".taskListItem").filter({ hasText: "Add User create API" }).waitFor();
   await taskDetail.getByRole("heading", { name: /#\d+ Add User create API/ }).waitFor();
 
-  await clickAndWaitForIdle(page, taskDetail.getByRole("button", { name: "Run task" }));
+  await clickAndWaitForIdle(page, taskDetail.getByRole("button", { name: "运行任务" }));
   await waitForBadge(taskDetail, "WAITING_HUMAN_APPROVAL");
   await taskDetail.getByText("Adds POST /api/users").first().waitFor();
   await taskDetail.getByText("SPRING_USER_CREATE_RECIPE").first().waitFor();
@@ -638,7 +638,7 @@ try {
   await taskDetail.getByText("createUserReturnsCreatedUser").first().waitFor();
   await taskDetail.getByText("User name must not be blank").first().waitFor();
   await taskDetail.getByText("PASSED").first().waitFor();
-  const createChangedFiles = patchPanel.getByLabel("Changed files");
+  const createChangedFiles = patchPanel.getByLabel("变更文件");
   await createChangedFiles.getByText("src/main/java/com/example/demo/user/UserController.java").waitFor();
   await createChangedFiles.getByText("src/main/java/com/example/demo/user/CreateUserRequest.java").waitFor();
   await createChangedFiles.getByText("src/main/java/com/example/demo/user/UserService.java").waitFor();

@@ -631,7 +631,7 @@ export function App() {
   const [taskFilters, setTaskFilters] = useState<TaskFilters>(initialTaskFilters);
   const [codeSearchQuery, setCodeSearchQuery] = useState("UserService");
   const [controllerApiRiskFilters, setControllerApiRiskFilters] = useState<ControllerApiRiskFilters>(initialControllerApiRiskFilters);
-  const [approvalComment, setApprovalComment] = useState("Sandbox validation passed.");
+  const [approvalComment, setApprovalComment] = useState("沙箱验证已通过。");
   const [rejectComment, setRejectComment] = useState("");
   const [copyOverviewLinkStatus, setCopyOverviewLinkStatus] = useState<string | null>(null);
   const [copyProjectLinkStatus, setCopyProjectLinkStatus] = useState<string | null>(null);
@@ -1227,7 +1227,7 @@ export function App() {
     localStorage.removeItem("repopilot.token");
     setToken("");
     setSelectedTaskId(null);
-    setMessage("Signed out.");
+    setMessage("已退出登录。");
   }
 
   return (
@@ -1235,11 +1235,11 @@ export function App() {
       <aside className="rail" aria-label="RepoPilot navigation">
         <div className="mark">RP</div>
         <nav>
-          <a className="navItem active" href="#tasks">Tasks</a>
-          <a className="navItem" href="#overview">Overview</a>
-          <a className="navItem" href="#projects">Projects</a>
-          <a className="navItem" href="#settings">Settings</a>
-          <a className="navItem" href="#patch">Patch</a>
+          <a className="navItem active" href="#tasks">任务</a>
+          <a className="navItem" href="#overview">概览</a>
+          <a className="navItem" href="#projects">项目</a>
+          <a className="navItem" href="#settings">配置</a>
+          <a className="navItem" href="#patch">补丁</a>
           <a className="navItem" href="#pr">PR</a>
         </nav>
       </aside>
@@ -1247,14 +1247,14 @@ export function App() {
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p className="eyebrow">RepoPilot Control Console</p>
-            <h1>Run, review, test, approve, and prepare pull requests.</h1>
+            <p className="eyebrow">RepoPilot 控制台</p>
+            <h1>接入仓库、运行 Agent、审查补丁、测试通过后再准备 PR。</h1>
           </div>
           <div className="topActions">
             <button className="ghostButton" type="button" onClick={() => void loadWorkspace()} disabled={!token || busy !== null}>
-              Refresh
+              刷新
             </button>
-            {token ? <button className="ghostButton" type="button" onClick={signOut}>Sign out</button> : null}
+            {token ? <button className="ghostButton" type="button" onClick={signOut}>退出登录</button> : null}
           </div>
         </header>
 
@@ -1600,17 +1600,17 @@ export function App() {
                   canPreparePr={canPreparePr}
                   streamLabel={taskStreamLabel}
                   busy={busy !== null}
-                  onRun={() => void withBusy("Starting task", async () => {
+                  onRun={() => void withBusy("正在启动任务", async () => {
                     if (!selectedTask) return;
                     await runTask(token, selectedTask.id);
                     await refreshSelectedTask(false);
                   })}
-                  onCancel={() => void withBusy("Cancelling task", async () => {
+                  onCancel={() => void withBusy("正在取消任务", async () => {
                     if (!selectedTask) return;
                     await cancelTask(token, selectedTask.id);
                     await refreshSelectedTask(false);
                   })}
-                  onPreparePr={() => void withBusy("Preparing pull request", async () => {
+                  onPreparePr={() => void withBusy("正在准备 PR", async () => {
                     if (!selectedTask) return;
                     await preparePullRequest(token, selectedTask.id);
                     await refreshSelectedTask();
@@ -1649,17 +1649,17 @@ export function App() {
                     setRejectComment={setRejectComment}
                     busy={busy !== null}
                     canRegenerate={canRegeneratePatch}
-                    onApprove={() => void withBusy("Approving patch", async () => {
+                    onApprove={() => void withBusy("正在审批补丁", async () => {
                       if (!selectedTask || !details.patch) return;
                       await approvePatch(token, selectedTask.id, details.patch.id, approvalComment);
                       await refreshSelectedTask();
                     })}
-                    onReject={() => void withBusy("Rejecting patch", async () => {
+                    onReject={() => void withBusy("正在拒绝补丁", async () => {
                       if (!selectedTask || !details.patch) return;
                       await rejectPatch(token, selectedTask.id, details.patch.id, rejectComment);
                       await refreshSelectedTask();
                     })}
-                    onRegenerate={() => void withBusy("Regenerating patch", async () => {
+                    onRegenerate={() => void withBusy("正在重新生成补丁", async () => {
                       if (!selectedTask) return;
                       await regeneratePatch(token, selectedTask.id);
                       await refreshSelectedTask();
@@ -1688,14 +1688,14 @@ function StatusStrip({
   pullRequest: PullRequestRecord | null;
 }) {
   const cards = [
-    { label: "Task", value: selectedTask?.status ?? "No selection", tone: toneFor(selectedTask?.status) },
-    { label: "Patch", value: patch?.status ?? "Not generated", tone: toneFor(patch?.status) },
-    { label: "Tests", value: testRun?.status ?? "No run", tone: toneFor(testRun?.status) },
-    { label: "Pull request", value: pullRequest?.status ?? "Not prepared", tone: toneFor(pullRequest?.status) }
+    { label: "任务", value: selectedTask?.status ?? "未选择", tone: toneFor(selectedTask?.status) },
+    { label: "补丁", value: patch?.status ?? "未生成", tone: toneFor(patch?.status) },
+    { label: "测试", value: testRun?.status ?? "未运行", tone: toneFor(testRun?.status) },
+    { label: "PR", value: pullRequest?.status ?? "未准备", tone: toneFor(pullRequest?.status) }
   ];
 
   return (
-    <section className="statusGrid" aria-label="System status">
+    <section className="statusGrid" aria-label="系统状态">
       {cards.map((card) => (
         <article className="statusCard" data-tone={card.tone} key={card.label}>
           <span>{card.label}</span>
@@ -2599,8 +2599,8 @@ function TaskSummary({
     <section className="panel">
       <div className="panelHeader">
         <div>
-          <p className="eyebrow">Task detail</p>
-          <h2>{task ? `#${task.id} ${task.title}` : "Select a task"}</h2>
+          <p className="eyebrow">任务详情</p>
+          <h2>{task ? `#${task.id} ${task.title}` : "选择一个任务"}</h2>
         </div>
         <div className="headerBadges">
           {streamLabel === null ? null : <span className="pill">{streamLabel}</span>}
@@ -2611,18 +2611,18 @@ function TaskSummary({
         <>
           <p className="description">{task.description}</p>
           <div className="metaGrid">
-            <Meta label="Project" value={project ? `#${project.id} ${project.repoFullName}` : `#${task.projectId}`} />
-            <Meta label="Run" value={task.currentRunId === null ? "No run" : `#${task.currentRunId}`} />
-            <Meta label="Type" value={task.taskType} />
-            <Meta label="Created" value={formatDate(task.createdAt)} />
+            <Meta label="项目" value={project ? `#${project.id} ${project.repoFullName}` : `#${task.projectId}`} />
+            <Meta label="运行" value={task.currentRunId === null ? "未运行" : `#${task.currentRunId}`} />
+            <Meta label="类型" value={task.taskType} />
+            <Meta label="创建时间" value={formatDate(task.createdAt)} />
           </div>
           <div className="buttonRow">
-            <button className="primaryButton" type="button" onClick={onRun} disabled={!canRun || busy}>Run task</button>
-            <button className="ghostButton dangerButton" type="button" onClick={onCancel} disabled={!canCancel || busy}>Cancel</button>
-            <button className="primaryButton" type="button" onClick={onPreparePr} disabled={!canPreparePr || busy}>Prepare PR</button>
+            <button className="primaryButton" type="button" onClick={onRun} disabled={!canRun || busy}>运行任务</button>
+            <button className="ghostButton dangerButton" type="button" onClick={onCancel} disabled={!canCancel || busy}>取消任务</button>
+            <button className="primaryButton" type="button" onClick={onPreparePr} disabled={!canPreparePr || busy}>准备 PR</button>
           </div>
         </>
-      ) : <EmptyText text="Choose an Agent task from the list." />}
+      ) : <EmptyText text="从列表里选择一个 Agent 任务。" />}
     </section>
   );
 }
@@ -2632,12 +2632,12 @@ function StepTimeline({ steps, task }: { steps: AgentStep[]; task: AgentTask | n
     <section className="panel">
       <div className="panelHeader">
         <div>
-          <p className="eyebrow">Execution</p>
-          <h2>Agent step timeline</h2>
+          <p className="eyebrow">执行过程</p>
+          <h2>Agent 步骤时间线</h2>
         </div>
-        {task && runningStatuses.has(task.status) ? <span className="pill">Running</span> : null}
+        {task && runningStatuses.has(task.status) ? <span className="pill">运行中</span> : null}
       </div>
-      {steps.length === 0 ? <EmptyText text="No steps recorded yet." /> : (
+      {steps.length === 0 ? <EmptyText text="还没有记录执行步骤。" /> : (
         <ol className="timeline richTimeline">
           {steps.map((step) => (
             <li className={step.status === "SUCCESS" ? "done" : step.status === "FAILED" ? "failed" : ""} key={step.id}>
@@ -2683,10 +2683,10 @@ function AgentEvidencePanel({
     <section className="panel" id="agent-evidence">
       <div className="panelHeader">
         <div>
-          <p className="eyebrow">Evidence</p>
-          <h2>Agent evidence</h2>
+          <p className="eyebrow">证据链</p>
+          <h2>Agent 执行证据</h2>
         </div>
-        <span className="pill">{evidence.length} artifacts</span>
+        <span className="pill">{evidence.length} 份证据</span>
       </div>
       <div className="buttonRow evidenceActions">
         <button className="ghostButton" type="button" onClick={onCopyRunReport} disabled={runReport === null || busy}>
@@ -2741,7 +2741,7 @@ function AgentEvidencePanel({
           </div>
         )}
       </div>
-      {evidence.length === 0 ? <EmptyText text="Run a task to capture planner, retrieval, patch, test, and review evidence." /> : (
+      {evidence.length === 0 ? <EmptyText text="运行任务后会在这里沉淀计划、检索、补丁、测试和审查证据。" /> : (
         <div className="evidenceList">
           {evidence.map((item) => (
             <article className="evidenceItem" key={item.key}>
@@ -2779,12 +2779,12 @@ function ToolCallPanel({ toolCalls, runId }: { toolCalls: ToolCallLog[]; runId: 
     <section className="panel" id="tool-calls">
       <div className="panelHeader">
         <div>
-          <p className="eyebrow">Trace</p>
-          <h2>Tool call audit</h2>
+          <p className="eyebrow">审计</p>
+          <h2>工具调用审计</h2>
         </div>
         {runId === null ? null : <span className="pill">Run #{runId}</span>}
       </div>
-      {toolCalls.length === 0 ? <EmptyText text="No tool calls recorded yet." /> : (
+      {toolCalls.length === 0 ? <EmptyText text="还没有工具调用记录。" /> : (
         <div className="toolCallList">
           {toolCalls.map((call) => (
             <article className="toolCallItem" key={call.id}>
@@ -2798,11 +2798,11 @@ function ToolCallPanel({ toolCalls, runId }: { toolCalls: ToolCallLog[]; runId: 
               {call.errorMessage ? <div className="errorBox">{call.errorMessage}</div> : null}
               <div className="toolJsonGrid">
                 <div>
-                  <span>Input</span>
+                  <span>输入</span>
                   <pre className="jsonBlock">{formatJson(call.inputJson)}</pre>
                 </div>
                 <div>
-                  <span>Output</span>
+                  <span>输出</span>
                   <pre className="jsonBlock">{formatJson(call.outputJson)}</pre>
                 </div>
               </div>
@@ -2819,12 +2819,12 @@ function ModelCallPanel({ modelCalls, runId }: { modelCalls: ModelCallLog[]; run
     <section className="panel" id="model-calls">
       <div className="panelHeader">
         <div>
-          <p className="eyebrow">Trace</p>
-          <h2>Model call audit</h2>
+          <p className="eyebrow">审计</p>
+          <h2>模型调用审计</h2>
         </div>
         {runId === null ? null : <span className="pill">Run #{runId}</span>}
       </div>
-      {modelCalls.length === 0 ? <EmptyText text="No model calls recorded yet." /> : (
+      {modelCalls.length === 0 ? <EmptyText text="还没有模型调用记录。" /> : (
         <div className="toolCallList">
           {modelCalls.map((call) => (
             <article className="toolCallItem" key={call.id}>
@@ -2840,11 +2840,11 @@ function ModelCallPanel({ modelCalls, runId }: { modelCalls: ModelCallLog[]; run
               {call.errorMessage ? <div className="errorBox">{call.errorMessage}</div> : null}
               <div className="toolJsonGrid">
                 <div>
-                  <span>Prompt</span>
+                  <span>提示词</span>
                   <pre className="jsonBlock">{formatJson(call.promptJson)}</pre>
                 </div>
                 <div>
-                  <span>Response</span>
+                  <span>响应</span>
                   <pre className="jsonBlock">{formatJson(call.responseJson)}</pre>
                 </div>
               </div>
@@ -2861,44 +2861,44 @@ function PatchPanel({ patch, review }: { patch: PatchRecord | null; review: Patc
     <section className="panel" id="patch">
       <div className="panelHeader">
         <div>
-          <p className="eyebrow">Patch</p>
-          <h2>Unified diff</h2>
+          <p className="eyebrow">补丁</p>
+          <h2>统一 diff</h2>
         </div>
         {patch ? <Badge value={patch.status} /> : null}
       </div>
       {patch ? (
         <>
           <div className="metaGrid compact">
-            <Meta label="Base" value={patch.baseBranch} />
-            <Meta label="Target" value={patch.targetBranch} />
-            <Meta label="Patch" value={`#${patch.id}`} />
-            <Meta label="Mode" value={patch.generationMode} />
+            <Meta label="基线分支" value={patch.baseBranch} />
+            <Meta label="目标分支" value={patch.targetBranch} />
+            <Meta label="补丁" value={`#${patch.id}`} />
+            <Meta label="生成模式" value={patch.generationMode} />
           </div>
           <p className="description">{patch.summary}</p>
           <PatchRiskReviewSummary review={review} />
           <ChangedFilesSummary changedFiles={patch.changedFiles} />
           <pre className="diffBlock">{patch.diffContent}</pre>
         </>
-      ) : <EmptyText text="Run a task to generate a patch." />}
+      ) : <EmptyText text="运行任务后会生成补丁。" />}
     </section>
   );
 }
 
 function PatchRiskReviewSummary({ review }: { review: PatchRiskReview | null }) {
   if (review === null) {
-    return <EmptyText text="No automated review report yet." />;
+    return <EmptyText text="还没有自动审查报告。" />;
   }
   return (
-    <div className="patchReviewSummary" aria-label="Automated review">
+    <div className="patchReviewSummary" aria-label="自动审查">
       <div className="sectionHeader">
         <div>
-          <h3>Automated review</h3>
+          <h3>自动审查</h3>
           <span>{review.summary}</span>
         </div>
         <Badge value={review.riskLevel} />
       </div>
       <div className="reviewFindingList">
-        {review.findings.length === 0 ? <EmptyText text="No review findings." /> : review.findings.map((finding) => (
+        {review.findings.length === 0 ? <EmptyText text="没有审查发现。" /> : review.findings.map((finding) => (
           <div className="reviewFindingRow" data-severity={finding.severity} key={`${finding.code}-${finding.filePath ?? ""}`}>
             <Badge value={finding.severity} />
             <div>
@@ -2915,7 +2915,7 @@ function PatchRiskReviewSummary({ review }: { review: PatchRiskReview | null }) 
 
 function ChangedFilesSummary({ changedFiles }: { changedFiles: PatchChangedFile[] }) {
   if (changedFiles.length === 0) {
-    return <EmptyText text="No file-level diff summary available." />;
+    return <EmptyText text="还没有文件级 diff 摘要。" />;
   }
   const totals = changedFiles.reduce(
     (summary, file) => ({
@@ -2925,11 +2925,11 @@ function ChangedFilesSummary({ changedFiles }: { changedFiles: PatchChangedFile[
     { addedLines: 0, deletedLines: 0 }
   );
   return (
-    <div className="changedFilesSummary" aria-label="Changed files">
+    <div className="changedFilesSummary" aria-label="变更文件">
       <div className="sectionHeader">
         <div>
-          <h3>Changed files</h3>
-          <span>{changedFiles.length} files · +{totals.addedLines} / -{totals.deletedLines}</span>
+          <h3>变更文件</h3>
+          <span>{changedFiles.length} 个文件 · +{totals.addedLines} / -{totals.deletedLines}</span>
         </div>
       </div>
       <div className="changedFileList">
@@ -2950,21 +2950,21 @@ function TestPanel({ testRun }: { testRun: TestRun | null }) {
     <section className="panel">
       <div className="panelHeader">
         <div>
-          <p className="eyebrow">Sandbox</p>
-          <h2>Maven test run</h2>
+          <p className="eyebrow">沙箱</p>
+          <h2>Maven 测试运行</h2>
         </div>
         {testRun ? <Badge value={testRun.status} /> : null}
       </div>
       {testRun ? (
         <>
           <div className="metaGrid compact">
-            <Meta label="Exit" value={String(testRun.exitCode)} />
-            <Meta label="Duration" value={`${testRun.durationMs} ms`} />
-            <Meta label="Test run" value={`#${testRun.id}`} />
+            <Meta label="退出码" value={String(testRun.exitCode)} />
+            <Meta label="耗时" value={`${testRun.durationMs} ms`} />
+            <Meta label="测试运行" value={`#${testRun.id}`} />
           </div>
-          <pre className="logBlock">{testRun.logExcerpt || "No log output."}</pre>
+          <pre className="logBlock">{testRun.logExcerpt || "没有日志输出。"}</pre>
         </>
-      ) : <EmptyText text="No sandbox test run yet." />}
+      ) : <EmptyText text="还没有沙箱测试运行。" />}
     </section>
   );
 }
@@ -3000,28 +3000,28 @@ function ApprovalPanel({
     <section className="panel">
       <div className="panelHeader">
         <div>
-          <p className="eyebrow">Approval</p>
-          <h2>Human gate</h2>
+          <p className="eyebrow">人工审批</p>
+          <h2>人工闸口</h2>
         </div>
       </div>
-      <TextField label="Approval comment" value={approvalComment} onChange={setApprovalComment} />
-      <TextField label="Reject reason" value={rejectComment} onChange={setRejectComment} />
+      <TextField label="审批备注" value={approvalComment} onChange={setApprovalComment} />
+      <TextField label="拒绝原因" value={rejectComment} onChange={setRejectComment} />
       <div className="buttonRow">
         <button className="primaryButton" type="button" onClick={onApprove} disabled={!canApprove || patch === null || busy}>
-          Approve
+          通过审批
         </button>
         <button className="ghostButton" type="button" onClick={onReject} disabled={!canApprove || !rejectComment.trim() || busy}>
-          Reject
+          拒绝
         </button>
         <button className="ghostButton" type="button" onClick={onRegenerate} disabled={!canRegenerate || busy}>
-          Regenerate
+          重新生成
         </button>
       </div>
       <div className="historyList">
-        {approvals.length === 0 ? <EmptyText text="No approval records." /> : approvals.map((approval) => (
+        {approvals.length === 0 ? <EmptyText text="还没有审批记录。" /> : approvals.map((approval) => (
           <div className="historyItem" key={approval.id}>
             <strong>{approval.action}</strong>
-            <span>{approval.comment || "No comment"}</span>
+            <span>{approval.comment || "没有备注"}</span>
             <small>{formatDate(approval.createdAt)}</small>
           </div>
         ))}
@@ -3041,8 +3041,8 @@ function PullRequestPanel({
     <section className="panel" id="pr">
       <div className="panelHeader">
         <div>
-          <p className="eyebrow">Pull request</p>
-          <h2>PR result</h2>
+          <p className="eyebrow">Pull Request</p>
+          <h2>PR 准备结果</h2>
         </div>
         {pullRequest ? <Badge value={pullRequest.status} /> : null}
       </div>
@@ -3050,31 +3050,31 @@ function PullRequestPanel({
       {pullRequest ? (
         <>
           <div className="metaGrid">
-            <Meta label="Branch" value={pullRequest.targetBranch ?? "Not prepared"} />
-            <Meta label="Commit" value={shortSha(pullRequest.commitSha)} />
-            <Meta label="PR" value={pullRequest.prNumber === null ? "Not opened" : `#${pullRequest.prNumber}`} />
-            <Meta label="Opened" value={pullRequest.openedAt ? formatDate(pullRequest.openedAt) : "Not opened"} />
+            <Meta label="分支" value={pullRequest.targetBranch ?? "未准备"} />
+            <Meta label="提交" value={shortSha(pullRequest.commitSha)} />
+            <Meta label="PR" value={pullRequest.prNumber === null ? "未打开" : `#${pullRequest.prNumber}`} />
+            <Meta label="打开时间" value={pullRequest.openedAt ? formatDate(pullRequest.openedAt) : "未打开"} />
           </div>
-          {pullRequest.url ? <a className="externalLink" href={pullRequest.url} target="_blank" rel="noreferrer">Open pull request</a> : null}
+          {pullRequest.url ? <a className="externalLink" href={pullRequest.url} target="_blank" rel="noreferrer">打开 Pull Request</a> : null}
           {pullRequest.errorMessage ? <div className="errorBox">{pullRequest.errorMessage}</div> : null}
-          <pre className="logBlock">{pullRequest.body || "No PR body recorded."}</pre>
+          <pre className="logBlock">{pullRequest.body || "还没有 PR 正文记录。"}</pre>
         </>
-      ) : <EmptyText text="Approve a tested patch, then prepare the PR." />}
+      ) : <EmptyText text="补丁测试通过并完成审批后，就可以准备 PR。" />}
     </section>
   );
 }
 
 function PullRequestPreflightSummary({ preflight }: { preflight: PullRequestPreflight }) {
   return (
-    <section className="prPreflight" aria-label="Pull request preflight">
+    <section className="prPreflight" aria-label="PR 准备前置检查">
       <div className="sectionHeader">
-        <h3>Publishing preflight</h3>
+        <h3>发布前置检查</h3>
         <Badge value={preflight.canPrepare ? "READY" : "BLOCKED"} />
       </div>
       <div className="metaGrid compact">
-        <Meta label="Mode" value={preflight.publishMode} />
-        <Meta label="Local draft" value={preflight.localDraftReady ? "Ready" : "Waiting"} />
-        <Meta label="Remote" value={preflight.remotePublishingWillRun ? "Will publish" : "Not publishing"} />
+        <Meta label="发布模式" value={preflight.publishMode} />
+        <Meta label="本地草稿" value={preflight.localDraftReady ? "已就绪" : "等待中"} />
+        <Meta label="远端发布" value={preflight.remotePublishingWillRun ? "会发布" : "不发布"} />
       </div>
       <div className="preflightCheckList">
         {preflight.checks.map((check) => (
@@ -3089,7 +3089,7 @@ function PullRequestPreflightSummary({ preflight }: { preflight: PullRequestPref
       </div>
       {preflight.blockers.length > 0 ? (
         <div className="errorBox">
-          PR preparation blocker: {preflight.blockers.join(" ")}
+          PR 准备阻塞项：{preflight.blockers.join(" ")}
         </div>
       ) : null}
     </section>
@@ -3144,15 +3144,15 @@ function agentEvidenceFromSteps(steps: AgentStep[]): AgentEvidenceItem[] {
     const searchQueries = stringArrayField(output, "searchQueries");
     items.push({
       key: "plan",
-      label: "Planner task plan",
+      label: "任务规划",
       stepName: planStep.stepName,
       status: planStep.status,
       finishedAt: planStep.finishedAt,
-      summary: stringField(output, "summary") ?? "Planner produced an implementation plan.",
-      meta: searchQueries.length > 0 ? [`Search queries: ${summarizeList(searchQueries, 3)}`] : [],
+      summary: stringField(output, "summary") ?? "Planner 已生成实现计划。",
+      meta: searchQueries.length > 0 ? [`检索词：${summarizeList(searchQueries, 3)}`] : [],
       highlights: planSteps.slice(0, 5).map((step, index) => {
         const order = numberField(step, "order") ?? index + 1;
-        const title = stringField(step, "title") ?? "Plan step";
+        const title = stringField(step, "title") ?? "计划步骤";
         const reason = stringField(step, "reason");
         return reason ? `${order}. ${title} - ${reason}` : `${order}. ${title}`;
       })
@@ -3167,14 +3167,14 @@ function agentEvidenceFromSteps(steps: AgentStep[]): AgentEvidenceItem[] {
     const counts = objectField(output, "resultCountByQuery");
     items.push({
       key: "retrieval",
-      label: "Retrieved code context",
+      label: "检索到的代码上下文",
       stepName: retrievalStep.stepName,
       status: retrievalStep.status,
       finishedAt: retrievalStep.finishedAt,
-      summary: `Matched ${results.length} unique code chunks across ${queries.length} queries.`,
+      summary: `通过 ${queries.length} 个检索词命中 ${results.length} 个去重代码片段。`,
       meta: counts ? Object.entries(counts).slice(0, 4).map(([query, count]) => `${query}: ${String(count)}`) : [],
       highlights: results.slice(0, 5).map((result) => {
-        const filePath = stringField(result, "filePath") ?? "Unknown file";
+        const filePath = stringField(result, "filePath") ?? "未知文件";
         const qualifiedName = stringField(result, "qualifiedName");
         const summary = stringField(result, "summary") ?? stringField(result, "preview");
         const range = sourceRange(result);
@@ -3191,18 +3191,18 @@ function agentEvidenceFromSteps(steps: AgentStep[]): AgentEvidenceItem[] {
     const mode = stringField(output, "generationMode");
     items.push({
       key: "patch",
-      label: "Generated patch artifact",
+      label: "生成的补丁产物",
       stepName: patchStep.stepName,
       status: patchStep.status,
       finishedAt: patchStep.finishedAt,
-      summary: stringField(output, "summary") ?? "Coder generated a patch artifact.",
+      summary: stringField(output, "summary") ?? "Coder 已生成补丁产物。",
       meta: compactStrings([
-        patchId ? `Patch #${patchId}` : null,
+        patchId ? `补丁 #${patchId}` : null,
         stringField(output, "status"),
         mode,
         branchPair(output)
       ]),
-      highlights: mode ? [`Generation mode: ${mode}`] : []
+      highlights: mode ? [`生成模式：${mode}`] : []
     });
   }
 
@@ -3212,11 +3212,11 @@ function agentEvidenceFromSteps(steps: AgentStep[]): AgentEvidenceItem[] {
     const safe = booleanField(output, "safe");
     items.push({
       key: "safety",
-      label: "Patch safety gate",
+      label: "补丁安全门",
       stepName: safetyStep.stepName,
       status: safetyStep.status,
       finishedAt: safetyStep.finishedAt,
-      summary: safe === null ? "Patch safety validation completed." : `Patch safety validation marked the diff ${safe ? "safe" : "unsafe"}.`,
+      summary: safe === null ? "补丁安全预检已完成。" : `补丁安全预检判定 diff 为${safe ? "安全" : "不安全"}。`,
       meta: compactStrings([safe === null ? null : `safe=${String(safe)}`]),
       highlights: stringArrayField(output, "reasons").slice(0, 4)
     });
@@ -3227,16 +3227,16 @@ function agentEvidenceFromSteps(steps: AgentStep[]): AgentEvidenceItem[] {
     const output = parseJsonObject(testStep.outputJson);
     items.push({
       key: "tests",
-      label: "Sandbox test result",
+      label: "沙箱测试结果",
       stepName: testStep.stepName,
       status: testStep.status,
       finishedAt: testStep.finishedAt,
-      summary: stringField(output, "logExcerpt") ?? "Sandbox test execution completed.",
+      summary: stringField(output, "logExcerpt") ?? "沙箱测试执行已完成。",
       meta: compactStrings([
         stringField(output, "command"),
         stringField(output, "status"),
         numberField(output, "durationMs") !== null ? `${numberField(output, "durationMs")} ms` : null,
-        numberField(output, "exitCode") !== null ? `exit ${numberField(output, "exitCode")}` : null
+        numberField(output, "exitCode") !== null ? `退出码 ${numberField(output, "exitCode")}` : null
       ]),
       highlights: []
     });
@@ -3248,14 +3248,14 @@ function agentEvidenceFromSteps(steps: AgentStep[]): AgentEvidenceItem[] {
     const findings = objectArrayField(output, "findings");
     items.push({
       key: "review",
-      label: "Automated patch review",
+      label: "自动补丁审查",
       stepName: reviewStep.stepName,
       status: reviewStep.status,
       finishedAt: reviewStep.finishedAt,
-      summary: stringField(output, "summary") ?? "Automated patch review completed.",
+      summary: stringField(output, "summary") ?? "自动补丁审查已完成。",
       meta: compactStrings([stringField(output, "riskLevel")]),
       highlights: findings.length === 0
-        ? ["No automated review findings."]
+        ? ["没有自动审查发现。"]
         : findings.slice(0, 5).map((finding) => compactStrings([
           stringField(finding, "severity"),
           stringField(finding, "code"),
@@ -3270,12 +3270,12 @@ function agentEvidenceFromSteps(steps: AgentStep[]): AgentEvidenceItem[] {
     const patchId = numberField(input, "patchId");
     items.push({
       key: "approval",
-      label: "Human approval checkpoint",
+      label: "人工审批检查点",
       stepName: approvalStep.stepName,
       status: approvalStep.status,
       finishedAt: approvalStep.finishedAt,
-      summary: "The run stopped before PR creation so a human can review and approve the patch.",
-      meta: compactStrings([patchId ? `Patch #${patchId}` : null, stringField(input, "status")]),
+      summary: "本次运行已在创建 PR 前暂停，等待人工审查并审批补丁。",
+      meta: compactStrings([patchId ? `补丁 #${patchId}` : null, stringField(input, "status")]),
       highlights: []
     });
   }

@@ -73,6 +73,7 @@ Agent 执行页必须特别处理长任务状态：
 - 日志流中断时显示 fallback 状态，并继续通过任务详情接口轮询。
 - 任务详情应把 `agent_step.inputJson`/`outputJson` 的稳定字段解析为 `AgentEvidencePanel`，在原始审计 JSON 之外展示计划摘要、检索命中、patch 生成结果、patch 安全门、沙箱测试结果、自动审查和人工审批 checkpoint。
 - 任务存在 current run 时，任务详情应通过 `GET /api/agent/tasks/{id}/run-report` 加载可复制/下载的 Markdown run report；没有 current run 时按钮禁用并保持空状态。任务详情还应通过 `GET /api/agent/tasks/{id}/run-report/snapshots?limit=5` 展示最近运行报告快照，可通过 `POST /api/agent/tasks/{id}/run-report/snapshots` 保存当前报告，并从历史快照复制或下载保存时的 Markdown。
+- 任务详情主链路的导航、状态卡、步骤时间线、Agent 证据、模型/工具审计、补丁、沙箱测试、人工审批和 PR 前置检查使用中文产品文案；后端枚举、step name、recipe id 和导出的 Markdown 报告标题保留工程原文，便于排查和对接 API。
 
 ## 5. 核心组件
 
@@ -86,17 +87,17 @@ Agent 执行页必须特别处理长任务状态：
 | `FileTree` | 展示仓库文件树 |
 | `SymbolSummary` | 展示 Controller、Service、Mapper、Entity 数量 |
 | `ControllerApiList` | 展示 Spring Controller 路由、HTTP 方法、参数来源、Service 与 Mapper/Repository 调用、风险分、鉴权/校验/参数边界风险提示、字段/参数级风险细节、风险等级计数、风险等级/风险码筛选、可复制风险视图/单路由链接、可复制/下载/保存由后端生成的当前可见 API Markdown 文档、最近 API 文档快照及快照复制/下载/删除/清空操作、请求/响应类型和源码位置 |
-| `AgentStepTimeline` | 展示 Agent 状态机步骤 |
-| `AgentEvidencePanel` | 从当前任务 step JSON 中提取 planner、retriever、Coder、sandbox、review 和 approval checkpoint 证据，提供比原始 JSON 更适合演示和排查的摘要视图，并支持复制、下载或保存后端生成的 Markdown run report；最近运行报告快照支持复制和下载 |
+| `AgentStepTimeline` | 以中文标题展示 Agent 状态机步骤和运行中状态 |
+| `AgentEvidencePanel` | 从当前任务 step JSON 中提取 planner、retriever、Coder、sandbox、review 和 approval checkpoint 证据，用中文证据卡展示规划、检索、补丁、安全门、测试、审查和人工审批检查点，并支持复制、下载或保存后端生成的 Markdown run report；最近运行报告快照支持复制和下载 |
 | `TaskFilterForm` | 按项目、状态、类型和关键词筛选 `GET /api/agent/tasks` 结果，支持一键重置和复制当前任务视图链接 |
 | `ToolCallTable` | 展示工具调用审计 |
 | `DiffViewer` | 展示 unified diff、文件级摘要和 patch generation mode |
 | `TestLogPanel` | 展示 Maven 测试日志 |
-| `ApprovalActions` | Approve、Reject、Regenerate |
-| `PrResultCard` | 展示 PR 链接和状态 |
-| `PullRequestPreflightSummary` | 展示 PR 发布前置检查、发布模式、本地草稿状态、远程 GitHub 状态和 blocker |
+| `ApprovalActions` | 提供通过审批、拒绝和重新生成操作 |
+| `PrResultCard` | 用中文标签展示 PR 链接、分支、提交、打开状态和正文 |
+| `PullRequestPreflightSummary` | 用中文标签展示 PR 发布前置检查、发布模式、本地草稿状态、远程 GitHub 状态和 blocker |
 | `ToolCallAuditPanel` | 展示工具调用输入、输出摘要、状态和耗时 |
-| `ModelCallAuditPanel` | 展示模型调用 prompt、response 摘要、模型名、token 和耗时 |
+| `ModelCallAuditPanel` | 展示模型调用提示词、响应摘要、模型名、token 和耗时 |
 | `CoderSettingsPanel` | 展示当前 Coder mode、provider、model、API base URL、key 是否配置、fixture 是否配置、缺失配置项和支持模式；不展示任何密钥或 fixture 原文 |
 | `GitHubSettingsPanel` | 展示当前 GitHub PR 发布模式、provider、API base URL、token 是否配置、远程发布是否启用和缺失配置项；不展示 token 原文 |
 | `SandboxSettingsPanel` | 展示 Docker daemon、sandbox image、Maven cache、workspace root、timeout 和 readiness 检查；不启动测试容器 |
