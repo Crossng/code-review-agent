@@ -85,6 +85,8 @@ else
   (
     cd "$ROOT_DIR/agent-worker"
     PYTHONPATH="$ROOT_DIR/agent-worker" \
+      REPOPILOT_AGENT_WORKER_CALLBACK_TOKEN="" \
+      BACKEND_CALLBACK_TOKEN="" \
       python3 -m uvicorn app.main:app --host 127.0.0.1 --port "$WORKER_PORT"
   ) >"$LOG_DIR/agent-worker.log" 2>&1 &
   worker_pid="$!"

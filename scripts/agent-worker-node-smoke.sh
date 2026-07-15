@@ -1,0 +1,329 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ARTIFACT_DIR="$ROOT_DIR/output/agent-worker-node-smoke"
+SUMMARY_JSON="$ARTIFACT_DIR/last-run.json"
+LOG_DIR="$ROOT_DIR/target/agent-worker-node-smoke/logs"
+
+usage() {
+  cat <<'EOF'
+RepoPilot Agent Worker 初始节点 smoke
+
+用法:
+  ./scripts/agent-worker-node-smoke.sh
+
+说明:
+  - 启动本地后端 HTTP stub 和真实 Agent Worker。
+  - 调用 /runs/{run_id}/start。
+  - 验证 Worker 后台执行 load_task_context 和 plan_task。
+  - 校验 Worker 拉取 context/files/symbols/search，并回写两个 SUCCESS step。
+  - 运行证据写入 output/agent-worker-node-smoke/last-run.json。
+EOF
+}
+
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+  usage
+  exit 0
+fi
+
+mkdir -p "$ARTIFACT_DIR" "$LOG_DIR"
+
+echo "RepoPilot Agent Worker 初始节点 smoke"
+
+PYTHONPATH="$ROOT_DIR/agent-worker" python3 - "$ROOT_DIR" "$SUMMARY_JSON" "$LOG_DIR" <<'PY'
+import json
+import os
+import socket
+import subprocess
+import sys
+import threading
+import time
+from datetime import datetime, timezone
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
+from urllib.error import URLError
+from urllib.parse import parse_qs, urlparse
+from urllib.request import Request, urlopen
+
+root_dir = Path(sys.argv[1])
+summary_path = Path(sys.argv[2])
+log_dir = Path(sys.argv[3])
+captured = {"gets": [], "steps": []}
+
+
+def free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
+class BackendStubHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        parsed = urlparse(self.path)
+        query = parse_qs(parsed.query)
+        event = {
+            "method": self.command,
+            "path": parsed.path,
+            "query": query,
+            "token": self.headers.get("X-RepoPilot-Worker-Token"),
+        }
+        captured["gets"].append(event)
+        if parsed.path.endswith("/context"):
+            data = {
+                "runId": 606,
+                "runStatus": "RUNNING",
+                "taskId": 303,
+                "taskStatus": "CREATED",
+                "taskType": "FEATURE",
+                "title": "给 User 模块新增分页查询接口",
+                "description": "需要读取 UserController 并生成分页查询计划。",
+                "projectId": 202,
+                "repoUrl": "file:///demo",
+                "repoFullName": "demo/repo",
+                "defaultBranch": "main",
+                "localPath": "/workspace/repos/202/source",
+                "projectStatus": "READY",
+            }
+        elif parsed.path.endswith("/project/files"):
+            data = [
+                {"path": "src/main/java/com/example/demo/user/UserController.java", "type": "FILE", "size": 1800},
+                {"path": "src/main/java/com/example/demo/user/UserService.java", "type": "FILE", "size": 2200},
+                {"path": "src/main/java/com/example/demo/user/UserMapper.java", "type": "FILE", "size": 900},
+                {"path": "src/test/java/com/example/demo/user/UserServiceTest.java", "type": "FILE", "size": 1300},
+            ]
+        elif parsed.path.endswith("/project/symbols"):
+            data = [
+                {
+                    "id": 12,
+                    "filePath": "src/main/java/com/example/demo/user/UserController.java",
+                    "symbolType": "CONTROLLER",
+                    "name": "UserController",
+                    "qualifiedName": "com.example.demo.user.UserController",
+                    "annotations": "RestController",
+                    "startLine": 1,
+                    "endLine": 36,
+                },
+                {
+                    "id": 13,
+                    "filePath": "src/main/java/com/example/demo/user/UserService.java",
+                    "symbolType": "SERVICE",
+                    "name": "UserService",
+                    "qualifiedName": "com.example.demo.user.UserService",
+                    "annotations": "Service",
+                    "startLine": 1,
+                    "endLine": 52,
+                },
+            ]
+        elif parsed.path.endswith("/project/search"):
+            query_text = query.get("query", [""])[0]
+            data = {
+                "query": query_text,
+                "limit": int(query.get("limit", ["4"])[0]),
+                "results": [
+                    {
+                        "chunkId": 77,
+                        "filePath": "src/main/java/com/example/demo/user/UserController.java",
+                        "chunkType": "SYMBOL",
+                        "symbolType": "CONTROLLER",
+                        "symbolName": "UserController",
+                        "qualifiedName": "com.example.demo.user.UserController",
+                        "startLine": 1,
+                        "endLine": 36,
+                        "summary": "User Controller",
+                        "preview": f"Controller context for {query_text}",
+                    }
+                ],
+            }
+        else:
+            self.send_response(404)
+            self.end_headers()
+            return
+        self.respond({"success": True, "data": data, "code": None, "message": None, "traceId": "node-smoke"})
+
+    def do_POST(self):
+        parsed = urlparse(self.path)
+        content_length = int(self.headers.get("Content-Length", "0"))
+        body = self.rfile.read(content_length).decode("utf-8")
+        event = {
+            "method": self.command,
+            "path": parsed.path,
+            "token": self.headers.get("X-RepoPilot-Worker-Token"),
+            "contentType": self.headers.get("Content-Type"),
+            "body": json.loads(body),
+        }
+        if not parsed.path.endswith("/steps"):
+            self.send_response(404)
+            self.end_headers()
+            return
+        captured["steps"].append(event)
+        data = {
+            "id": 900 + len(captured["steps"]),
+            "stepName": event["body"]["step_name"],
+            "status": event["body"]["status"],
+            "inputJson": json.dumps(event["body"].get("input", {}), ensure_ascii=False),
+            "outputJson": json.dumps(event["body"].get("output", {}), ensure_ascii=False),
+            "errorMessage": event["body"].get("error_message"),
+            "startedAt": "2026-07-16T00:00:00Z",
+            "finishedAt": "2026-07-16T00:00:01Z",
+        }
+        self.respond({"success": True, "data": data, "code": None, "message": None, "traceId": "node-smoke"})
+
+    def respond(self, payload):
+        encoded = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(encoded)))
+        self.end_headers()
+        self.wfile.write(encoded)
+
+    def log_message(self, format, *args):
+        return
+
+
+backend_server = HTTPServer(("127.0.0.1", 0), BackendStubHandler)
+backend_thread = threading.Thread(target=backend_server.serve_forever, daemon=True)
+backend_thread.start()
+
+worker_port = free_port()
+worker_log_path = log_dir / "agent-worker-node-smoke.log"
+env = os.environ.copy()
+env.update(
+    {
+        "PYTHONPATH": str(root_dir / "agent-worker"),
+        "REPOPILOT_BACKEND_BASE_URL": f"http://127.0.0.1:{backend_server.server_port}",
+        "REPOPILOT_AGENT_WORKER_CALLBACK_TOKEN": "node-smoke-token",
+        "REPOPILOT_BACKEND_TIMEOUT_SECONDS": "3",
+    }
+)
+worker_log = worker_log_path.open("w", encoding="utf-8")
+worker = subprocess.Popen(
+    [sys.executable, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", str(worker_port)],
+    cwd=root_dir / "agent-worker",
+    env=env,
+    stdout=worker_log,
+    stderr=subprocess.STDOUT,
+)
+
+
+def request_json(method: str, url: str, payload=None) -> dict:
+    body = None if payload is None else json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    headers = {} if payload is None else {"Content-Type": "application/json"}
+    request = Request(url, data=body, method=method, headers=headers)
+    with urlopen(request, timeout=5) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+try:
+    health_url = f"http://127.0.0.1:{worker_port}/health"
+    deadline = time.time() + 30
+    while True:
+        try:
+            health = request_json("GET", health_url)
+            break
+        except URLError:
+            if time.time() > deadline:
+                raise
+            time.sleep(0.25)
+
+    start = request_json(
+        "POST",
+        f"http://127.0.0.1:{worker_port}/runs/606/start",
+        {
+            "task_id": 303,
+            "project_id": 202,
+            "user_request": "给 User 模块新增分页查询接口",
+            "repo_path": "/workspace/repos/202/source",
+            "base_branch": "main",
+        },
+    )
+
+    deadline = time.time() + 10
+    while len(captured["steps"]) < 2 and time.time() < deadline:
+        time.sleep(0.1)
+finally:
+    worker.terminate()
+    try:
+        worker.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        worker.kill()
+        worker.wait(timeout=5)
+    worker_log.close()
+    backend_server.shutdown()
+    backend_thread.join(timeout=3)
+
+if health.get("status") != "UP":
+    raise SystemExit(f"worker health mismatch: {health}")
+if start.get("run_id") != 606 or start.get("accepted") is not True or start.get("status") != "QUEUED":
+    raise SystemExit(f"worker start mismatch: {start}")
+if len(captured["steps"]) < 2:
+    raise SystemExit(f"expected two worker step callbacks, got {captured['steps']}")
+if any(event["token"] != "node-smoke-token" for event in captured["gets"] + captured["steps"]):
+    raise SystemExit("worker internal token header mismatch")
+
+get_paths = [event["path"] for event in captured["gets"]]
+for expected in [
+    "/api/internal/agent-worker/runs/606/context",
+    "/api/internal/agent-worker/runs/606/project/files",
+    "/api/internal/agent-worker/runs/606/project/symbols",
+    "/api/internal/agent-worker/runs/606/project/search",
+]:
+    if expected not in get_paths:
+        raise SystemExit(f"missing backend tool request {expected}: {get_paths}")
+
+step_by_name = {event["body"]["step_name"]: event["body"] for event in captured["steps"]}
+if set(step_by_name) != {"load_task_context", "plan_task"}:
+    raise SystemExit(f"step names mismatch: {list(step_by_name)}")
+if step_by_name["load_task_context"].get("status") != "SUCCESS":
+    raise SystemExit(f"load_task_context status mismatch: {step_by_name['load_task_context']}")
+if step_by_name["plan_task"].get("status") != "SUCCESS":
+    raise SystemExit(f"plan_task status mismatch: {step_by_name['plan_task']}")
+
+load_output = step_by_name["load_task_context"].get("output", {})
+plan_output = step_by_name["plan_task"].get("output", {})
+if load_output.get("repoFullName") != "demo/repo" or load_output.get("fileCount") != 4:
+    raise SystemExit(f"load_task_context output mismatch: {load_output}")
+if "searchQueries" not in plan_output or len(plan_output.get("steps", [])) < 5:
+    raise SystemExit(f"plan_task output mismatch: {plan_output}")
+
+summary = {
+    "generatedAt": datetime.now(timezone.utc).isoformat(),
+    "worker": {
+        "port": worker_port,
+        "health": health,
+        "start": start,
+    },
+    "backendRequests": [
+        {
+            "method": event["method"],
+            "path": event["path"],
+            "query": event.get("query", {}),
+            "tokenHeaderPresent": event["token"] == "node-smoke-token",
+        }
+        for event in captured["gets"]
+    ],
+    "steps": [
+        {
+            "path": event["path"],
+            "stepName": event["body"]["step_name"],
+            "status": event["body"]["status"],
+            "tokenHeaderPresent": event["token"] == "node-smoke-token",
+        }
+        for event in captured["steps"]
+    ],
+    "loadTaskContext": {
+        "repoFullName": load_output["repoFullName"],
+        "fileCount": load_output["fileCount"],
+        "symbolCount": load_output["symbolCount"],
+    },
+    "planTask": {
+        "summary": plan_output["summary"],
+        "stepCount": len(plan_output["steps"]),
+        "searchQueries": plan_output["searchQueries"],
+    },
+}
+summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+print("Agent Worker 初始节点验证通过。")
+print(f"Steps: {', '.join(step['stepName'] for step in summary['steps'])}")
+print(f"证据文件: {summary_path}")
+PY
