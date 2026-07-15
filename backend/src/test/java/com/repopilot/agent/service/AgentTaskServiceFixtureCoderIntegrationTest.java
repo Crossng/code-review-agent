@@ -10,15 +10,20 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.io.IOException;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sun.net.httpserver.HttpServer;
 import com.repopilot.agent.domain.AgentRun;
 import com.repopilot.agent.domain.AgentRunStatus;
 import com.repopilot.agent.domain.AgentStep;
@@ -30,7 +35,10 @@ import com.repopilot.agent.repository.AgentRunRepository;
 import com.repopilot.agent.repository.AgentRunReportSnapshotRepository;
 import com.repopilot.agent.repository.AgentStepRepository;
 import com.repopilot.agent.repository.AgentTaskRepository;
+import com.repopilot.indexer.domain.CodeChunkType;
+import com.repopilot.indexer.domain.CodeSymbolType;
 import com.repopilot.indexer.dto.CodeSearchResponse;
+import com.repopilot.indexer.dto.CodeSearchResultResponse;
 import com.repopilot.indexer.service.CodeSearchService;
 import com.repopilot.modelcall.domain.ModelCallLog;
 import com.repopilot.modelcall.repository.ModelCallLogRepository;
@@ -52,6 +60,7 @@ import com.repopilot.toolcall.repository.ToolCallLogRepository;
 import com.repopilot.toolcall.service.ToolCallLogService;
 import com.repopilot.user.domain.User;
 import com.repopilot.user.repository.UserRepository;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -78,6 +87,16 @@ class AgentTaskServiceFixtureCoderIntegrationTest {
             @@ -0,0 +1,2 @@
             +# Fixture Coder Patch
             +Generated through the RepoPilot fixture Coder model path.
+            """;
+    private static final String OPENAI_COMPATIBLE_DIFF = """
+            diff --git a/README.md b/README.md
+            new file mode 100644
+            index 0000000..2222222
+            --- /dev/null
+            +++ b/README.md
+            @@ -0,0 +1,2 @@
+            +# OpenAI Compatible Coder Patch
+            +Generated through the RepoPilot OpenAI-compatible Coder model path.
             """;
 
     @TempDir
@@ -139,56 +158,25 @@ class AgentTaskServiceFixtureCoderIntegrationTest {
     private AgentTask savedTask;
     private AgentRun savedRun;
     private AgentTaskService agentTaskService;
+    private ObjectMapper objectMapper;
+    private HttpServer coderServer;
 
     @BeforeEach
     void setUp() {
-        ObjectMapper objectMapper = new ObjectMapper();
-        PatchGenerationService patchGenerationService = new PatchGenerationService(
-                patchRecordRepository,
-                new CoderPatchOutputParser(),
-                new ConfiguredCoderModelClient(
-                        objectMapper,
-                        "fixture",
-                        FIXTURE_DIFF,
-                        "https://api.openai.com/v1",
-                        "",
-                        "",
-                        120,
-                        4096,
-                        "developer",
-                        "",
-                        ""
-                )
-        );
-        SandboxTestService sandboxTestService = new SandboxTestService(
-                testRunRepository,
-                tempDir.resolve("workspace").toString(),
-                Path.of("..", ".m2").toString(),
-                "maven:3.9-eclipse-temurin-17",
-                600
-        );
-        agentTaskService = new AgentTaskService(
-                agentTaskRepository,
-                agentRunRepository,
-                agentRunReportSnapshotRepository,
-                agentStepRepository,
-                projectRepository,
-                userRepository,
-                codeSearchService,
-                patchGenerationService,
-                patchRecordRepository,
-                sandboxTestService,
-                new PatchRiskReviewService(),
-                new PatchDiffSafetyService(),
-                patchRepairService,
-                new ModelCallLogService(modelCallLogRepository, objectMapper),
-                new ToolCallLogService(toolCallLogRepository, objectMapper),
-                taskStreamService,
-                projectWriteGuardService,
-                new SyncTaskExecutor(),
-                transactionManager,
-                objectMapper
-        );
+        objectMapper = new ObjectMapper();
+        configureAgentTaskService(new ConfiguredCoderModelClient(
+                objectMapper,
+                "fixture",
+                FIXTURE_DIFF,
+                "https://api.openai.com/v1",
+                "",
+                "",
+                120,
+                4096,
+                "developer",
+                "",
+                ""
+        ));
 
         lenient().when(transactionManager.getTransaction(any(TransactionDefinition.class))).thenReturn(transactionStatus);
         lenient().when(agentRunRepository.save(any(AgentRun.class))).thenAnswer(invocation -> {
@@ -224,6 +212,50 @@ class AgentTaskServiceFixtureCoderIntegrationTest {
         });
         lenient().when(codeSearchService.search(any(), anyString(), anyInt()))
                 .thenAnswer(invocation -> new CodeSearchResponse(invocation.getArgument(1), invocation.getArgument(2), List.of()));
+    }
+
+    @AfterEach
+    void tearDown() {
+        if (coderServer != null) {
+            coderServer.stop(0);
+        }
+    }
+
+    private void configureAgentTaskService(ConfiguredCoderModelClient coderModelClient) {
+        PatchGenerationService patchGenerationService = new PatchGenerationService(
+                patchRecordRepository,
+                new CoderPatchOutputParser(),
+                coderModelClient
+        );
+        SandboxTestService sandboxTestService = new SandboxTestService(
+                testRunRepository,
+                tempDir.resolve("workspace").toString(),
+                Path.of("..", ".m2").toString(),
+                "maven:3.9-eclipse-temurin-17",
+                600
+        );
+        agentTaskService = new AgentTaskService(
+                agentTaskRepository,
+                agentRunRepository,
+                agentRunReportSnapshotRepository,
+                agentStepRepository,
+                projectRepository,
+                userRepository,
+                codeSearchService,
+                patchGenerationService,
+                patchRecordRepository,
+                sandboxTestService,
+                new PatchRiskReviewService(),
+                new PatchDiffSafetyService(),
+                patchRepairService,
+                new ModelCallLogService(modelCallLogRepository, objectMapper),
+                new ToolCallLogService(toolCallLogRepository, objectMapper),
+                taskStreamService,
+                projectWriteGuardService,
+                new SyncTaskExecutor(),
+                transactionManager,
+                objectMapper
+        );
     }
 
     @Test
@@ -296,6 +328,135 @@ class AgentTaskServiceFixtureCoderIntegrationTest {
         assertThat(sandboxReadme).exists();
         assertThat(Files.readString(sandboxReadme))
                 .contains("Generated through the RepoPilot fixture Coder model path.");
+    }
+
+    @Test
+    void openAiCompatibleCoderPatchRunsThroughHttpClientParserSafetySandboxAndReview() throws IOException {
+        AtomicReference<String> authorization = new AtomicReference<>();
+        AtomicReference<String> requestBody = new AtomicReference<>();
+        startCoderServer("gpt-repopilot-test", OPENAI_COMPATIBLE_DIFF, authorization, requestBody);
+        configureAgentTaskService(new ConfiguredCoderModelClient(
+                objectMapper,
+                "openai-compatible",
+                "",
+                coderServerBaseUrl(),
+                "test-coder-key",
+                "gpt-repopilot-test",
+                30,
+                2048,
+                "developer",
+                "",
+                ""
+        ));
+        Fixture fixture = fixture();
+        stubRetrievedContext(fixture);
+        when(agentTaskRepository.findById(fixture.task().getId())).thenReturn(Optional.of(fixture.task()));
+
+        AgentRun run = agentTaskService.run(fixture.task().getId(), fixture.user().getId());
+
+        PatchRecord patch = savedPatches.stream()
+                .filter(candidate -> PatchGenerationService.MODE_LLM_CODER_DRAFT.equals(candidate.getGenerationMode()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(run.getStatus()).isEqualTo(AgentRunStatus.SUCCESS);
+        assertThat(fixture.task().getStatus()).isEqualTo(AgentTaskStatus.WAITING_HUMAN_APPROVAL);
+        assertThat(patch.getStatus()).isEqualTo(PatchStatus.APPLIED);
+        assertThat(patch.getGenerationProvider()).isEqualTo("OPENAI_COMPATIBLE");
+        assertThat(patch.getGenerationModel()).isEqualTo("gpt-repopilot-test");
+        assertThat(patch.getDiffContent())
+                .startsWith("diff --git a/README.md b/README.md")
+                .contains("OpenAI Compatible Coder Patch")
+                .doesNotContain("```");
+        assertThat(authorization.get()).isEqualTo("Bearer test-coder-key");
+        assertThat(requestBody.get())
+                .contains("\"model\":\"gpt-repopilot-test\"")
+                .contains("Return only one raw unified diff")
+                .contains(fixture.task().getTitle())
+                .contains("src/main/java/com/example/demo/user/UserController.java")
+                .contains("com.example.demo.user.UserController");
+        ArgumentCaptor<ModelCallLog> modelCallCaptor = ArgumentCaptor.forClass(ModelCallLog.class);
+        verify(modelCallLogRepository, atLeastOnce()).save(modelCallCaptor.capture());
+        assertThat(modelCallCaptor.getAllValues())
+                .anySatisfy(call -> {
+                    assertThat(call.getStepName()).isEqualTo("generate_patch");
+                    assertThat(call.getModelProvider()).isEqualTo("OPENAI_COMPATIBLE");
+                    assertThat(call.getModelName()).isEqualTo("gpt-repopilot-test");
+                    assertThat(call.getPromptJson()).contains("src/main/java/com/example/demo/user/UserController.java");
+                    assertThat(call.getResponseJson()).contains("\"generationProvider\":\"OPENAI_COMPATIBLE\"");
+                });
+        assertThat(savedSteps)
+                .anySatisfy(step -> {
+                    assertThat(step.getStepName()).isEqualTo("generate_patch");
+                    assertThat(step.getOutputJson())
+                            .contains("\"generationProvider\":\"OPENAI_COMPATIBLE\"")
+                            .contains("\"generationModel\":\"gpt-repopilot-test\"");
+                })
+                .anySatisfy(step -> {
+                    assertThat(step.getStepName()).isEqualTo("waiting_human_approval");
+                    assertThat(step.getStatus()).isEqualTo(AgentStepStatus.PENDING);
+                });
+        assertThat(savedTestRuns)
+                .hasSize(1)
+                .allSatisfy(testRun -> assertThat(testRun.getStatus()).isEqualTo(TestRunStatus.PASSED));
+        Path sandboxReadme = tempDir.resolve("workspace")
+                .resolve("runs")
+                .resolve(String.valueOf(run.getId()))
+                .resolve("source")
+                .resolve("README.md");
+        assertThat(sandboxReadme).exists();
+        assertThat(Files.readString(sandboxReadme))
+                .contains("Generated through the RepoPilot OpenAI-compatible Coder model path.");
+    }
+
+    private void stubRetrievedContext(Fixture fixture) {
+        CodeSearchResultResponse result = new CodeSearchResultResponse(
+                10L,
+                "src/main/java/com/example/demo/user/UserController.java",
+                CodeChunkType.CLASS,
+                CodeSymbolType.CONTROLLER,
+                "UserController",
+                "com.example.demo.user.UserController",
+                8,
+                28,
+                "User REST endpoints",
+                "class UserController { List<UserEntity> listUsers() { return userService.listUsers(); } }"
+        );
+        when(codeSearchService.search(any(), anyString(), anyInt()))
+                .thenAnswer(invocation -> {
+                    String query = invocation.getArgument(1);
+                    int limit = invocation.getArgument(2);
+                    if (query.equals(fixture.task().getTitle())) {
+                        return new CodeSearchResponse(query, limit, List.of(result));
+                    }
+                    return new CodeSearchResponse(query, limit, List.of());
+                });
+    }
+
+    private void startCoderServer(
+            String model,
+            String rawDiff,
+            AtomicReference<String> authorization,
+            AtomicReference<String> requestBody
+    ) throws IOException {
+        coderServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        coderServer.createContext("/v1/chat/completions", exchange -> {
+            authorization.set(exchange.getRequestHeaders().getFirst("Authorization"));
+            requestBody.set(new String(exchange.getRequestBody().readAllBytes()));
+            byte[] bytes = objectMapper.writeValueAsBytes(Map.of(
+                    "model", model,
+                    "choices", List.of(Map.of("message", Map.of("content", rawDiff)))
+            ));
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, bytes.length);
+            try (OutputStream output = exchange.getResponseBody()) {
+                output.write(bytes);
+            }
+        });
+        coderServer.start();
+    }
+
+    private String coderServerBaseUrl() {
+        return "http://127.0.0.1:" + coderServer.getAddress().getPort() + "/v1";
     }
 
     private Fixture fixture() throws IOException {

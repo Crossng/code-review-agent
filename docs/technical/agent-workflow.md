@@ -124,6 +124,8 @@ LLM CoderAgent 的 raw response 必须满足以下契约，才能进入 `patch_r
 
 所有真实模型输出都必须复用同一个 `CoderModelClient` 接口，输出 raw response 后统一进入 parser、安全预检、沙箱测试和 review。未配置 key 或 model 时，`openai-compatible` 模式会在 patch 生成阶段返回配置错误，不会绕过安全链路。成功生成的 patch 会记录 `generationProvider` 和 `generationModel`，并同步进入 `generate_patch` 的 step output、运行报告和 model call 审计，方便区分本地 recipe、fixture 和真实 OpenAI-compatible Coder。
 
+`openai-compatible` 模式已用本地 Chat Completions HTTP stub 做生产状态机级验证：Agent 会真实发送 Authorization header、模型名、diff-only system/developer prompt 和检索上下文，收到 raw diff 后继续进入同一 parser、安全预检、Docker 沙箱测试、ReviewAgent 和人工审批暂停点。真实 token 环境只需替换 API base URL、key 和 model，不改变后续安全链路。
+
 `GET /api/settings/coder` 提供当前 Coder 模型入口的只读脱敏状态，前端可展示 mode、provider、model、API base URL、key 是否配置、fixture 是否配置、缺失项和支持模式，但不返回 API key、fixture response、organization 或 project 原文。
 
 ## 7. 检索输出格式
