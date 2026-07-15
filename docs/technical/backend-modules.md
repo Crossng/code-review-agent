@@ -136,6 +136,7 @@ CANCELLED
 - `POST /api/tasks/{id}/patches/regenerate` 仍保持同步执行，用于审批前快速生成并返回新的 patch 版本。
 - `ProjectWriteGuardService` 会在启动任务、重新生成 patch、审批通过和 PR 准备前用项目行级锁检查同项目写入槽；若已有其他任务处于写入型状态，接口返回 `409 PROJECT_WRITE_TASK_RUNNING`，避免多个后台 run 同时修改同一工作区。
 - 已提供 `GET /api/agent/tasks/{id}/stream` SSE：连接后先发送当前 task/run/step 快照；任务运行中会继续推送 `TASK_UPDATED`、`STEP_RECORDED`，并在审批点、失败、取消或完成时发送 `STREAM_COMPLETE` 后关闭。
+- 可通过 `REPOPILOT_AGENT_WORKER_ENABLED=true` 打开 Agent Worker 启动桥；后台执行会调用 `${REPOPILOT_AGENT_WORKER_URL}/runs/{runId}/start` 并写入 `agent_worker_start` step，调用失败只记录失败证据，现阶段仍由 Spring Boot executor 继续兜底。
 - Agent Worker 后续通过内部 API 或消息队列回写步骤状态。
 - 同一个项目同一时间 MVP 只允许一个写入型 Agent 任务运行，避免工作区冲突。
 

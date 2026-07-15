@@ -31,6 +31,8 @@ import com.repopilot.agent.repository.AgentRunRepository;
 import com.repopilot.agent.repository.AgentRunReportSnapshotRepository;
 import com.repopilot.agent.repository.AgentStepRepository;
 import com.repopilot.agent.repository.AgentTaskRepository;
+import com.repopilot.agent.worker.AgentWorkerGateway;
+import com.repopilot.agent.worker.AgentWorkerStartResult;
 import com.repopilot.common.ApiException;
 import com.repopilot.indexer.dto.CodeSearchResponse;
 import com.repopilot.indexer.dto.CodeSearchResultResponse;
@@ -82,6 +84,7 @@ public class AgentTaskService {
     private final ToolCallLogService toolCallLogService;
     private final TaskStreamService taskStreamService;
     private final ProjectWriteGuardService projectWriteGuardService;
+    private final AgentWorkerGateway agentWorkerGateway;
     private final TaskExecutor agentTaskExecutor;
     private final TransactionTemplate transactionTemplate;
     private final ObjectMapper objectMapper;
@@ -104,6 +107,7 @@ public class AgentTaskService {
             ToolCallLogService toolCallLogService,
             TaskStreamService taskStreamService,
             ProjectWriteGuardService projectWriteGuardService,
+            AgentWorkerGateway agentWorkerGateway,
             @Qualifier("agentTaskExecutor") TaskExecutor agentTaskExecutor,
             PlatformTransactionManager transactionManager,
             ObjectMapper objectMapper
@@ -125,6 +129,7 @@ public class AgentTaskService {
         this.toolCallLogService = toolCallLogService;
         this.taskStreamService = taskStreamService;
         this.projectWriteGuardService = projectWriteGuardService;
+        this.agentWorkerGateway = agentWorkerGateway;
         this.agentTaskExecutor = agentTaskExecutor;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.objectMapper = objectMapper;
@@ -251,6 +256,7 @@ public class AgentTaskService {
         if (stopIfCancelled(task, run, cancellationAware)) {
             return new RunExecution(run, null);
         }
+        startAgentWorkerIfEnabled(task, run);
         List<String> queries = candidateQueries(task);
         RunContext context = toolCallLogService.record(
                 run,
@@ -665,6 +671,7 @@ public class AgentTaskService {
 
     private List<AgentRunReportSectionResponse> runReportSections(List<AgentStep> steps) {
         List<AgentRunReportSectionResponse> sections = new ArrayList<>();
+        addWorkerSection(sections, latestStepByName(steps, "agent_worker_start"));
         addPlanSection(sections, latestStepByName(steps, "plan_task"));
         addRetrievalSection(sections, latestStepByName(steps, "retrieve_context"));
         addPatchSection(sections, latestStepByName(steps, "generate_patch"));
@@ -673,6 +680,47 @@ public class AgentTaskService {
         addReviewSection(sections, latestStepByName(steps, "review_patch"));
         addApprovalSection(sections, latestStepByName(steps, "waiting_human_approval"));
         return sections;
+    }
+
+    private void addWorkerSection(List<AgentRunReportSectionResponse> sections, AgentStep step) {
+        if (step == null) {
+            return;
+        }
+        JsonNode output = jsonNode(step.getOutputJson());
+        List<String> graphNodes = stringArray(output, "graph_nodes");
+        if (graphNodes.isEmpty()) {
+            graphNodes = stringArray(output, "graphNodes");
+        }
+        List<String> facts = new ArrayList<>();
+        String runId = longText(output, "run_id", "Worker run #");
+        if (runId == null) {
+            runId = longText(output, "runId", "Worker run #");
+        }
+        if (runId != null) {
+            facts.add(runId);
+        }
+        String accepted = booleanText(output, "accepted", "accepted=");
+        if (accepted != null) {
+            facts.add(accepted);
+        }
+        String workerStatus = text(output, "status", null);
+        if (workerStatus != null) {
+            facts.add(workerStatus);
+        }
+        if (!graphNodes.isEmpty()) {
+            facts.add("Graph nodes: " + graphNodes.size());
+        }
+        String summary = step.getStatus() == AgentStepStatus.SUCCESS
+                ? "后端已把本次 run 的启动契约发送给 Python Agent Worker。"
+                : "后端尝试启动 Python Agent Worker 失败，当前仍保留 Spring Boot 本地执行兜底。";
+        sections.add(section(
+                "worker",
+                "Agent Worker 启动桥",
+                step,
+                summary,
+                facts,
+                graphNodes.stream().limit(10).toList()
+        ));
     }
 
     private void addPlanSection(List<AgentRunReportSectionResponse> sections, AgentStep step) {
@@ -933,6 +981,11 @@ public class AgentTaskService {
         return value.isNumber() ? prefix + value.asLong() : null;
     }
 
+    private String booleanText(JsonNode node, String fieldName, String prefix) {
+        JsonNode value = node.path(fieldName);
+        return value.isBoolean() ? prefix + value.asBoolean() : null;
+    }
+
     private List<String> compactList(String... values) {
         List<String> compact = new ArrayList<>();
         for (String value : values) {
@@ -1054,6 +1107,42 @@ public class AgentTaskService {
 
     private void completeTaskStream(AgentTask task, AgentRun run, String message) {
         taskStreamService.publishStreamComplete(task, run, message);
+    }
+
+    private void startAgentWorkerIfEnabled(AgentTask task, AgentRun run) {
+        if (!agentWorkerGateway.isEnabled()) {
+            return;
+        }
+        Map<String, Object> input = new LinkedHashMap<>();
+        input.put("runId", run.getId());
+        input.put("taskId", task.getId());
+        input.put("projectId", task.getProject().getId());
+        input.put("repoPath", task.getProject().getLocalPath());
+        input.put("baseBranch", task.getProject().getDefaultBranch());
+        try {
+            AgentWorkerStartResult result = agentWorkerGateway.startRun(run);
+            saveStep(run, "agent_worker_start", AgentStepStatus.SUCCESS, input, result);
+        } catch (RuntimeException exception) {
+            saveStep(
+                    run,
+                    "agent_worker_start",
+                    AgentStepStatus.FAILED,
+                    input,
+                    Map.of("code", workerErrorCode(exception), "message", safeErrorMessage(exception)),
+                    safeErrorMessage(exception)
+            );
+        }
+    }
+
+    private String workerErrorCode(RuntimeException exception) {
+        if (exception instanceof ApiException apiException) {
+            return apiException.getCode();
+        }
+        return exception.getClass().getSimpleName();
+    }
+
+    private String safeErrorMessage(RuntimeException exception) {
+        return exception.getMessage() == null ? exception.getClass().getSimpleName() : exception.getMessage();
     }
 
     private void saveStep(AgentRun run, String name, AgentStepStatus status, Object input, Object output) {

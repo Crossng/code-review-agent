@@ -27,6 +27,8 @@ import com.repopilot.agent.repository.AgentRunRepository;
 import com.repopilot.agent.repository.AgentRunReportSnapshotRepository;
 import com.repopilot.agent.repository.AgentStepRepository;
 import com.repopilot.agent.repository.AgentTaskRepository;
+import com.repopilot.agent.worker.AgentWorkerGateway;
+import com.repopilot.agent.worker.AgentWorkerStartResult;
 import com.repopilot.common.ApiException;
 import com.repopilot.indexer.domain.CodeChunkType;
 import com.repopilot.indexer.domain.CodeSymbolType;
@@ -111,6 +113,9 @@ class AgentTaskServiceRegenerationTest {
     private ProjectWriteGuardService projectWriteGuardService;
 
     @Mock
+    private AgentWorkerGateway agentWorkerGateway;
+
+    @Mock
     private PlatformTransactionManager transactionManager;
 
     @Mock
@@ -143,6 +148,7 @@ class AgentTaskServiceRegenerationTest {
                 new ToolCallLogService(toolCallLogRepository, objectMapper),
                 taskStreamService,
                 projectWriteGuardService,
+                agentWorkerGateway,
                 new SyncTaskExecutor(),
                 transactionManager,
                 objectMapper
@@ -282,6 +288,63 @@ class AgentTaskServiceRegenerationTest {
                 .contains("src/main/java/com/example/demo/user/UserController.java")
                 .contains("com.example.demo.user.UserController")
                 .contains("User REST endpoints");
+    }
+
+    @Test
+    void runRecordsAgentWorkerStartStepWhenBridgeIsEnabled() {
+        Fixture fixture = fixture(AgentTaskStatus.CREATED);
+        stubSuccessfulPipeline(fixture);
+        when(agentWorkerGateway.isEnabled()).thenReturn(true);
+        when(agentWorkerGateway.startRun(any(AgentRun.class)))
+                .thenReturn(new AgentWorkerStartResult(
+                        200L,
+                        true,
+                        "QUEUED",
+                        List.of("load_task_context", "ensure_index", "plan_task")
+                ));
+
+        agentTaskService.run(fixture.task().getId(), fixture.user().getId());
+
+        verify(agentWorkerGateway).startRun(any(AgentRun.class));
+        ArgumentCaptor<AgentStep> stepCaptor = ArgumentCaptor.forClass(AgentStep.class);
+        verify(agentStepRepository, atLeastOnce()).save(stepCaptor.capture());
+        assertThat(stepCaptor.getAllValues())
+                .anySatisfy(step -> {
+                    assertThat(step.getStepName()).isEqualTo("agent_worker_start");
+                    assertThat(step.getStatus()).isEqualTo(AgentStepStatus.SUCCESS);
+                    assertThat(step.getOutputJson())
+                            .contains("\"run_id\":200")
+                            .contains("\"accepted\":true")
+                            .contains("\"graph_nodes\"");
+                });
+    }
+
+    @Test
+    void runKeepsLocalExecutorFallbackWhenAgentWorkerStartFails() {
+        Fixture fixture = fixture(AgentTaskStatus.CREATED);
+        stubSuccessfulPipeline(fixture);
+        when(agentWorkerGateway.isEnabled()).thenReturn(true);
+        when(agentWorkerGateway.startRun(any(AgentRun.class)))
+                .thenThrow(new ApiException(
+                        org.springframework.http.HttpStatus.BAD_GATEWAY,
+                        "AGENT_WORKER_START_FAILED",
+                        "worker unavailable"
+                ));
+
+        AgentRun run = agentTaskService.run(fixture.task().getId(), fixture.user().getId());
+
+        assertThat(run.getStatus()).isEqualTo(AgentRunStatus.SUCCESS);
+        assertThat(fixture.task().getStatus()).isEqualTo(AgentTaskStatus.WAITING_HUMAN_APPROVAL);
+        ArgumentCaptor<AgentStep> stepCaptor = ArgumentCaptor.forClass(AgentStep.class);
+        verify(agentStepRepository, atLeastOnce()).save(stepCaptor.capture());
+        assertThat(stepCaptor.getAllValues())
+                .anySatisfy(step -> {
+                    assertThat(step.getStepName()).isEqualTo("agent_worker_start");
+                    assertThat(step.getStatus()).isEqualTo(AgentStepStatus.FAILED);
+                    assertThat(step.getErrorMessage()).isEqualTo("worker unavailable");
+                    assertThat(step.getOutputJson()).contains("AGENT_WORKER_START_FAILED");
+                })
+                .anySatisfy(step -> assertThat(step.getStepName()).isEqualTo("waiting_human_approval"));
     }
 
     @Test

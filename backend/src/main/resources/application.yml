@@ -23,6 +23,10 @@ repopilot:
     secret: ${JWT_SECRET:change-me-to-a-long-random-secret-change-me}
     expiration-minutes: ${JWT_EXPIRATION_MINUTES:720}
   workspace-root: ${REPOPILOT_WORKSPACE_ROOT:../workspace}
+  agent-worker:
+    enabled: ${REPOPILOT_AGENT_WORKER_ENABLED:false}
+    base-url: ${REPOPILOT_AGENT_WORKER_URL:http://127.0.0.1:8090}
+    timeout-seconds: ${REPOPILOT_AGENT_WORKER_TIMEOUT_SECONDS:10}
   sandbox:
     docker-image: ${REPOPILOT_SANDBOX_IMAGE:maven:3.9-eclipse-temurin-17}
     timeout-seconds: ${REPOPILOT_SANDBOX_TIMEOUT_SECONDS:600}

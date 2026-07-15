@@ -35,6 +35,7 @@ import com.repopilot.agent.repository.AgentRunRepository;
 import com.repopilot.agent.repository.AgentRunReportSnapshotRepository;
 import com.repopilot.agent.repository.AgentStepRepository;
 import com.repopilot.agent.repository.AgentTaskRepository;
+import com.repopilot.agent.worker.AgentWorkerGateway;
 import com.repopilot.indexer.domain.CodeChunkType;
 import com.repopilot.indexer.domain.CodeSymbolType;
 import com.repopilot.indexer.dto.CodeSearchResponse;
@@ -145,6 +146,9 @@ class AgentTaskServiceFixtureCoderIntegrationTest {
     private ProjectWriteGuardService projectWriteGuardService;
 
     @Mock
+    private AgentWorkerGateway agentWorkerGateway;
+
+    @Mock
     private PlatformTransactionManager transactionManager;
 
     @Mock
@@ -252,6 +256,7 @@ class AgentTaskServiceFixtureCoderIntegrationTest {
                 new ToolCallLogService(toolCallLogRepository, objectMapper),
                 taskStreamService,
                 projectWriteGuardService,
+                agentWorkerGateway,
                 new SyncTaskExecutor(),
                 transactionManager,
                 objectMapper
