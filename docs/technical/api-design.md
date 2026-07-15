@@ -35,20 +35,25 @@ Authorization: Bearer <jwt>
 }
 ```
 
-### Internal Agent Worker Callback
+### Internal Agent Worker Callback And Tools
 
-Agent Worker 回写接口使用独立内部路径和专用 header，不使用用户 JWT：
+Agent Worker 内部接口使用独立内部路径和专用 header，不使用用户 JWT：
 
 ```text
 X-RepoPilot-Worker-Token: <worker-callback-token>
 ```
 
-该 token 由后端 `REPOPILOT_AGENT_WORKER_CALLBACK_TOKEN` 配置。未配置 token 时，内部回写接口返回 `AGENT_WORKER_CALLBACK_DISABLED`；token 缺失或不匹配时返回 `AGENT_WORKER_CALLBACK_FORBIDDEN`。
+该 token 由后端 `REPOPILOT_AGENT_WORKER_CALLBACK_TOKEN` 配置。未配置 token 时，内部接口返回 `AGENT_WORKER_CALLBACK_DISABLED`；token 缺失或不匹配时返回 `AGENT_WORKER_CALLBACK_FORBIDDEN`。
 
 | 方法 | 路径 | 功能 |
 | --- | --- | --- |
 | `POST` | `/internal/agent-worker/runs/{runId}/steps` | Agent Worker 回写 run step 证据 |
 | `POST` | `/internal/agent-worker/runs/{runId}/status` | Agent Worker 回写 task/run 状态 |
+| `GET` | `/internal/agent-worker/runs/{runId}/context` | Agent Worker 读取 run/task/project 上下文 |
+| `GET` | `/internal/agent-worker/runs/{runId}/project/files?maxDepth=6` | Agent Worker 按 run 读取项目文件树 |
+| `GET` | `/internal/agent-worker/runs/{runId}/project/file?path=...` | Agent Worker 按 run 读取仓库内单个文本文件 |
+| `GET` | `/internal/agent-worker/runs/{runId}/project/search?query=...&limit=8` | Agent Worker 按 run 检索代码 chunk |
+| `GET` | `/internal/agent-worker/runs/{runId}/project/symbols?type=CONTROLLER` | Agent Worker 按 run 读取 Java 符号 |
 
 Step 请求：
 
@@ -82,6 +87,8 @@ Status 请求：
 ```
 
 `task_status` 与 `run_status` 至少传一个。后端更新状态后会发布 `TASK_UPDATED`；`complete_stream=true` 时还会发布 `STREAM_COMPLETE`。`run_status=FAILED` 或 `CANCELLED` 时，`error_message` 会写入 `agent_run.error_message`。
+
+Tool 读取接口全部以 `runId` 为入口，后端从 run 反查 task 和 project，不要求 Worker 传用户 JWT 或直接持有任意 `projectId` 工具范围。`read_file` 只允许项目工作区内相对路径，拒绝绝对路径、`..` 越权路径和 `.git` 内部路径，单次读取默认限制为 200 KB。
 
 ## 2. Auth API
 

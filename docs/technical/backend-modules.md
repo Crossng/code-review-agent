@@ -138,6 +138,7 @@ CANCELLED
 - 已提供 `GET /api/agent/tasks/{id}/stream` SSE：连接后先发送当前 task/run/step 快照；任务运行中会继续推送 `TASK_UPDATED`、`STEP_RECORDED`，并在审批点、失败、取消或完成时发送 `STREAM_COMPLETE` 后关闭。
 - 可通过 `REPOPILOT_AGENT_WORKER_ENABLED=true` 打开 Agent Worker 启动桥；后台执行会调用 `${REPOPILOT_AGENT_WORKER_URL}/runs/{runId}/start` 并写入 `agent_worker_start` step，调用失败只记录失败证据，现阶段仍由 Spring Boot executor 继续兜底。
 - Agent Worker 可通过 `POST /api/internal/agent-worker/runs/{runId}/steps` 回写 step 证据，通过 `POST /api/internal/agent-worker/runs/{runId}/status` 回写 task/run 状态；内部 callback 由 `REPOPILOT_AGENT_WORKER_CALLBACK_TOKEN` 保护，成功落库后分别发布 `STEP_RECORDED`、`TASK_UPDATED`，并在 `complete_stream=true` 时发布 `STREAM_COMPLETE`。
+- Agent Worker 可通过 `GET /api/internal/agent-worker/runs/{runId}/context`、`/project/files`、`/project/file`、`/project/search` 和 `/project/symbols` 读取 run 作用域内的任务上下文、文件树、文件内容、代码检索结果和符号；后端按 run 反查 task/project，`read_file` 拒绝越权路径和 `.git` 内部路径，作为正式 MCP Tool Server 拆出前的内部工具桥。
 - 同一个项目同一时间 MVP 只允许一个写入型 Agent 任务运行，避免工作区冲突。
 
 ## 7. 异常处理

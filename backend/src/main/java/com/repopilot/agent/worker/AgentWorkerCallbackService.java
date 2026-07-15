@@ -1,8 +1,5 @@
 package com.repopilot.agent.worker;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -23,7 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class AgentWorkerCallbackService {
 
-    private final AgentWorkerProperties properties;
+    private final AgentWorkerTokenGuard tokenGuard;
     private final AgentRunRepository agentRunRepository;
     private final AgentTaskRepository agentTaskRepository;
     private final AgentStepRepository agentStepRepository;
@@ -31,14 +28,14 @@ public class AgentWorkerCallbackService {
     private final ObjectMapper objectMapper;
 
     public AgentWorkerCallbackService(
-            AgentWorkerProperties properties,
+            AgentWorkerTokenGuard tokenGuard,
             AgentRunRepository agentRunRepository,
             AgentTaskRepository agentTaskRepository,
             AgentStepRepository agentStepRepository,
             TaskStreamService taskStreamService,
             ObjectMapper objectMapper
     ) {
-        this.properties = properties;
+        this.tokenGuard = tokenGuard;
         this.agentRunRepository = agentRunRepository;
         this.agentTaskRepository = agentTaskRepository;
         this.agentStepRepository = agentStepRepository;
@@ -48,7 +45,7 @@ public class AgentWorkerCallbackService {
 
     @Transactional
     public AgentStepResponse recordStep(Long runId, String callbackToken, AgentWorkerStepRecordRequest request) {
-        requireValidToken(callbackToken);
+        tokenGuard.requireValidToken(callbackToken);
         AgentRun run = agentRunRepository.findById(runId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "AGENT_RUN_NOT_FOUND", "Agent run not found"));
         AgentStep step = agentStepRepository.save(new AgentStep(
@@ -69,7 +66,7 @@ public class AgentWorkerCallbackService {
             String callbackToken,
             AgentWorkerRunStatusUpdateRequest request
     ) {
-        requireValidToken(callbackToken);
+        tokenGuard.requireValidToken(callbackToken);
         if (request.taskStatus() == null && request.runStatus() == null) {
             throw new ApiException(
                     HttpStatus.BAD_REQUEST,
@@ -111,30 +108,6 @@ public class AgentWorkerCallbackService {
 
     private String blankToDefault(String value, String fallback) {
         return value == null || value.isBlank() ? fallback : value;
-    }
-
-    private void requireValidToken(String callbackToken) {
-        String expected = properties.getCallbackToken();
-        if (expected == null || expected.isBlank()) {
-            throw new ApiException(
-                    HttpStatus.FORBIDDEN,
-                    "AGENT_WORKER_CALLBACK_DISABLED",
-                    "Agent Worker callback token is not configured"
-            );
-        }
-        if (callbackToken == null || callbackToken.isBlank() || !constantTimeEquals(expected, callbackToken)) {
-            throw new ApiException(
-                    HttpStatus.FORBIDDEN,
-                    "AGENT_WORKER_CALLBACK_FORBIDDEN",
-                    "Agent Worker callback token is invalid"
-            );
-        }
-    }
-
-    private boolean constantTimeEquals(String expected, String actual) {
-        byte[] expectedBytes = expected.getBytes(StandardCharsets.UTF_8);
-        byte[] actualBytes = actual.getBytes(StandardCharsets.UTF_8);
-        return MessageDigest.isEqual(expectedBytes, actualBytes);
     }
 
     private String json(JsonNode node, String fallback) {

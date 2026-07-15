@@ -7,6 +7,7 @@
 ```bash
 ./scripts/agent-worker-smoke.sh
 ./scripts/agent-worker-callback-smoke.sh
+./scripts/agent-worker-tool-smoke.sh
 ```
 
 `agent-worker-smoke.sh` 用于验证 Python Agent Worker 的最小服务契约。它会：
@@ -24,6 +25,13 @@
 - 调用 `BackendApiClient.update_status(...)`。
 - 验证 `/api/internal/agent-worker/runs/{run_id}/steps` 与 `/api/internal/agent-worker/runs/{run_id}/status` 路径、`X-RepoPilot-Worker-Token` header、step JSON 和 status JSON。
 - 将证据写入 `output/agent-worker-callback-smoke/last-run.json`。
+
+`agent-worker-tool-smoke.sh` 用于验证 Python Agent Worker 的后端工具读取 client。它会：
+
+- 启动本地 HTTP stub。
+- 调用 `BackendApiClient.load_run_context(...)`、`list_project_files(...)`、`read_project_file(...)`、`search_code(...)` 和 `list_symbols(...)`。
+- 验证 `/api/internal/agent-worker/runs/{run_id}/context`、`/project/files`、`/project/file`、`/project/search` 与 `/project/symbols` 路径、`X-RepoPilot-Worker-Token` header 和 query 参数。
+- 将证据写入 `output/agent-worker-tool-smoke/last-run.json`。
 
 ## Real Token Demo Check
 
