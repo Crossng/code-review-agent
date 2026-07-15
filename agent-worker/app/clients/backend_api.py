@@ -4,7 +4,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from app.config import settings
-from app.schemas import AgentStepRecordRequest
+from app.schemas import AgentStatusUpdateRequest, AgentStepRecordRequest
 
 
 class BackendApiError(RuntimeError):
@@ -23,12 +23,23 @@ class BackendApiClient:
         self.timeout_seconds = timeout_seconds if timeout_seconds is not None else settings.backend_timeout_seconds
 
     def record_step(self, run_id: int, step: AgentStepRecordRequest) -> dict[str, Any]:
+        return self._post_callback(
+            f"/api/internal/agent-worker/runs/{run_id}/steps",
+            step.model_dump(exclude_none=True),
+        )
+
+    def update_status(self, run_id: int, status: AgentStatusUpdateRequest) -> dict[str, Any]:
+        return self._post_callback(
+            f"/api/internal/agent-worker/runs/{run_id}/status",
+            status.model_dump(exclude_none=True),
+        )
+
+    def _post_callback(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
         if not self.callback_token:
             raise BackendApiError("Backend callback token is not configured")
-        payload = step.model_dump(exclude_none=True)
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         request = Request(
-            f"{self.base_url}/api/internal/agent-worker/runs/{run_id}/steps",
+            f"{self.base_url}{path}",
             data=body,
             method="POST",
             headers={

@@ -21,7 +21,8 @@
 
 - 启动本地 HTTP stub。
 - 调用 `BackendApiClient.record_step(...)`。
-- 验证 `/api/internal/agent-worker/runs/{run_id}/steps` 路径、`X-RepoPilot-Worker-Token` header 和 step JSON。
+- 调用 `BackendApiClient.update_status(...)`。
+- 验证 `/api/internal/agent-worker/runs/{run_id}/steps` 与 `/api/internal/agent-worker/runs/{run_id}/status` 路径、`X-RepoPilot-Worker-Token` header、step JSON 和 status JSON。
 - 将证据写入 `output/agent-worker-callback-smoke/last-run.json`。
 
 ## Real Token Demo Check

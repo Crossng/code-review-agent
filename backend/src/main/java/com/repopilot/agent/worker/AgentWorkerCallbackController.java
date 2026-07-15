@@ -28,4 +28,13 @@ public class AgentWorkerCallbackController {
     ) {
         return ApiResponse.ok(callbackService.recordStep(runId, callbackToken, request));
     }
+
+    @PostMapping("/api/internal/agent-worker/runs/{runId}/status")
+    public ApiResponse<AgentWorkerRunStatusUpdateResponse> updateStatus(
+            @PathVariable Long runId,
+            @RequestHeader(name = CALLBACK_TOKEN_HEADER, required = false) String callbackToken,
+            @Valid @RequestBody AgentWorkerRunStatusUpdateRequest request
+    ) {
+        return ApiResponse.ok(callbackService.updateStatus(runId, callbackToken, request));
+    }
 }

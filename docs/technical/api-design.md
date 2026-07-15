@@ -48,8 +48,9 @@ X-RepoPilot-Worker-Token: <worker-callback-token>
 | 方法 | 路径 | 功能 |
 | --- | --- | --- |
 | `POST` | `/internal/agent-worker/runs/{runId}/steps` | Agent Worker 回写 run step 证据 |
+| `POST` | `/internal/agent-worker/runs/{runId}/status` | Agent Worker 回写 task/run 状态 |
 
-请求：
+Step 请求：
 
 ```json
 {
@@ -67,6 +68,20 @@ X-RepoPilot-Worker-Token: <worker-callback-token>
 ```
 
 响应返回标准 `AgentStepResponse`，其中 `inputJson` / `outputJson` 为落库后的 JSON 字符串。后端保存 step 后会发布 `STEP_RECORDED` 事件，前端已订阅的任务 SSE 可收到回写结果。
+
+Status 请求：
+
+```json
+{
+  "task_status": "WAITING_HUMAN_APPROVAL",
+  "run_status": "SUCCESS",
+  "error_message": null,
+  "stream_message": "Worker 已进入人工审批",
+  "complete_stream": true
+}
+```
+
+`task_status` 与 `run_status` 至少传一个。后端更新状态后会发布 `TASK_UPDATED`；`complete_stream=true` 时还会发布 `STREAM_COMPLETE`。`run_status=FAILED` 或 `CANCELLED` 时，`error_message` 会写入 `agent_run.error_message`。
 
 ## 2. Auth API
 

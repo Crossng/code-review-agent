@@ -28,3 +28,33 @@ class AgentStepRecordRequest(BaseModel):
     input: Optional[dict[str, Any]] = None
     output: Optional[dict[str, Any]] = None
     error_message: Optional[str] = Field(default=None, max_length=4000)
+
+
+class AgentStatusUpdateRequest(BaseModel):
+    task_status: Optional[
+        Literal[
+            "CREATED",
+            "REPO_INDEXING",
+            "PLANNING",
+            "RETRIEVING_CONTEXT",
+            "GENERATING_PATCH",
+            "APPLYING_PATCH_IN_SANDBOX",
+            "RUNNING_TESTS",
+            "REPAIRING",
+            "REVIEWING_PATCH",
+            "WAITING_HUMAN_APPROVAL",
+            "CREATING_PULL_REQUEST",
+            "DONE",
+            "FAILED_REPO_CLONE",
+            "FAILED_INDEXING",
+            "FAILED_CONTEXT_RETRIEVAL",
+            "FAILED_PATCH_GENERATION",
+            "FAILED_TEST",
+            "FAILED_PR_CREATION",
+            "CANCELLED",
+        ]
+    ] = None
+    run_status: Optional[Literal["RUNNING", "SUCCESS", "FAILED", "CANCELLED"]] = None
+    error_message: Optional[str] = Field(default=None, max_length=4000)
+    stream_message: Optional[str] = Field(default=None, max_length=4000)
+    complete_stream: bool = False

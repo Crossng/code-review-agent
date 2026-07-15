@@ -13,9 +13,11 @@ import java.util.UUID;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repopilot.agent.domain.AgentRun;
+import com.repopilot.agent.domain.AgentRunStatus;
 import com.repopilot.agent.domain.AgentStep;
 import com.repopilot.agent.domain.AgentStepStatus;
 import com.repopilot.agent.domain.AgentTask;
+import com.repopilot.agent.domain.AgentTaskStatus;
 import com.repopilot.agent.domain.AgentTaskType;
 import com.repopilot.agent.repository.AgentRunRepository;
 import com.repopilot.agent.repository.AgentStepRepository;
@@ -156,6 +158,68 @@ class AgentWorkerCallbackControllerIntegrationTest {
                 .andExpect(jsonPath("$.code").value("AGENT_WORKER_CALLBACK_FORBIDDEN"));
 
         assertThat(agentStepRepository.findByAgentRunIdOrderByStartedAtAsc(run.getId())).isEmpty();
+    }
+
+    @Test
+    void updateStatusRequiresCallbackTokenAndPersistsTaskAndRunStatus() throws Exception {
+        Map<String, Object> request = Map.of(
+                "task_status", "WAITING_HUMAN_APPROVAL",
+                "run_status", "SUCCESS",
+                "stream_message", "Worker 已进入人工审批",
+                "complete_stream", true
+        );
+
+        mockMvc.perform(post("/api/internal/agent-worker/runs/{runId}/status", run.getId())
+                        .header(AgentWorkerCallbackController.CALLBACK_TOKEN_HEADER, "test-worker-callback-token")
+                        .contentType(APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.taskId").value(task.getId()))
+                .andExpect(jsonPath("$.data.taskStatus").value("WAITING_HUMAN_APPROVAL"))
+                .andExpect(jsonPath("$.data.runId").value(run.getId()))
+                .andExpect(jsonPath("$.data.runStatus").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.streamCompleted").value(true));
+
+        AgentTask savedTask = agentTaskRepository.findById(task.getId()).orElseThrow();
+        AgentRun savedRun = agentRunRepository.findById(run.getId()).orElseThrow();
+        assertThat(savedTask.getStatus()).isEqualTo(AgentTaskStatus.WAITING_HUMAN_APPROVAL);
+        assertThat(savedRun.getStatus()).isEqualTo(AgentRunStatus.SUCCESS);
+        assertThat(savedRun.getFinishedAt()).isNotNull();
+        assertThat(savedRun.getErrorMessage()).isNull();
+    }
+
+    @Test
+    void updateStatusRejectsEmptyStatusPayload() throws Exception {
+        mockMvc.perform(post("/api/internal/agent-worker/runs/{runId}/status", run.getId())
+                        .header(AgentWorkerCallbackController.CALLBACK_TOKEN_HEADER, "test-worker-callback-token")
+                        .contentType(APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("stream_message", "nothing to update"))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value("AGENT_WORKER_STATUS_EMPTY"));
+    }
+
+    @Test
+    void updateStatusRejectsInvalidCallbackTokenBeforeJwtAuthentication() throws Exception {
+        Map<String, Object> request = Map.of(
+                "task_status", "FAILED_PATCH_GENERATION",
+                "run_status", "FAILED",
+                "error_message", "worker failed"
+        );
+
+        mockMvc.perform(post("/api/internal/agent-worker/runs/{runId}/status", run.getId())
+                        .header(AgentWorkerCallbackController.CALLBACK_TOKEN_HEADER, "wrong-token")
+                        .contentType(APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value("AGENT_WORKER_CALLBACK_FORBIDDEN"));
+
+        assertThat(agentTaskRepository.findById(task.getId()).orElseThrow().getStatus())
+                .isEqualTo(AgentTaskStatus.CREATED);
+        assertThat(agentRunRepository.findById(run.getId()).orElseThrow().getStatus())
+                .isEqualTo(AgentRunStatus.RUNNING);
     }
 
     private JsonNode jsonNode(String value) {
