@@ -2,6 +2,32 @@
 
 后续放本地开发、索引、演示、清理脚本。MVP 阶段优先保持脚本短小、可读、可重复执行。
 
+## Real Token Demo Check
+
+```bash
+./scripts/real-token-demo-check.sh
+```
+
+该脚本用于真实 token 演示前做环境体检，默认只提示缺项，不因为没有模型 key 或 GitHub token 失败。它会检查：
+
+- 项目关键文件、`git`、`java`、`mvn`、`npm`、`docker` 和 Docker Compose。
+- Docker daemon、PostgreSQL/Redis Compose 状态、沙箱镜像、超时和 Maven cache。
+- 真实 Coder 所需的 `REPOPILOT_CODER_MODE=openai-compatible`、`REPOPILOT_CODER_API_KEY`/`OPENAI_API_KEY` 和 `REPOPILOT_CODER_MODEL`。
+- 远端 GitHub PR 所需的 `REPOPILOT_GITHUB_ENABLED=true` 和 `REPOPILOT_GITHUB_TOKEN`/`GITHUB_TOKEN`。
+- 后端和前端端口是否已有进程监听。
+
+脚本只展示密钥是否配置，不打印 GitHub token、模型 key 或 Authorization header。正式演示前可使用严格模式：
+
+```bash
+./scripts/real-token-demo-check.sh --strict
+```
+
+如需先启动 PostgreSQL 和 Redis：
+
+```bash
+./scripts/real-token-demo-check.sh --start-deps
+```
+
 ## Browser Smoke
 
 ```bash

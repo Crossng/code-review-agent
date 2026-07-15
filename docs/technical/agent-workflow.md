@@ -126,6 +126,8 @@ LLM CoderAgent 的 raw response 必须满足以下契约，才能进入 `patch_r
 
 `openai-compatible` 模式已用本地 Chat Completions HTTP stub 做生产状态机级验证：Agent 会真实发送 Authorization header、模型名、diff-only system/developer prompt 和检索上下文，收到 raw diff 后继续进入同一 parser、安全预检、Docker 沙箱测试、ReviewAgent 和人工审批暂停点。真实 token 环境只需替换 API base URL、key 和 model，不改变后续安全链路。
 
+真实 token 演示前可运行 `./scripts/real-token-demo-check.sh` 做只读体检；默认模式会提示 `REPOPILOT_CODER_MODE=openai-compatible`、`REPOPILOT_CODER_API_KEY`/`OPENAI_API_KEY` 和 `REPOPILOT_CODER_MODEL` 是否到位但不失败，`--strict` 模式会在真实 Coder 缺项时返回非 0。脚本只展示密钥是否配置，不打印模型 key 或 Authorization header。
+
 `GET /api/settings/coder` 提供当前 Coder 模型入口的只读脱敏状态，前端可展示 mode、provider、model、API base URL、key 是否配置、fixture 是否配置、缺失项和支持模式，但不返回 API key、fixture response、organization 或 project 原文。
 
 ## 7. 检索输出格式

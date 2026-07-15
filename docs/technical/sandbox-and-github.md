@@ -104,6 +104,8 @@ REPOPILOT_GITHUB_API_BASE_URL=https://api.github.com
 
 本地开发默认 `REPOPILOT_GITHUB_ENABLED=false`，因此只生成本地分支、commit 和 `DRAFT_READY` 记录，不推送远端。
 
+真实远端 PR 演示前可运行 `./scripts/real-token-demo-check.sh` 做只读体检；默认模式会提示 Docker、PostgreSQL/Redis、沙箱镜像、Maven cache、`REPOPILOT_GITHUB_ENABLED=true` 和 `REPOPILOT_GITHUB_TOKEN`/`GITHUB_TOKEN` 是否到位但不失败，`--strict` 模式会在 Docker 或远端 PR 缺项时返回非 0。需要顺手启动基础依赖时可加 `--start-deps`。脚本只展示 token 是否配置，不打印 token 或 Authorization header。
+
 `GET /api/settings/github` 提供当前 GitHub 发布配置的只读脱敏状态，前端可展示 `LOCAL_DRAFT_ONLY` 或 `REMOTE_GITHUB_PR`、API base URL、token 是否配置和缺失项，但不返回 token 原文。
 
 `GET /api/tasks/{id}/pull-request/preflight` 提供任务级 PR 发布前置检查，覆盖任务状态、patch 审批、沙箱测试、本地草稿准备、远程 GitHub 仓库资格和 token 配置。该接口只读，不创建分支或 PR，供控制台在审批前后展示 blocker 和 warning。
