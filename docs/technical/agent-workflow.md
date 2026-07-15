@@ -128,6 +128,8 @@ LLM CoderAgent 的 raw response 必须满足以下契约，才能进入 `patch_r
 
 真实 token 演示前可运行 `./scripts/real-token-demo-check.sh` 做只读体检；默认模式会提示 `REPOPILOT_CODER_MODE=openai-compatible`、`REPOPILOT_CODER_API_KEY`/`OPENAI_API_KEY` 和 `REPOPILOT_CODER_MODEL` 是否到位但不失败，`--strict` 模式会在真实 Coder 缺项时返回非 0。脚本只展示密钥是否配置，不打印模型 key 或 Authorization header。
 
+真实模型 API 级端到端演示可运行 `./scripts/real-coder-demo.sh`。该脚本在真实 Coder 配置 ready 时创建临时用户和本地 demo 项目，发起一个不会命中 recipe catalog 的最小任务，要求模型只新增 `.repopilot/real-coder-demo-note.md`，然后验证 `LLM_CODER_DRAFT`、`OPENAI_COMPATIBLE`、`generate_patch` model call、diff 安全预检、Docker 沙箱 `mvn -q test` 和 `WAITING_HUMAN_APPROVAL` 暂停点。脚本会清理临时业务数据，并只输出脱敏证据。
+
 `GET /api/settings/coder` 提供当前 Coder 模型入口的只读脱敏状态，前端可展示 mode、provider、model、API base URL、key 是否配置、fixture 是否配置、缺失项和支持模式，但不返回 API key、fixture response、organization 或 project 原文。
 
 ## 7. 检索输出格式

@@ -28,6 +28,35 @@
 ./scripts/real-token-demo-check.sh --start-deps
 ```
 
+## Real Coder Demo
+
+```bash
+./scripts/real-coder-demo.sh
+```
+
+该脚本用于有真实模型 token 时跑一条 API 级端到端演示。它会：
+
+- 启动 PostgreSQL 和 Redis。
+- 若 `REPOPILOT_BACKEND_URL` 对应的后端未运行，则用当前 shell 的真实 Coder 环境变量临时启动后端。
+- 注册临时用户，创建本地 `examples/demo-spring-repo` 项目，执行 clone 和 index。
+- 创建一个不会命中本地 recipe 的小任务，要求模型只新增 `.repopilot/real-coder-demo-note.md`。
+- 启动 Agent run，并等待任务进入 `WAITING_HUMAN_APPROVAL`。
+- 验证 `generate_patch`、`validate_patch_safety`、`run_tests`、`review_patch` 成功。
+- 验证 patch 为 `generationMode=LLM_CODER_DRAFT`、`generationProvider=OPENAI_COMPATIBLE`，且沙箱 `mvn -q test` 通过。
+- 将脱敏后的运行证据写入 `output/real-coder-demo/last-run.json`。
+- 清理本次演示创建的临时用户、项目、任务、运行、补丁、测试、审批、PR 数据和脚本自启后端的 workspace。
+
+如果 8080 没有后端进程，运行前至少需要：
+
+```bash
+export REPOPILOT_CODER_MODE=openai-compatible
+export REPOPILOT_CODER_API_KEY=...
+export REPOPILOT_CODER_MODEL=...
+./scripts/real-coder-demo.sh
+```
+
+如果已有后端在运行，脚本会先通过 `GET /api/settings/coder` 检查后端实际 Coder 配置；若不是 `OPENAI_COMPATIBLE` 且 ready，则直接失败并提示重启后端。脚本不会打印模型 key、GitHub token 或 Authorization header。
+
 ## Browser Smoke
 
 ```bash
