@@ -1,0 +1,18 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:repopilot}
+    username: ${POSTGRES_USER:repopilot}
+    password: ${POSTGRES_PASSWORD:repopilot}
+  flyway:
+    enabled: true
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
+repopilot:
+  jwt:
+    secret: test-secret-for-repopilot-integration-tests-change-me
+    expiration-minutes: 60
+  workspace-root: ../target/repopilot-http-it-workspace
+  github:
+    enabled: false

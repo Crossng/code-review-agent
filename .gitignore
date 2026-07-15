@@ -1,0 +1,41 @@
+# macOS
+.DS_Store
+
+# IDE / editor
+.idea/
+*.iml
+
+# Environment and secrets
+.env
+.env.local
+*.local
+
+# Java / Maven
+.m2/
+target/
+backend/target/
+mcp-tool-server/target/
+*.class
+
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
+
+# Python
+agent-worker/.venv/
+agent-worker/__pycache__/
+agent-worker/.pytest_cache/
+*.pyc
+
+# RepoPilot runtime workspace
+workspace/
+output/
+examples/demo-spring-repo/.git/
+
+# Logs
+*.log
+logs/

@@ -1,0 +1,2 @@
+"""RepoPilot agent worker package."""
+

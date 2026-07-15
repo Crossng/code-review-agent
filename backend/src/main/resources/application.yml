@@ -1,0 +1,51 @@
+server:
+  port: ${BACKEND_PORT:8080}
+
+spring:
+  application:
+    name: repopilot-backend
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:repopilot}
+    username: ${POSTGRES_USER:repopilot}
+    password: ${POSTGRES_PASSWORD:repopilot}
+  flyway:
+    enabled: true
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+
+repopilot:
+  jwt:
+    secret: ${JWT_SECRET:change-me-to-a-long-random-secret-change-me}
+    expiration-minutes: ${JWT_EXPIRATION_MINUTES:720}
+  workspace-root: ${REPOPILOT_WORKSPACE_ROOT:../workspace}
+  sandbox:
+    docker-image: ${REPOPILOT_SANDBOX_IMAGE:maven:3.9-eclipse-temurin-17}
+    timeout-seconds: ${REPOPILOT_SANDBOX_TIMEOUT_SECONDS:600}
+    maven-cache: ${REPOPILOT_MAVEN_CACHE:../.m2}
+    docker-check-enabled: ${REPOPILOT_SANDBOX_DOCKER_CHECK_ENABLED:true}
+  coder:
+    mode: ${REPOPILOT_CODER_MODE:disabled}
+    fixture-response: ${REPOPILOT_CODER_FIXTURE_RESPONSE:}
+    api-base-url: ${REPOPILOT_CODER_API_BASE_URL:https://api.openai.com/v1}
+    api-key: ${REPOPILOT_CODER_API_KEY:${OPENAI_API_KEY:}}
+    model: ${REPOPILOT_CODER_MODEL:}
+    timeout-seconds: ${REPOPILOT_CODER_TIMEOUT_SECONDS:120}
+    max-completion-tokens: ${REPOPILOT_CODER_MAX_COMPLETION_TOKENS:4096}
+    instruction-role: ${REPOPILOT_CODER_INSTRUCTION_ROLE:developer}
+    organization: ${REPOPILOT_CODER_ORGANIZATION:}
+    project: ${REPOPILOT_CODER_PROJECT:}
+  github:
+    enabled: ${REPOPILOT_GITHUB_ENABLED:false}
+    api-base-url: ${REPOPILOT_GITHUB_API_BASE_URL:https://api.github.com}
+    token: ${REPOPILOT_GITHUB_TOKEN:${GITHUB_TOKEN:}}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
