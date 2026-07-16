@@ -47,6 +47,7 @@
 - 验证 Worker 在安全预检通过后调用 `/patches/{patchId}/sandbox-tests` 触发后端沙箱应用和 Maven 测试。
 - 验证 Worker 在沙箱测试通过后调用 `/patches/{patchId}/review` 触发后端规则化风险审查。
 - 验证 Worker 在风险审查通过后调用 `/patches/{patchId}/approval-ready` 触发后端 `WAITING_HUMAN_APPROVAL` 暂停点。
+- Worker 进入审批暂停点后的用户 approve 和本地 PR 准备链路由后端集成测试覆盖，避免 smoke 脚本绕过人工审批边界。
 - 将证据写入 `output/agent-worker-node-smoke/last-run.json`。
 
 ## Real Token Demo Check

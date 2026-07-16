@@ -140,7 +140,7 @@ Patch 请求：
 
 响应返回标准 `PatchRecordResponse`。后端按 `runId` 绑定到已有 `agent_run` 和 `agent_task`，未传 `base_branch` 时使用项目默认分支，未传 `target_branch` 时使用 `repopilot/task-{taskId}`。该接口只负责持久化 Worker 生成的 patch draft，不会绕过后续 diff 安全预检、沙箱测试、风险审查和人工审批。
 
-Patch 后置门接口 `safety`、`sandbox-tests`、`review` 和 `approval-ready` 使用空 JSON body。`review` 会校验 patch 属于当前 run，并要求 patch 已经在 sandbox-tests 中成功应用且最新 `test_run.status=PASSED`；通过后复用 `PatchRiskReviewService` 生成 `riskLevel`、`summary` 和 `findings`，同时写入 `review_patch` model call audit 与 step 证据。`approval-ready` 会再次校验 patch 属于当前 run、最新测试通过且同一 patch 已有成功 `review_patch` step，然后写入 `waiting_human_approval` PENDING step，把 task 标为 `WAITING_HUMAN_APPROVAL`、run 标为 `SUCCESS`，并发布 `STREAM_COMPLETE`。该接口只进入人工审批暂停点，不会 approve patch 或创建 PR。
+Patch 后置门接口 `safety`、`sandbox-tests`、`review` 和 `approval-ready` 使用空 JSON body。`review` 会校验 patch 属于当前 run，并要求 patch 已经在 sandbox-tests 中成功应用且最新 `test_run.status=PASSED`；通过后复用 `PatchRiskReviewService` 生成 `riskLevel`、`summary` 和 `findings`，同时写入 `review_patch` model call audit 与 step 证据。`approval-ready` 会再次校验 patch 属于当前 run、最新测试通过且同一 patch 已有成功 `review_patch` step，然后写入 `waiting_human_approval` PENDING step，把 task 标为 `WAITING_HUMAN_APPROVAL`、run 标为 `SUCCESS`，并发布 `STREAM_COMPLETE`。该接口只进入人工审批暂停点，不会 approve patch 或创建 PR。进入暂停点后，Worker patch 与本地 executor patch 使用同一组用户接口：`POST /api/tasks/{id}/approval/approve` 将 patch 标为 `APPROVED` 并推进到 `CREATING_PULL_REQUEST`，`POST /api/tasks/{id}/pull-request` 再校验 approved patch 与通过的测试，准备本地 target branch、commit 和 `DRAFT_READY` PR 记录。
 
 Status 请求：
 

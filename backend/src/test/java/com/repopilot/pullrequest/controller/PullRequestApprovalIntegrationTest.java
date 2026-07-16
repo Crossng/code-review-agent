@@ -20,12 +20,17 @@ import java.util.UUID;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repopilot.agent.domain.AgentRun;
+import com.repopilot.agent.domain.AgentRunStatus;
+import com.repopilot.agent.domain.AgentStep;
+import com.repopilot.agent.domain.AgentStepStatus;
 import com.repopilot.agent.domain.AgentTask;
 import com.repopilot.agent.domain.AgentTaskStatus;
 import com.repopilot.agent.domain.AgentTaskType;
 import com.repopilot.agent.repository.AgentRunRepository;
+import com.repopilot.agent.repository.AgentStepRepository;
 import com.repopilot.agent.repository.AgentTaskRepository;
 import com.repopilot.patch.domain.PatchRecord;
+import com.repopilot.patch.domain.PatchStatus;
 import com.repopilot.patch.repository.PatchRecordRepository;
 import com.repopilot.project.domain.Project;
 import com.repopilot.project.domain.ProjectStatus;
@@ -46,7 +51,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
-@SpringBootTest
+@SpringBootTest(properties = "repopilot.agent-worker.callback-token=test-worker-callback-token")
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class PullRequestApprovalIntegrationTest {
@@ -82,6 +87,9 @@ class PullRequestApprovalIntegrationTest {
 
     @Autowired
     private AgentRunRepository agentRunRepository;
+
+    @Autowired
+    private AgentStepRepository agentStepRepository;
 
     @Autowired
     private PatchRecordRepository patchRecordRepository;
@@ -208,6 +216,95 @@ class PullRequestApprovalIntegrationTest {
                 .andExpect(jsonPath("$.code").value("PATCH_TEST_NOT_PASSED"));
     }
 
+    @Test
+    void workerGeneratedPatchCanBeApprovedAndPreparedAsLocalPullRequest() throws Exception {
+        String token = register(email);
+        Fixture fixture = createWorkerFixture();
+
+        mockMvc.perform(post("/api/internal/agent-worker/runs/{runId}/patches/{patchId}/review",
+                        fixture.task().getCurrentRun().getId(),
+                        fixture.patch().getId())
+                        .header("X-RepoPilot-Worker-Token", "test-worker-callback-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.patchId").value(fixture.patch().getId()))
+                .andExpect(jsonPath("$.data.stepStatus").value("SUCCESS"));
+
+        mockMvc.perform(post("/api/internal/agent-worker/runs/{runId}/patches/{patchId}/approval-ready",
+                        fixture.task().getCurrentRun().getId(),
+                        fixture.patch().getId())
+                        .header("X-RepoPilot-Worker-Token", "test-worker-callback-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.taskStatus").value("WAITING_HUMAN_APPROVAL"))
+                .andExpect(jsonPath("$.data.runStatus").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.approvalStepStatus").value("PENDING"))
+                .andExpect(jsonPath("$.data.streamCompleted").value(true));
+
+        AgentTask waitingTask = agentTaskRepository.findById(fixture.task().getId()).orElseThrow();
+        AgentRun finishedRun = agentRunRepository.findById(fixture.task().getCurrentRun().getId()).orElseThrow();
+        PatchRecord workerPatch = patchRecordRepository.findById(fixture.patch().getId()).orElseThrow();
+        assertThat(waitingTask.getStatus()).isEqualTo(AgentTaskStatus.WAITING_HUMAN_APPROVAL);
+        assertThat(finishedRun.getStatus()).isEqualTo(AgentRunStatus.SUCCESS);
+        assertThat(workerPatch.getStatus()).isEqualTo(PatchStatus.APPLIED);
+        assertThat(workerPatch.getGenerationMode()).isEqualTo("WORKER_SAFE_PLANNING_DRAFT");
+        assertThat(workerPatch.getGenerationProvider()).isEqualTo("AGENT_WORKER");
+        assertThat(workerPatch.getGenerationModel()).isEqualTo("worker-retrieval-plan-v1");
+        assertThat(agentStepRepository.findByAgentRunIdOrderByStartedAtAsc(finishedRun.getId()))
+                .extracting(AgentStep::getStepName)
+                .contains("review_patch", "waiting_human_approval");
+
+        mockMvc.perform(get("/api/tasks/{taskId}/pull-request/preflight", fixture.task().getId())
+                        .header(AUTHORIZATION, bearer(token)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.canPrepare").value(false))
+                .andExpect(jsonPath("$.data.taskStatus").value("WAITING_HUMAN_APPROVAL"))
+                .andExpect(jsonPath("$.data.latestPatchStatus").value("APPLIED"))
+                .andExpect(jsonPath("$.data.latestTestStatus").value("PASSED"))
+                .andExpect(jsonPath("$.data.blockers[0]").value("准备 PR 前需要先审批已测试通过的补丁。"));
+
+        mockMvc.perform(post("/api/tasks/{taskId}/approval/approve", fixture.task().getId())
+                        .header(AUTHORIZATION, bearer(token))
+                        .contentType(APPLICATION_JSON)
+                        .content(json(Map.of(
+                                "patchId", fixture.patch().getId(),
+                                "comment", "Worker 补丁已通过测试和审查，同意准备 PR。"
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.action").value("APPROVE"))
+                .andExpect(jsonPath("$.data.patchStatus").value("APPROVED"))
+                .andExpect(jsonPath("$.data.taskStatus").value("CREATING_PULL_REQUEST"));
+
+        mockMvc.perform(get("/api/tasks/{taskId}/pull-request/preflight", fixture.task().getId())
+                        .header(AUTHORIZATION, bearer(token)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.canPrepare").value(true))
+                .andExpect(jsonPath("$.data.latestPatchStatus").value("APPROVED"))
+                .andExpect(jsonPath("$.data.latestTestStatus").value("PASSED"))
+                .andExpect(jsonPath("$.data.localDraftReady").value(true))
+                .andExpect(jsonPath("$.data.blockers").isEmpty());
+
+        MvcResult prepareResult = mockMvc.perform(post("/api/tasks/{taskId}/pull-request", fixture.task().getId())
+                        .header(AUTHORIZATION, bearer(token)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.status").value("DRAFT_READY"))
+                .andExpect(jsonPath("$.data.taskStatus").value("DONE"))
+                .andExpect(jsonPath("$.data.targetBranch").value(fixture.patch().getTargetBranch()))
+                .andReturn();
+
+        JsonNode pullRequest = data(prepareResult);
+        String commitSha = pullRequest.path("commitSha").asText();
+        assertThat(commitSha).isNotBlank();
+        assertThat(git(repositoryPath, "show", commitSha + ":README.md"))
+                .contains("hello from repopilot")
+                .contains("prepared by worker patch");
+        assertThat(git(repositoryPath, "show", "-s", "--format=%B", commitSha))
+                .contains("由 RepoPilot 生成。")
+                .contains("补丁：#" + fixture.patch().getId())
+                .contains("测试：mvn test 已通过");
+    }
+
     private Fixture createFixture(TestRunStatus testStatus) throws Exception {
         User owner = userRepository.findByEmail(email).orElseThrow();
         repositoryPath = createRepository();
@@ -246,6 +343,79 @@ class PullRequestApprovalIntegrationTest {
                 1200,
                 testStatus == TestRunStatus.PASSED ? "" : "failing test",
                 testStatus
+        ));
+        return new Fixture(task, patch);
+    }
+
+    private Fixture createWorkerFixture() throws Exception {
+        User owner = userRepository.findByEmail(email).orElseThrow();
+        repositoryPath = createRepository();
+        Project project = new Project(owner, repositoryPath.toUri().toString(), "example/worker-pr-http", "main");
+        project.setLocalPath(repositoryPath.toString());
+        project.setStatus(ProjectStatus.READY);
+        project = projectRepository.save(project);
+
+        AgentTask task = agentTaskRepository.save(new AgentTask(
+                project,
+                owner,
+                AgentTaskType.FEATURE,
+                "Worker patch approval PR",
+                "Prepare a pull request from a Worker-generated patch."
+        ));
+        AgentRun run = agentRunRepository.save(new AgentRun(task));
+        task.setCurrentRun(run);
+        task = agentTaskRepository.save(task);
+
+        String workerDiff = """
+                diff --git a/README.md b/README.md
+                --- a/README.md
+                +++ b/README.md
+                @@ -1 +1,2 @@
+                 hello from repopilot
+                +prepared by worker patch
+                """;
+        PatchRecord patch = new PatchRecord(
+                task,
+                run,
+                "main",
+                "repopilot/worker-http-it-" + task.getId(),
+                workerDiff,
+                "Worker 生成并通过审查的补丁",
+                "WORKER_SAFE_PLANNING_DRAFT",
+                "AGENT_WORKER",
+                "worker-retrieval-plan-v1"
+        );
+        patch.markApplied();
+        patch = patchRecordRepository.save(patch);
+        testRunRepository.save(new TestRun(
+                run,
+                patch,
+                "mvn -q test",
+                0,
+                1200,
+                "BUILD SUCCESS",
+                TestRunStatus.PASSED
+        ));
+        agentStepRepository.save(new AgentStep(
+                run,
+                "validate_patch_safety",
+                AgentStepStatus.SUCCESS,
+                json(Map.of("patchId", patch.getId(), "source", "agent-worker")),
+                json(Map.of("safe", true, "changedPaths", List.of("README.md"), "findings", List.of()))
+        ));
+        agentStepRepository.save(new AgentStep(
+                run,
+                "apply_patch",
+                AgentStepStatus.SUCCESS,
+                json(Map.of("patchId", patch.getId(), "source", "agent-worker")),
+                json(Map.of("exitCode", 0))
+        ));
+        agentStepRepository.save(new AgentStep(
+                run,
+                "run_tests",
+                AgentStepStatus.SUCCESS,
+                json(Map.of("patchId", patch.getId(), "source", "agent-worker")),
+                json(Map.of("status", "PASSED", "exitCode", 0))
         ));
         return new Fixture(task, patch);
     }

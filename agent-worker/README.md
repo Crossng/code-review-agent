@@ -154,7 +154,7 @@ client.record_patch(
 )
 ```
 
-The backend binds the patch to the existing run/task, fills default branches when omitted and returns the standard `PatchRecordResponse`. After persistence, the worker can call `validate_patch_safety(...)`, `run_patch_sandbox_tests(...)`, `review_patch(...)` and `mark_patch_ready_for_approval(...)` to let the backend record the same safety, sandbox, automated review and approval checkpoint evidence used by the local executor. The approval-ready bridge only enters `WAITING_HUMAN_APPROVAL`; creating a PR still requires a human approval action.
+The backend binds the patch to the existing run/task, fills default branches when omitted and returns the standard `PatchRecordResponse`. After persistence, the worker can call `validate_patch_safety(...)`, `run_patch_sandbox_tests(...)`, `review_patch(...)` and `mark_patch_ready_for_approval(...)` to let the backend record the same safety, sandbox, automated review and approval checkpoint evidence used by the local executor. The approval-ready bridge only enters `WAITING_HUMAN_APPROVAL`; creating a PR still requires a human approval action, then the standard approval and pull-request APIs prepare the local target branch, commit and `DRAFT_READY` PR record.
 
 ## Backend Tool Bridge
 
@@ -194,4 +194,4 @@ Next implementation steps:
 
 1. Replace the lightweight graph runner with a real LangGraph graph once node contracts stabilize.
 2. Attach future Worker model calls to `record_model_call(...)` automatically.
-3. Connect Worker-approved patches to the post-approval PR creation chain.
+3. Exercise Worker-approved patches against real remote GitHub PR publishing once a token-backed demo repository is available.
