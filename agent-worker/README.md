@@ -20,6 +20,7 @@ Current slice:
 ../scripts/agent-worker-planner-smoke.sh
 ../scripts/agent-worker-coder-smoke.sh
 ../scripts/agent-worker-coder-model-smoke.sh
+../scripts/agent-worker-business-smoke.sh
 ```
 
 The contract smoke script checks:
@@ -88,6 +89,14 @@ The planner smoke script checks:
 - The worker parses the assistant raw diff into `LLM_CODER_DRAFT`, records `generate_patch / OPENAI_COMPATIBLE` model call audit and continues through safety, sandbox, review and approval-ready gates.
 - The Coder API key is not written into model call prompt/response audit payloads.
 - Evidence is written to `output/agent-worker-coder-model-smoke/last-run.json`.
+
+`agent-worker-business-smoke.sh` verifies the Worker Coder business loop against the real Spring Boot backend:
+
+- PostgreSQL/Redis, Spring Boot backend, FastAPI worker and a local OpenAI-compatible Coder stub are started together.
+- The script creates and indexes the local demo Spring repository.
+- A Worker-only run is created so the evidence comes from the Worker path instead of the Spring Boot fallback executor.
+- The Worker Coder stub generates a real Java diff for `GET /api/users/summary`, records `LLM_CODER_DRAFT / OPENAI_COMPATIBLE`, passes safety, Docker Maven tests, review and approval-ready gates, then uses the standard user approval and local PR draft APIs.
+- Evidence is written to `output/agent-worker-business-smoke/last-run.json`.
 
 ## Backend Start Bridge
 
@@ -303,6 +312,6 @@ This keeps LangGraph wiring small and makes future model-backed nodes easier to 
 
 Next implementation steps:
 
-1. Add a Worker Planner node smoke with a local OpenAI-compatible stub.
-2. Replace deterministic planning/patch draft logic with model-backed nodes one node at a time.
+1. Promote the Worker-only business smoke path toward the backend Worker bridge as the primary execution path.
+2. Keep expanding model-backed Coder business scenarios while preserving parser, safety, sandbox, review and approval gates.
 3. Exercise Worker-approved patches against real remote GitHub PR publishing once a token-backed demo repository is available.

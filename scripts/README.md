@@ -12,6 +12,7 @@
 ./scripts/agent-worker-planner-smoke.sh
 ./scripts/agent-worker-coder-smoke.sh
 ./scripts/agent-worker-coder-model-smoke.sh
+./scripts/agent-worker-business-smoke.sh
 ```
 
 `agent-worker-smoke.sh` 用于验证 Python Agent Worker 的最小服务契约。它会：
@@ -83,6 +84,16 @@
 - 验证模型 diff 仍进入 safety、sandbox、review 和 approval-ready 后置门。
 - 验证 Coder API key 只进入 Authorization header，不写入 prompt/response 审计。
 - 将证据写入 `output/agent-worker-coder-model-smoke/last-run.json`。
+
+`agent-worker-business-smoke.sh` 用于验证 Worker Coder 模型 patch 在真实 Spring Boot 后端里的业务闭环。它会：
+
+- 启动 PostgreSQL/Redis、真实 Spring Boot 后端、真实 FastAPI Worker 和本地 OpenAI-compatible Coder 模型 stub。
+- 创建临时用户、本地 `examples/demo-spring-repo` 项目，执行 clone 和 index。
+- 创建 Worker-only run，直接调用 Worker `/runs/{runId}/start`，避免 Spring Boot 本地 executor 兜底链路混入证据。
+- 让 Worker Coder stub 生成真实 Java diff：给 User 模块新增 `GET /api/users/summary` 汇总接口。
+- 验证 `LLM_CODER_DRAFT`、`OPENAI_COMPATIBLE`、模型 token usage、密钥不落审计、工具读取审计、diff 安全预检、Docker 沙箱 `mvn -q test`、风险审查和人工审批暂停点。
+- 使用标准用户 JWT 审批 Worker patch，随后调用 PR preflight 和 `/pull-request`，验证本地 `DRAFT_READY` 分支/commit 草稿可准备。
+- 将证据写入 `output/agent-worker-business-smoke/last-run.json`，并清理本次临时业务数据和 workspace。
 
 ## Real Token Demo Check
 
