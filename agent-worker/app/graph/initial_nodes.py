@@ -399,7 +399,11 @@ def generate_patch(
                 output["sandbox"] = sandbox_data
                 if isinstance(sandbox_data, dict) and sandbox_data.get("testsPassed") is True:
                     review_response = backend.review_patch(run_id, int(patch_id))
-                    output["review"] = review_response.get("data")
+                    review_data = review_response.get("data")
+                    output["review"] = review_data
+                    if isinstance(review_data, dict) and review_data.get("stepStatus") == "SUCCESS":
+                        approval_response = backend.mark_patch_ready_for_approval(run_id, int(patch_id))
+                        output["approval"] = approval_response.get("data")
         except Exception as error:  # noqa: BLE001 - post-patch gates are reported without duplicating generate_patch failure
             output["postPatchGateError"] = str(error)[:1000]
     return output

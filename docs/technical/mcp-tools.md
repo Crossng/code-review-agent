@@ -241,9 +241,10 @@ POST /api/internal/agent-worker/runs/{runId}/patches
 POST /api/internal/agent-worker/runs/{runId}/patches/{patchId}/safety
 POST /api/internal/agent-worker/runs/{runId}/patches/{patchId}/sandbox-tests
 POST /api/internal/agent-worker/runs/{runId}/patches/{patchId}/review
+POST /api/internal/agent-worker/runs/{runId}/patches/{patchId}/approval-ready
 ```
 
-这些接口继续使用 `X-RepoPilot-Worker-Token`，后端按 `runId` 绑定到已有 `agent_run`；tool/model 审计复用本地 executor 的 JSON 截断和敏感字段脱敏逻辑，patch draft 落入既有 `patch_record`。Worker 可在 patch draft 持久化后调用 safety 接口，后端复用 `PatchDiffSafetyService` 记录 `validate_patch_safety` step；安全通过后可调用 sandbox-tests 接口，后端复用 `SandboxTestService` 执行 workspace 准备、`git apply` 和 `mvn -q test`，写入 `apply_patch`、`run_tests` step 与 `test_run`；沙箱测试通过后可调用 review 接口，后端复用 `PatchRiskReviewService` 与 `ModelCallLogService` 写入规则化风险审查 model audit 和 `review_patch` step。通过后仍必须继续进入人工审批。
+这些接口继续使用 `X-RepoPilot-Worker-Token`，后端按 `runId` 绑定到已有 `agent_run`；tool/model 审计复用本地 executor 的 JSON 截断和敏感字段脱敏逻辑，patch draft 落入既有 `patch_record`。Worker 可在 patch draft 持久化后调用 safety 接口，后端复用 `PatchDiffSafetyService` 记录 `validate_patch_safety` step；安全通过后可调用 sandbox-tests 接口，后端复用 `SandboxTestService` 执行 workspace 准备、`git apply` 和 `mvn -q test`，写入 `apply_patch`、`run_tests` step 与 `test_run`；沙箱测试通过后可调用 review 接口，后端复用 `PatchRiskReviewService` 与 `ModelCallLogService` 写入规则化风险审查 model audit 和 `review_patch` step；review 通过后可调用 approval-ready 接口，后端写入 `waiting_human_approval` step、把 run 标为 `SUCCESS` 并关闭任务 stream。通过后仍必须等待人工 approve 才能创建 PR。
 Worker 的 run-scoped 仓库读取 client 已经把 `load_run_context`、`list_project_files`、`read_project_file`、`search_code` 和 `list_symbols` 自动接入 `/tool-calls`；审计写入失败会被忽略，避免日志管道故障影响主工具读取。
 
 ## 5. 安全规则

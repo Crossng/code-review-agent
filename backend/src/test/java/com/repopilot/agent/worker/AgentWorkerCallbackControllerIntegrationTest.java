@@ -642,6 +642,87 @@ class AgentWorkerCallbackControllerIntegrationTest {
     }
 
     @Test
+    void markPatchReadyForApprovalRequiresPassedReviewAndRecordsApprovalCheckpoint() throws Exception {
+        PatchRecord patch = saveWorkerSafePatch();
+        patch.markApplied();
+        patch = patchRecordRepository.save(patch);
+        TestRun testRun = saveWorkerTestRun(patch, TestRunStatus.PASSED, 0, "BUILD SUCCESS");
+        AgentStep reviewStep = saveWorkerReviewStep(patch, testRun);
+
+        mockMvc.perform(post("/api/internal/agent-worker/runs/{runId}/patches/{patchId}/approval-ready", run.getId(), patch.getId())
+                        .header(AgentWorkerCallbackController.CALLBACK_TOKEN_HEADER, "test-worker-callback-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.patchId").value(patch.getId()))
+                .andExpect(jsonPath("$.data.agentTaskId").value(task.getId()))
+                .andExpect(jsonPath("$.data.agentRunId").value(run.getId()))
+                .andExpect(jsonPath("$.data.testRunId").value(testRun.getId()))
+                .andExpect(jsonPath("$.data.reviewStepId").value(reviewStep.getId()))
+                .andExpect(jsonPath("$.data.approvalStepId").exists())
+                .andExpect(jsonPath("$.data.approvalStepStatus").value("PENDING"))
+                .andExpect(jsonPath("$.data.taskStatus").value("WAITING_HUMAN_APPROVAL"))
+                .andExpect(jsonPath("$.data.runStatus").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.streamCompleted").value(true));
+
+        List<AgentStep> steps = agentStepRepository.findByAgentRunIdOrderByStartedAtAsc(run.getId());
+        assertThat(steps).extracting(AgentStep::getStepName)
+                .containsExactly("review_patch", "waiting_human_approval");
+        AgentStep approvalStep = steps.get(1);
+        assertThat(approvalStep.getStatus()).isEqualTo(AgentStepStatus.PENDING);
+        assertThat(jsonNode(approvalStep.getInputJson()).path("patchId").asLong()).isEqualTo(patch.getId());
+        assertThat(jsonNode(approvalStep.getInputJson()).path("testRunId").asLong()).isEqualTo(testRun.getId());
+        assertThat(jsonNode(approvalStep.getInputJson()).path("reviewStepId").asLong()).isEqualTo(reviewStep.getId());
+        assertThat(jsonNode(approvalStep.getInputJson()).path("source").asText()).isEqualTo("agent-worker");
+        assertThat(jsonNode(approvalStep.getInputJson()).path("status").asText()).isEqualTo("APPLIED");
+        assertThat(approvalStep.getOutputJson()).isNull();
+        assertThat(approvalStep.getFinishedAt()).isNull();
+
+        AgentTask savedTask = agentTaskRepository.findById(task.getId()).orElseThrow();
+        AgentRun savedRun = agentRunRepository.findById(run.getId()).orElseThrow();
+        assertThat(savedTask.getStatus()).isEqualTo(AgentTaskStatus.WAITING_HUMAN_APPROVAL);
+        assertThat(savedRun.getStatus()).isEqualTo(AgentRunStatus.SUCCESS);
+        assertThat(savedRun.getFinishedAt()).isNotNull();
+        assertThat(savedRun.getErrorMessage()).isNull();
+    }
+
+    @Test
+    void markPatchReadyForApprovalRejectsPatchWithoutPassedReview() throws Exception {
+        PatchRecord patch = saveWorkerSafePatch();
+        patch.markApplied();
+        patch = patchRecordRepository.save(patch);
+        saveWorkerTestRun(patch, TestRunStatus.PASSED, 0, "BUILD SUCCESS");
+
+        mockMvc.perform(post("/api/internal/agent-worker/runs/{runId}/patches/{patchId}/approval-ready", run.getId(), patch.getId())
+                        .header(AgentWorkerCallbackController.CALLBACK_TOKEN_HEADER, "test-worker-callback-token"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value("PATCH_REVIEW_NOT_PASSED"));
+
+        assertThat(agentStepRepository.findByAgentRunIdOrderByStartedAtAsc(run.getId())).isEmpty();
+        assertThat(agentTaskRepository.findById(task.getId()).orElseThrow().getStatus())
+                .isEqualTo(AgentTaskStatus.CREATED);
+        assertThat(agentRunRepository.findById(run.getId()).orElseThrow().getStatus())
+                .isEqualTo(AgentRunStatus.RUNNING);
+    }
+
+    @Test
+    void markPatchReadyForApprovalRejectsInvalidCallbackTokenBeforeJwtAuthentication() throws Exception {
+        PatchRecord patch = saveWorkerSafePatch();
+
+        mockMvc.perform(post("/api/internal/agent-worker/runs/{runId}/patches/{patchId}/approval-ready", run.getId(), patch.getId())
+                        .header(AgentWorkerCallbackController.CALLBACK_TOKEN_HEADER, "wrong-token"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value("AGENT_WORKER_CALLBACK_FORBIDDEN"));
+
+        assertThat(agentStepRepository.findByAgentRunIdOrderByStartedAtAsc(run.getId())).isEmpty();
+        assertThat(agentTaskRepository.findById(task.getId()).orElseThrow().getStatus())
+                .isEqualTo(AgentTaskStatus.CREATED);
+        assertThat(agentRunRepository.findById(run.getId()).orElseThrow().getStatus())
+                .isEqualTo(AgentRunStatus.RUNNING);
+    }
+
+    @Test
     void updateStatusRejectsEmptyStatusPayload() throws Exception {
         mockMvc.perform(post("/api/internal/agent-worker/runs/{runId}/status", run.getId())
                         .header(AgentWorkerCallbackController.CALLBACK_TOKEN_HEADER, "test-worker-callback-token")
@@ -713,6 +794,16 @@ class AgentWorkerCallbackControllerIntegrationTest {
                 AgentStepStatus.SUCCESS,
                 jsonString(Map.of("patchId", patch.getId(), "source", "agent-worker")),
                 jsonString(Map.of("safe", true, "changedPaths", List.of(".repopilot/worker-plan.md"), "findings", List.of()))
+        ));
+    }
+
+    private AgentStep saveWorkerReviewStep(PatchRecord patch, TestRun testRun) throws Exception {
+        return agentStepRepository.save(new AgentStep(
+                run,
+                "review_patch",
+                AgentStepStatus.SUCCESS,
+                jsonString(Map.of("patchId", patch.getId(), "testRunId", testRun.getId(), "source", "agent-worker")),
+                jsonString(Map.of("riskLevel", "NONE", "summary", "没有自动审查发现。", "findings", List.of()))
         ));
     }
 

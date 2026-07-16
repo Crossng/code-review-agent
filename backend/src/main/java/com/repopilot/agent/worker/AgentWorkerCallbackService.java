@@ -8,6 +8,7 @@ import com.repopilot.agent.domain.AgentRunStatus;
 import com.repopilot.agent.domain.AgentStep;
 import com.repopilot.agent.domain.AgentStepStatus;
 import com.repopilot.agent.domain.AgentTask;
+import com.repopilot.agent.domain.AgentTaskStatus;
 import com.repopilot.agent.dto.AgentStepResponse;
 import com.repopilot.agent.repository.AgentRunRepository;
 import com.repopilot.agent.repository.AgentStepRepository;
@@ -308,6 +309,52 @@ public class AgentWorkerCallbackService {
     }
 
     @Transactional
+    public AgentWorkerPatchApprovalReadyResponse markPatchReadyForApproval(
+            Long runId,
+            Long patchId,
+            String callbackToken
+    ) {
+        tokenGuard.requireValidToken(callbackToken);
+        AgentRun run = requireRun(runId);
+        PatchRecord patch = requirePatchForRun(run, patchId);
+        TestRun testRun = requirePassedTestRun(patch);
+        AgentStep reviewStep = requireReviewStepPassed(run.getId(), patch.getId());
+        AgentTask task = run.getAgentTask();
+        task.setStatus(AgentTaskStatus.WAITING_HUMAN_APPROVAL);
+        AgentTask savedTask = agentTaskRepository.save(task);
+        AgentStep approvalStep = saveWorkerStep(
+                run,
+                "waiting_human_approval",
+                AgentStepStatus.PENDING,
+                java.util.Map.of(
+                        "patchId", patch.getId(),
+                        "testRunId", testRun.getId(),
+                        "reviewStepId", reviewStep.getId(),
+                        "status", patch.getStatus(),
+                        "source", "agent-worker"
+                ),
+                null,
+                null
+        );
+        run.markSuccess();
+        AgentRun savedRun = agentRunRepository.save(run);
+        taskStreamService.publishTaskUpdated(savedTask, savedRun);
+        taskStreamService.publishStreamComplete(savedTask, savedRun, "Agent Worker 已进入人工审批");
+        return AgentWorkerPatchApprovalReadyResponse.from(
+                patch.getId(),
+                savedTask.getId(),
+                savedRun.getId(),
+                testRun.getId(),
+                reviewStep.getId(),
+                approvalStep.getId(),
+                approvalStep.getStatus(),
+                savedTask.getStatus(),
+                savedRun.getStatus(),
+                true
+        );
+    }
+
+    @Transactional
     public AgentWorkerRunStatusUpdateResponse updateStatus(
             Long runId,
             String callbackToken,
@@ -374,6 +421,20 @@ public class AgentWorkerCallbackService {
             );
         }
         return testRun;
+    }
+
+    private AgentStep requireReviewStepPassed(Long runId, Long patchId) {
+        return agentStepRepository.findByAgentRunIdOrderByStartedAtAsc(runId)
+                .stream()
+                .filter(step -> "review_patch".equals(step.getStepName()))
+                .filter(step -> step.getStatus() == AgentStepStatus.SUCCESS)
+                .filter(step -> stepInputPatchId(step).equals(patchId))
+                .findFirst()
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.CONFLICT,
+                        "PATCH_REVIEW_NOT_PASSED",
+                        "Worker patch must pass review before approval"
+                ));
     }
 
     private void requireSafetyStepPassed(Long runId, Long patchId) {

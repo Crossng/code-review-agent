@@ -8,7 +8,7 @@ LOG_DIR="$ROOT_DIR/target/agent-worker-node-smoke/logs"
 
 usage() {
   cat <<'EOF'
-RepoPilot Agent Worker 初始、检索、补丁草稿、安全预检、沙箱测试与风险审查节点 smoke
+RepoPilot Agent Worker 初始、检索、补丁草稿、安全预检、沙箱测试、风险审查与审批暂停节点 smoke
 
 用法:
   ./scripts/agent-worker-node-smoke.sh
@@ -18,7 +18,7 @@ RepoPilot Agent Worker 初始、检索、补丁草稿、安全预检、沙箱测
   - 调用 /runs/{run_id}/start。
   - 验证 Worker 后台执行 load_task_context、ensure_index、plan_task、retrieve_context 和 generate_patch。
   - 校验 Worker 拉取 context/files/symbols/search/file，自动回写 tool call audit，回写 model call audit 和 patch draft，并回写五个 SUCCESS step。
-  - 校验 Worker 生成 patch draft 后调用后端 diff 安全预检接口，并在通过后调用沙箱测试和风险审查接口。
+  - 校验 Worker 生成 patch draft 后调用后端 diff 安全预检接口，并在通过后调用沙箱测试、风险审查和审批暂停接口。
   - 运行证据写入 output/agent-worker-node-smoke/last-run.json。
 EOF
 }
@@ -30,7 +30,7 @@ fi
 
 mkdir -p "$ARTIFACT_DIR" "$LOG_DIR"
 
-echo "RepoPilot Agent Worker 初始、检索、补丁草稿、安全预检、沙箱测试与风险审查节点 smoke"
+echo "RepoPilot Agent Worker 初始、检索、补丁草稿、安全预检、沙箱测试、风险审查与审批暂停节点 smoke"
 
 PYTHONPATH="$ROOT_DIR/agent-worker" python3 - "$ROOT_DIR" "$SUMMARY_JSON" "$LOG_DIR" <<'PY'
 import json
@@ -59,6 +59,7 @@ captured = {
     "safetyChecks": [],
     "sandboxRuns": [],
     "reviews": [],
+    "approvalReady": [],
 }
 
 
@@ -336,6 +337,22 @@ class UserService {
             }
             self.respond({"success": True, "data": data, "code": None, "message": None, "traceId": "node-smoke"})
             return
+        if parsed.path.endswith("/approval-ready"):
+            captured["approvalReady"].append(event)
+            data = {
+                "patchId": 881,
+                "agentTaskId": 303,
+                "agentRunId": 606,
+                "testRunId": 993,
+                "reviewStepId": 994,
+                "approvalStepId": 995,
+                "approvalStepStatus": "PENDING",
+                "taskStatus": "WAITING_HUMAN_APPROVAL",
+                "runStatus": "SUCCESS",
+                "streamCompleted": True,
+            }
+            self.respond({"success": True, "data": data, "code": None, "message": None, "traceId": "node-smoke"})
+            return
         if not parsed.path.endswith("/steps"):
             self.send_response(404)
             self.end_headers()
@@ -428,6 +445,7 @@ try:
         or len(captured["safetyChecks"]) < 1
         or len(captured["sandboxRuns"]) < 1
         or len(captured["reviews"]) < 1
+        or len(captured["approvalReady"]) < 1
     ) and time.time() < deadline:
         time.sleep(0.1)
 finally:
@@ -453,6 +471,8 @@ if len(captured["sandboxRuns"]) != 1:
     raise SystemExit(f"expected one worker sandbox test callback, got {captured['sandboxRuns']}")
 if len(captured["reviews"]) != 1:
     raise SystemExit(f"expected one worker review callback, got {captured['reviews']}")
+if len(captured["approvalReady"]) != 1:
+    raise SystemExit(f"expected one worker approval-ready callback, got {captured['approvalReady']}")
 callback_events = (
     captured["steps"]
     + captured["toolCalls"]
@@ -461,6 +481,7 @@ callback_events = (
     + captured["safetyChecks"]
     + captured["sandboxRuns"]
     + captured["reviews"]
+    + captured["approvalReady"]
 )
 if any(event["token"] != "node-smoke-token" for event in captured["gets"] + callback_events):
     raise SystemExit("worker internal token header mismatch")
@@ -592,6 +613,15 @@ if review_event.get("body") != {}:
 if review_event.get("path") != "/api/internal/agent-worker/runs/606/patches/881/review":
     raise SystemExit(f"review path mismatch: {review_event}")
 
+approval_ready = captured["approvalReady"]
+approval_event = approval_ready[0]
+if approval_event.get("contentType") != "application/json":
+    raise SystemExit(f"approval-ready content type mismatch: {approval_ready}")
+if approval_event.get("body") != {}:
+    raise SystemExit(f"approval-ready body mismatch: {approval_event}")
+if approval_event.get("path") != "/api/internal/agent-worker/runs/606/patches/881/approval-ready":
+    raise SystemExit(f"approval-ready path mismatch: {approval_event}")
+
 summary = {
     "generatedAt": datetime.now(timezone.utc).isoformat(),
     "worker": {
@@ -673,6 +703,14 @@ summary = {
         }
         for event in reviews
     ],
+    "approvalReady": [
+        {
+            "path": event["path"],
+            "requestBody": event["body"],
+            "tokenHeaderPresent": event["token"] == "node-smoke-token",
+        }
+        for event in approval_ready
+    ],
     "loadTaskContext": {
         "repoFullName": load_output["repoFullName"],
         "fileCount": load_output["fileCount"],
@@ -708,7 +746,7 @@ summary = {
     },
 }
 summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-print("Agent Worker 初始、检索、补丁草稿、安全预检、沙箱测试与风险审查节点验证通过。")
+print("Agent Worker 初始、检索、补丁草稿、安全预检、沙箱测试、风险审查与审批暂停节点验证通过。")
 print(f"Steps: {', '.join(step['stepName'] for step in summary['steps'])}")
 print(f"Tool calls: {len(summary['toolCalls'])}")
 print(
@@ -716,7 +754,8 @@ print(
     f"Patches: {len(summary['patches'])}; "
     f"Safety checks: {len(summary['safetyChecks'])}; "
     f"Sandbox runs: {len(summary['sandboxRuns'])}; "
-    f"Reviews: {len(summary['reviews'])}"
+    f"Reviews: {len(summary['reviews'])}; "
+    f"Approval-ready: {len(summary['approvalReady'])}"
 )
 print(f"证据文件: {summary_path}")
 PY

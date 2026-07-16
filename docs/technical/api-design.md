@@ -54,6 +54,7 @@ X-RepoPilot-Worker-Token: <worker-callback-token>
 | `POST` | `/internal/agent-worker/runs/{runId}/patches/{patchId}/safety` | Agent Worker 触发 patch diff 安全预检 |
 | `POST` | `/internal/agent-worker/runs/{runId}/patches/{patchId}/sandbox-tests` | Agent Worker 触发沙箱应用补丁并运行 Maven 测试 |
 | `POST` | `/internal/agent-worker/runs/{runId}/patches/{patchId}/review` | Agent Worker 触发已测试 patch 的规则化风险审查 |
+| `POST` | `/internal/agent-worker/runs/{runId}/patches/{patchId}/approval-ready` | Agent Worker 触发已审查 patch 进入人工审批暂停点 |
 | `POST` | `/internal/agent-worker/runs/{runId}/status` | Agent Worker 回写 task/run 状态 |
 | `GET` | `/internal/agent-worker/runs/{runId}/context` | Agent Worker 读取 run/task/project 上下文 |
 | `GET` | `/internal/agent-worker/runs/{runId}/project/files?maxDepth=6` | Agent Worker 按 run 读取项目文件树 |
@@ -139,7 +140,7 @@ Patch 请求：
 
 响应返回标准 `PatchRecordResponse`。后端按 `runId` 绑定到已有 `agent_run` 和 `agent_task`，未传 `base_branch` 时使用项目默认分支，未传 `target_branch` 时使用 `repopilot/task-{taskId}`。该接口只负责持久化 Worker 生成的 patch draft，不会绕过后续 diff 安全预检、沙箱测试、风险审查和人工审批。
 
-Patch 后置门接口 `safety`、`sandbox-tests` 和 `review` 使用空 JSON body。`review` 会校验 patch 属于当前 run，并要求 patch 已经在 sandbox-tests 中成功应用且最新 `test_run.status=PASSED`；通过后复用 `PatchRiskReviewService` 生成 `riskLevel`、`summary` 和 `findings`，同时写入 `review_patch` model call audit 与 step 证据。该接口只补齐 Worker shadow 链路的风险审查证据，不会直接切换 task/run 状态或进入人工审批。
+Patch 后置门接口 `safety`、`sandbox-tests`、`review` 和 `approval-ready` 使用空 JSON body。`review` 会校验 patch 属于当前 run，并要求 patch 已经在 sandbox-tests 中成功应用且最新 `test_run.status=PASSED`；通过后复用 `PatchRiskReviewService` 生成 `riskLevel`、`summary` 和 `findings`，同时写入 `review_patch` model call audit 与 step 证据。`approval-ready` 会再次校验 patch 属于当前 run、最新测试通过且同一 patch 已有成功 `review_patch` step，然后写入 `waiting_human_approval` PENDING step，把 task 标为 `WAITING_HUMAN_APPROVAL`、run 标为 `SUCCESS`，并发布 `STREAM_COMPLETE`。该接口只进入人工审批暂停点，不会 approve patch 或创建 PR。
 
 Status 请求：
 

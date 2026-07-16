@@ -53,6 +53,7 @@ The node smoke script checks:
 - The worker calls `/api/internal/agent-worker/runs/{run_id}/patches/{patch_id}/safety` after the draft is persisted.
 - The worker calls `/api/internal/agent-worker/runs/{run_id}/patches/{patch_id}/sandbox-tests` when safety passes.
 - The worker calls `/api/internal/agent-worker/runs/{run_id}/patches/{patch_id}/review` when sandbox tests pass.
+- The worker calls `/api/internal/agent-worker/runs/{run_id}/patches/{patch_id}/approval-ready` when review passes.
 - Evidence is written to `output/agent-worker-node-smoke/last-run.json`.
 
 ## Backend Start Bridge
@@ -153,7 +154,7 @@ client.record_patch(
 )
 ```
 
-The backend binds the patch to the existing run/task, fills default branches when omitted and returns the standard `PatchRecordResponse`. After persistence, the worker can call `validate_patch_safety(...)`, `run_patch_sandbox_tests(...)` and `review_patch(...)` to let the backend record the same safety, sandbox and automated review evidence used by the local executor.
+The backend binds the patch to the existing run/task, fills default branches when omitted and returns the standard `PatchRecordResponse`. After persistence, the worker can call `validate_patch_safety(...)`, `run_patch_sandbox_tests(...)`, `review_patch(...)` and `mark_patch_ready_for_approval(...)` to let the backend record the same safety, sandbox, automated review and approval checkpoint evidence used by the local executor. The approval-ready bridge only enters `WAITING_HUMAN_APPROVAL`; creating a PR still requires a human approval action.
 
 ## Backend Tool Bridge
 
@@ -185,7 +186,7 @@ When `REPOPILOT_AGENT_WORKER_CALLBACK_TOKEN` is configured, `/runs/{run_id}/star
 2. `ensure_index` checks that the run has file and Java symbol signals, then records index readiness evidence.
 3. `plan_task` builds a deterministic Spring implementation plan, runs a few code searches for evidence, then records a SUCCESS step.
 4. `retrieve_context` reuses plan search queries, deduplicates code chunks, reads key file previews and records a SUCCESS step.
-5. `generate_patch` creates a safe planning draft diff under `.repopilot/`, records a deterministic model-call audit entry, persists the draft through `record_patch(...)`, records a SUCCESS step, calls `validate_patch_safety(...)`, then `run_patch_sandbox_tests(...)` when safety passes, and finally `review_patch(...)` when sandbox tests pass.
+5. `generate_patch` creates a safe planning draft diff under `.repopilot/`, records a deterministic model-call audit entry, persists the draft through `record_patch(...)`, records a SUCCESS step, calls `validate_patch_safety(...)`, then `run_patch_sandbox_tests(...)` when safety passes, `review_patch(...)` when sandbox tests pass, and `mark_patch_ready_for_approval(...)` when review passes.
 
 If no callback token is configured, `/start` remains a pure contract endpoint and does not run background nodes. This keeps local smoke tests and bridge-disabled development quiet.
 
@@ -193,4 +194,4 @@ Next implementation steps:
 
 1. Replace the lightweight graph runner with a real LangGraph graph once node contracts stabilize.
 2. Attach future Worker model calls to `record_model_call(...)` automatically.
-3. Connect Worker-generated patches to the backend approval/status chain.
+3. Connect Worker-approved patches to the post-approval PR creation chain.
