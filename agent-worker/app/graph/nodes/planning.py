@@ -57,6 +57,9 @@ def plan_task(
                 status="SUCCESS",
                 prompt=model_result.prompt,
                 response=model_result.response,
+                prompt_tokens=model_result.prompt_tokens,
+                completion_tokens=model_result.completion_tokens,
+                total_tokens=model_result.total_tokens,
                 duration_ms=model_result.duration_ms,
             ),
         )

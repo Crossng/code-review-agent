@@ -141,23 +141,33 @@ The Spring Boot backend stores these records in the existing tool/model call aud
 
 ## Worker 模型计划入口
 
-`plan_task` 已接入 `WorkerModelClient`。默认配置保持保守：只生成确定性计划，不调用模型，也不会多写 model call audit。需要验证模型路径时，可以使用 fixture 模式：
+`plan_task` 已接入 `WorkerModelClient`。默认配置保持保守：只生成确定性计划，不调用模型，也不会多写 model call audit。需要验证模型路径时，可以使用 fixture 模式；需要真实 Planner 摘要时，可以切到 OpenAI-compatible Chat Completions 接口：
 
 ```bash
 export REPOPILOT_WORKER_MODEL_MODE=fixture
 export REPOPILOT_WORKER_MODEL_PROVIDER=WORKER_FIXTURE
 export REPOPILOT_WORKER_MODEL_NAME=worker-fixture-plan-v1
 export REPOPILOT_WORKER_MODEL_FIXTURE_RESPONSE="优先定位 Controller、Service 和测试，再生成最小 diff。"
+
+export REPOPILOT_WORKER_MODEL_MODE=openai-compatible
+export REPOPILOT_WORKER_MODEL_API_BASE_URL=https://api.openai.com/v1
+export REPOPILOT_WORKER_MODEL_API_KEY=...
+export REPOPILOT_WORKER_MODEL_NAME=gpt-worker-planner
 ```
 
 | 配置 | 默认值 | 说明 |
 | --- | --- | --- |
-| `REPOPILOT_WORKER_MODEL_MODE` | `disabled` | `disabled` 不调用模型；`fixture` 使用固定响应，便于 smoke/test 留证 |
+| `REPOPILOT_WORKER_MODEL_MODE` | `disabled` | `disabled` 不调用模型；`fixture` 使用固定响应；`openai`/`openai-compatible` 调用 Chat Completions 兼容接口 |
 | `REPOPILOT_WORKER_MODEL_PROVIDER` | `WORKER_FIXTURE` | 写入 model call audit 的 provider |
 | `REPOPILOT_WORKER_MODEL_NAME` | `worker-fixture-plan-v1` | 写入 model call audit 的模型名 |
 | `REPOPILOT_WORKER_MODEL_FIXTURE_RESPONSE` | 空 | fixture 模式下作为 `modelPlanText` 写入 `plan_task` step output |
+| `REPOPILOT_WORKER_MODEL_API_BASE_URL` | `https://api.openai.com/v1` | OpenAI-compatible API base URL |
+| `REPOPILOT_WORKER_MODEL_API_KEY` / `OPENAI_API_KEY` | 空 | OpenAI-compatible 模式的 API key；不会写入 prompt/response 审计 |
+| `REPOPILOT_WORKER_MODEL_TIMEOUT_SECONDS` | `120` | 模型 HTTP 请求超时 |
+| `REPOPILOT_WORKER_MODEL_MAX_COMPLETION_TOKENS` | `1200` | 写入 Chat Completions 请求的 `max_completion_tokens` |
+| `REPOPILOT_WORKER_MODEL_INSTRUCTION_ROLE` | `developer` | Planner 指令消息角色，只支持 `developer` 或 `system` |
 
-fixture 模式只增强 `plan_task` 的计划摘要，不直接生成代码、不绕过 `generate_patch`、安全预检、沙箱测试、风险审查或人工审批。后续真实模型入口会复用同一个客户端契约。
+模型模式只增强 `plan_task` 的计划摘要，不直接生成代码、不绕过 `generate_patch`、安全预检、沙箱测试、风险审查或人工审批。
 
 ## Backend Patch Callback
 
@@ -227,6 +237,6 @@ This keeps LangGraph wiring small and makes future model-backed nodes easier to 
 
 Next implementation steps:
 
-1. Extend `WorkerModelClient` from fixture mode to a real OpenAI-compatible Planner provider.
+1. Add a Worker Planner node smoke with a local OpenAI-compatible stub.
 2. Replace deterministic planning/patch draft logic with model-backed nodes one node at a time.
 3. Exercise Worker-approved patches against real remote GitHub PR publishing once a token-backed demo repository is available.
