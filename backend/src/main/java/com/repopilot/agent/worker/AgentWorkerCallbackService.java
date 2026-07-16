@@ -20,6 +20,9 @@ import com.repopilot.notification.service.TaskStreamService;
 import com.repopilot.patch.domain.PatchRecord;
 import com.repopilot.patch.dto.PatchRecordResponse;
 import com.repopilot.patch.repository.PatchRecordRepository;
+import com.repopilot.sandbox.domain.TestRun;
+import com.repopilot.sandbox.domain.TestRunStatus;
+import com.repopilot.sandbox.service.SandboxTestService;
 import com.repopilot.toolcall.dto.ToolCallLogResponse;
 import com.repopilot.toolcall.service.ToolCallLogService;
 import org.springframework.http.HttpStatus;
@@ -35,6 +38,7 @@ public class AgentWorkerCallbackService {
     private final AgentStepRepository agentStepRepository;
     private final PatchRecordRepository patchRecordRepository;
     private final PatchDiffSafetyService patchDiffSafetyService;
+    private final SandboxTestService sandboxTestService;
     private final ToolCallLogService toolCallLogService;
     private final ModelCallLogService modelCallLogService;
     private final TaskStreamService taskStreamService;
@@ -47,6 +51,7 @@ public class AgentWorkerCallbackService {
             AgentStepRepository agentStepRepository,
             PatchRecordRepository patchRecordRepository,
             PatchDiffSafetyService patchDiffSafetyService,
+            SandboxTestService sandboxTestService,
             ToolCallLogService toolCallLogService,
             ModelCallLogService modelCallLogService,
             TaskStreamService taskStreamService,
@@ -58,6 +63,7 @@ public class AgentWorkerCallbackService {
         this.agentStepRepository = agentStepRepository;
         this.patchRecordRepository = patchRecordRepository;
         this.patchDiffSafetyService = patchDiffSafetyService;
+        this.sandboxTestService = sandboxTestService;
         this.toolCallLogService = toolCallLogService;
         this.modelCallLogService = modelCallLogService;
         this.taskStreamService = taskStreamService;
@@ -155,11 +161,7 @@ public class AgentWorkerCallbackService {
     public AgentWorkerPatchSafetyResponse validatePatchSafety(Long runId, Long patchId, String callbackToken) {
         tokenGuard.requireValidToken(callbackToken);
         AgentRun run = requireRun(runId);
-        PatchRecord patch = patchRecordRepository.findById(patchId)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "PATCH_NOT_FOUND", "Patch not found"));
-        if (!patch.getAgentRun().getId().equals(run.getId())) {
-            throw new ApiException(HttpStatus.NOT_FOUND, "PATCH_NOT_FOUND", "Patch not found for current run");
-        }
+        PatchRecord patch = requirePatchForRun(run, patchId);
         PatchDiffSafetyService.PatchDiffSafetyReport report = patchDiffSafetyService.review(patch);
         AgentStepStatus stepStatus = report.safe() ? AgentStepStatus.SUCCESS : AgentStepStatus.FAILED;
         AgentStep step = agentStepRepository.save(new AgentStep(
@@ -178,6 +180,82 @@ public class AgentWorkerCallbackService {
                 report,
                 step.getId(),
                 stepStatus
+        );
+    }
+
+    @Transactional
+    public AgentWorkerPatchSandboxResponse runPatchSandboxTests(Long runId, Long patchId, String callbackToken) {
+        tokenGuard.requireValidToken(callbackToken);
+        AgentRun run = requireRun(runId);
+        PatchRecord patch = requirePatchForRun(run, patchId);
+        requireSafetyStepPassed(run.getId(), patch.getId());
+
+        SandboxTestService.SandboxWorkspace workspace = toolCallLogService.record(
+                run,
+                "prepare_sandbox",
+                java.util.Map.of("runId", run.getId(), "patchId", patch.getId(), "source", "agent-worker"),
+                () -> sandboxTestService.prepareWorkspace(run, patch),
+                AgentWorkerPatchSandboxResponse.SandboxWorkspaceOutput::from
+        );
+        SandboxTestService.CommandResult applyResult = toolCallLogService.record(
+                run,
+                "apply_patch",
+                java.util.Map.of("patchId", patch.getId(), "patchPath", workspace.patchPath().toString(), "source", "agent-worker"),
+                () -> sandboxTestService.applyPatch(workspace),
+                AgentWorkerPatchSandboxResponse.SandboxCommandOutput::from
+        );
+        AgentStepStatus applyStepStatus = applyResult.success() ? AgentStepStatus.SUCCESS : AgentStepStatus.FAILED;
+        AgentStep applyStep = saveWorkerStep(
+                run,
+                "apply_patch",
+                applyStepStatus,
+                java.util.Map.of("patchId", patch.getId(), "patchPath", workspace.patchPath().toString(), "source", "agent-worker"),
+                AgentWorkerPatchSandboxResponse.SandboxCommandOutput.from(applyResult),
+                applyResult.success() ? null : "补丁在沙箱中应用失败"
+        );
+        if (!applyResult.success()) {
+            return AgentWorkerPatchSandboxResponse.applyFailed(
+                    patch.getId(),
+                    patch.getAgentTask().getId(),
+                    run.getId(),
+                    patch.getStatus(),
+                    applyStep.getId(),
+                    applyStepStatus,
+                    applyResult
+            );
+        }
+
+        patch.markApplied();
+        patchRecordRepository.save(patch);
+        TestRun testRun = toolCallLogService.record(
+                run,
+                "run_maven_test",
+                java.util.Map.of("patchId", patch.getId(), "command", "mvn -q test", "source", "agent-worker"),
+                () -> sandboxTestService.runMavenTest(run, patch, workspace),
+                AgentWorkerPatchSandboxResponse.TestRunOutput::from
+        );
+        AgentStepStatus testStepStatus = testRun.getStatus() == TestRunStatus.PASSED
+                ? AgentStepStatus.SUCCESS
+                : AgentStepStatus.FAILED;
+        AgentStep testStep = saveWorkerStep(
+                run,
+                "run_tests",
+                testStepStatus,
+                java.util.Map.of("patchId", patch.getId(), "command", "mvn -q test", "source", "agent-worker"),
+                AgentWorkerPatchSandboxResponse.TestRunOutput.from(testRun),
+                testRun.getStatus() == TestRunStatus.PASSED ? null : "沙箱 Maven 测试失败"
+        );
+        return AgentWorkerPatchSandboxResponse.from(
+                patch.getId(),
+                patch.getAgentTask().getId(),
+                run.getId(),
+                patch.getStatus(),
+                applyStep.getId(),
+                applyStepStatus,
+                applyResult,
+                testStep.getId(),
+                testStepStatus,
+                testRun
         );
     }
 
@@ -215,6 +293,60 @@ public class AgentWorkerCallbackService {
     private AgentRun requireRun(Long runId) {
         return agentRunRepository.findById(runId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "AGENT_RUN_NOT_FOUND", "Agent run not found"));
+    }
+
+    private PatchRecord requirePatchForRun(AgentRun run, Long patchId) {
+        PatchRecord patch = patchRecordRepository.findById(patchId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "PATCH_NOT_FOUND", "Patch not found"));
+        if (!patch.getAgentRun().getId().equals(run.getId())) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "PATCH_NOT_FOUND", "Patch not found for current run");
+        }
+        return patch;
+    }
+
+    private void requireSafetyStepPassed(Long runId, Long patchId) {
+        boolean passed = agentStepRepository.findByAgentRunIdOrderByStartedAtAsc(runId)
+                .stream()
+                .filter(step -> "validate_patch_safety".equals(step.getStepName()))
+                .filter(step -> step.getStatus() == AgentStepStatus.SUCCESS)
+                .anyMatch(step -> stepInputPatchId(step).equals(patchId));
+        if (!passed) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "PATCH_SAFETY_NOT_PASSED",
+                    "Worker patch must pass diff safety before sandbox tests"
+            );
+        }
+    }
+
+    private Long stepInputPatchId(AgentStep step) {
+        try {
+            JsonNode node = objectMapper.readTree(step.getInputJson());
+            JsonNode patchId = node.path("patchId");
+            return patchId.canConvertToLong() ? patchId.asLong() : -1L;
+        } catch (Exception exception) {
+            return -1L;
+        }
+    }
+
+    private AgentStep saveWorkerStep(
+            AgentRun run,
+            String stepName,
+            AgentStepStatus status,
+            Object input,
+            Object output,
+            String errorMessage
+    ) {
+        AgentStep step = agentStepRepository.save(new AgentStep(
+                run,
+                stepName,
+                status,
+                jsonValue(input, "{}"),
+                jsonValue(output, null),
+                errorMessage
+        ));
+        taskStreamService.publishStepRecorded(run.getAgentTask(), run, step);
+        return step;
     }
 
     private void applyRunStatus(AgentRun run, AgentRunStatus status, String errorMessage) {

@@ -389,8 +389,15 @@ def generate_patch(
     )
     patch_id = output.get("patchId")
     if patch_id is not None:
-        safety_response = backend.validate_patch_safety(run_id, int(patch_id))
-        output["safety"] = safety_response.get("data")
+        try:
+            safety_response = backend.validate_patch_safety(run_id, int(patch_id))
+            safety_data = safety_response.get("data")
+            output["safety"] = safety_data
+            if isinstance(safety_data, dict) and safety_data.get("safe") is True:
+                sandbox_response = backend.run_patch_sandbox_tests(run_id, int(patch_id))
+                output["sandbox"] = sandbox_response.get("data")
+        except Exception as error:  # noqa: BLE001 - post-patch gates are reported without duplicating generate_patch failure
+            output["postPatchGateError"] = str(error)[:1000]
     return output
 
 

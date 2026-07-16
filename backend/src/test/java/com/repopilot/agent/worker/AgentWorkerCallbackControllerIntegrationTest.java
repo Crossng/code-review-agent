@@ -1,11 +1,15 @@
 package com.repopilot.agent.worker;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.when;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -30,6 +34,10 @@ import com.repopilot.patch.domain.PatchStatus;
 import com.repopilot.patch.repository.PatchRecordRepository;
 import com.repopilot.project.domain.Project;
 import com.repopilot.project.repository.ProjectRepository;
+import com.repopilot.sandbox.domain.TestRun;
+import com.repopilot.sandbox.domain.TestRunStatus;
+import com.repopilot.sandbox.repository.TestRunRepository;
+import com.repopilot.sandbox.service.SandboxTestService;
 import com.repopilot.toolcall.domain.ToolCallLog;
 import com.repopilot.toolcall.domain.ToolCallStatus;
 import com.repopilot.toolcall.repository.ToolCallLogRepository;
@@ -41,6 +49,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -79,6 +88,12 @@ class AgentWorkerCallbackControllerIntegrationTest {
     @Autowired
     private PatchRecordRepository patchRecordRepository;
 
+    @Autowired
+    private TestRunRepository testRunRepository;
+
+    @MockBean
+    private SandboxTestService sandboxTestService;
+
     private String email;
     private Project project;
     private AgentTask task;
@@ -106,6 +121,7 @@ class AgentWorkerCallbackControllerIntegrationTest {
     @AfterEach
     void tearDown() {
         if (run != null && run.getId() != null) {
+            testRunRepository.deleteAll(testRunRepository.findByAgentRunIdOrderByCreatedAtDesc(run.getId()));
             toolCallLogRepository.deleteAll(toolCallLogRepository.findByAgentRunIdOrderByStartedAtAsc(run.getId()));
             modelCallLogRepository.deleteAll(modelCallLogRepository.findByAgentRunIdOrderByStartedAtAsc(run.getId()));
             agentStepRepository.deleteAll(agentStepRepository.findByAgentRunIdOrderByStartedAtAsc(run.getId()));
@@ -428,6 +444,107 @@ class AgentWorkerCallbackControllerIntegrationTest {
     }
 
     @Test
+    void runPatchSandboxTestsRequiresPassedSafetyAndRecordsSandboxEvidence() throws Exception {
+        PatchRecord patch = saveWorkerSafePatch();
+        saveWorkerSafetyStep(patch);
+        SandboxTestService.SandboxWorkspace workspace = new SandboxTestService.SandboxWorkspace(
+                Path.of("/tmp/repopilot-worker-sandbox/run"),
+                Path.of("/tmp/repopilot-worker-sandbox/run/source"),
+                Path.of("/tmp/repopilot-worker-sandbox/run/patch.diff")
+        );
+        SandboxTestService.CommandResult applyResult = new SandboxTestService.CommandResult(
+                "git apply ../patch.diff",
+                0,
+                false,
+                12,
+                "",
+                "/tmp/repopilot-worker-sandbox/run/patch-apply.log"
+        );
+        when(sandboxTestService.prepareWorkspace(any(AgentRun.class), any(PatchRecord.class))).thenReturn(workspace);
+        when(sandboxTestService.applyPatch(eq(workspace))).thenReturn(applyResult);
+        when(sandboxTestService.runMavenTest(any(AgentRun.class), any(PatchRecord.class), eq(workspace)))
+                .thenAnswer(invocation -> testRunRepository.save(new TestRun(
+                        run,
+                        patch,
+                        "mvn -q test",
+                        0,
+                        45,
+                        "BUILD SUCCESS",
+                        TestRunStatus.PASSED
+                )));
+
+        mockMvc.perform(post("/api/internal/agent-worker/runs/{runId}/patches/{patchId}/sandbox-tests", run.getId(), patch.getId())
+                        .header(AgentWorkerCallbackController.CALLBACK_TOKEN_HEADER, "test-worker-callback-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.patchId").value(patch.getId()))
+                .andExpect(jsonPath("$.data.patchStatus").value("APPLIED"))
+                .andExpect(jsonPath("$.data.applied").value(true))
+                .andExpect(jsonPath("$.data.testsPassed").value(true))
+                .andExpect(jsonPath("$.data.applyStepStatus").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.testStepStatus").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.testStatus").value("PASSED"))
+                .andExpect(jsonPath("$.data.applyResult.exitCode").value(0))
+                .andExpect(jsonPath("$.data.testRun.exitCode").value(0));
+
+        PatchRecord savedPatch = patchRecordRepository.findById(patch.getId()).orElseThrow();
+        assertThat(savedPatch.getStatus()).isEqualTo(PatchStatus.APPLIED);
+        List<TestRun> testRuns = testRunRepository.findByAgentRunIdOrderByCreatedAtDesc(run.getId());
+        assertThat(testRuns).hasSize(1);
+        assertThat(testRuns.get(0).getStatus()).isEqualTo(TestRunStatus.PASSED);
+
+        List<AgentStep> steps = agentStepRepository.findByAgentRunIdOrderByStartedAtAsc(run.getId());
+        assertThat(steps).extracting(AgentStep::getStepName)
+                .containsExactly("validate_patch_safety", "apply_patch", "run_tests");
+        AgentStep applyStep = steps.get(1);
+        assertThat(applyStep.getStatus()).isEqualTo(AgentStepStatus.SUCCESS);
+        assertThat(jsonNode(applyStep.getInputJson()).path("source").asText()).isEqualTo("agent-worker");
+        assertThat(jsonNode(applyStep.getOutputJson()).path("exitCode").asInt()).isEqualTo(0);
+        AgentStep testStep = steps.get(2);
+        assertThat(testStep.getStatus()).isEqualTo(AgentStepStatus.SUCCESS);
+        assertThat(jsonNode(testStep.getOutputJson()).path("status").asText()).isEqualTo("PASSED");
+
+        List<ToolCallLog> toolCalls = toolCallLogRepository.findByAgentRunIdOrderByStartedAtAsc(run.getId());
+        assertThat(toolCalls).extracting(ToolCallLog::getToolName)
+                .containsExactly("prepare_sandbox", "apply_patch", "run_maven_test");
+        assertThat(toolCalls).allSatisfy(toolCall -> assertThat(toolCall.getStatus()).isEqualTo(ToolCallStatus.SUCCESS));
+        assertThat(agentTaskRepository.findById(task.getId()).orElseThrow().getStatus())
+                .isEqualTo(AgentTaskStatus.CREATED);
+        assertThat(agentRunRepository.findById(run.getId()).orElseThrow().getStatus())
+                .isEqualTo(AgentRunStatus.RUNNING);
+    }
+
+    @Test
+    void runPatchSandboxTestsRejectsPatchWithoutPassedSafety() throws Exception {
+        PatchRecord patch = saveWorkerSafePatch();
+
+        mockMvc.perform(post("/api/internal/agent-worker/runs/{runId}/patches/{patchId}/sandbox-tests", run.getId(), patch.getId())
+                        .header(AgentWorkerCallbackController.CALLBACK_TOKEN_HEADER, "test-worker-callback-token"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value("PATCH_SAFETY_NOT_PASSED"));
+
+        assertThat(patchRecordRepository.findById(patch.getId()).orElseThrow().getStatus())
+                .isEqualTo(PatchStatus.GENERATED);
+        assertThat(testRunRepository.findByAgentRunIdOrderByCreatedAtDesc(run.getId())).isEmpty();
+        assertThat(toolCallLogRepository.findByAgentRunIdOrderByStartedAtAsc(run.getId())).isEmpty();
+    }
+
+    @Test
+    void runPatchSandboxTestsRejectsInvalidCallbackTokenBeforeJwtAuthentication() throws Exception {
+        PatchRecord patch = saveWorkerSafePatch();
+
+        mockMvc.perform(post("/api/internal/agent-worker/runs/{runId}/patches/{patchId}/sandbox-tests", run.getId(), patch.getId())
+                        .header(AgentWorkerCallbackController.CALLBACK_TOKEN_HEADER, "wrong-token"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value("AGENT_WORKER_CALLBACK_FORBIDDEN"));
+
+        assertThat(agentStepRepository.findByAgentRunIdOrderByStartedAtAsc(run.getId())).isEmpty();
+        assertThat(testRunRepository.findByAgentRunIdOrderByCreatedAtDesc(run.getId())).isEmpty();
+    }
+
+    @Test
     void updateStatusRejectsEmptyStatusPayload() throws Exception {
         mockMvc.perform(post("/api/internal/agent-worker/runs/{runId}/status", run.getId())
                         .header(AgentWorkerCallbackController.CALLBACK_TOKEN_HEADER, "test-worker-callback-token")
@@ -490,5 +607,19 @@ class AgentWorkerCallbackControllerIntegrationTest {
                 "AGENT_WORKER",
                 "worker-retrieval-plan-v1"
         ));
+    }
+
+    private void saveWorkerSafetyStep(PatchRecord patch) throws Exception {
+        agentStepRepository.save(new AgentStep(
+                run,
+                "validate_patch_safety",
+                AgentStepStatus.SUCCESS,
+                jsonString(Map.of("patchId", patch.getId(), "source", "agent-worker")),
+                jsonString(Map.of("safe", true, "changedPaths", List.of(".repopilot/worker-plan.md"), "findings", List.of()))
+        ));
+    }
+
+    private String jsonString(Object value) throws Exception {
+        return objectMapper.writeValueAsString(value);
     }
 }

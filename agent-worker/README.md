@@ -51,6 +51,7 @@ The node smoke script checks:
 - The worker records `load_task_context`, `ensure_index`, deterministic `plan_task`, `retrieve_context` and `generate_patch` SUCCESS steps.
 - The worker records a deterministic `generate_patch` model call and a `WORKER_SAFE_PLANNING_DRAFT` patch draft.
 - The worker calls `/api/internal/agent-worker/runs/{run_id}/patches/{patch_id}/safety` after the draft is persisted.
+- The worker calls `/api/internal/agent-worker/runs/{run_id}/patches/{patch_id}/sandbox-tests` when safety passes.
 - Evidence is written to `output/agent-worker-node-smoke/last-run.json`.
 
 ## Backend Start Bridge
@@ -183,7 +184,7 @@ When `REPOPILOT_AGENT_WORKER_CALLBACK_TOKEN` is configured, `/runs/{run_id}/star
 2. `ensure_index` checks that the run has file and Java symbol signals, then records index readiness evidence.
 3. `plan_task` builds a deterministic Spring implementation plan, runs a few code searches for evidence, then records a SUCCESS step.
 4. `retrieve_context` reuses plan search queries, deduplicates code chunks, reads key file previews and records a SUCCESS step.
-5. `generate_patch` creates a safe planning draft diff under `.repopilot/`, records a deterministic model-call audit entry, persists the draft through `record_patch(...)`, records a SUCCESS step and calls `validate_patch_safety(...)`.
+5. `generate_patch` creates a safe planning draft diff under `.repopilot/`, records a deterministic model-call audit entry, persists the draft through `record_patch(...)`, records a SUCCESS step, calls `validate_patch_safety(...)` and then `run_patch_sandbox_tests(...)` when safety passes.
 
 If no callback token is configured, `/start` remains a pure contract endpoint and does not run background nodes. This keeps local smoke tests and bridge-disabled development quiet.
 
@@ -191,4 +192,4 @@ Next implementation steps:
 
 1. Replace the lightweight graph runner with a real LangGraph graph once node contracts stabilize.
 2. Attach future Worker model calls to `record_model_call(...)` automatically.
-3. Connect Worker-generated patches to the backend sandbox, review and approval chain.
+3. Connect Worker-generated patches to the backend review and approval chain.

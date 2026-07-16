@@ -8,7 +8,7 @@ LOG_DIR="$ROOT_DIR/target/agent-worker-node-smoke/logs"
 
 usage() {
   cat <<'EOF'
-RepoPilot Agent Worker 初始、检索、补丁草稿与安全预检节点 smoke
+RepoPilot Agent Worker 初始、检索、补丁草稿、安全预检与沙箱测试节点 smoke
 
 用法:
   ./scripts/agent-worker-node-smoke.sh
@@ -18,7 +18,7 @@ RepoPilot Agent Worker 初始、检索、补丁草稿与安全预检节点 smoke
   - 调用 /runs/{run_id}/start。
   - 验证 Worker 后台执行 load_task_context、ensure_index、plan_task、retrieve_context 和 generate_patch。
   - 校验 Worker 拉取 context/files/symbols/search/file，自动回写 tool call audit，回写 model call audit 和 patch draft，并回写五个 SUCCESS step。
-  - 校验 Worker 生成 patch draft 后调用后端 diff 安全预检接口。
+  - 校验 Worker 生成 patch draft 后调用后端 diff 安全预检接口，并在通过后调用沙箱测试接口。
   - 运行证据写入 output/agent-worker-node-smoke/last-run.json。
 EOF
 }
@@ -30,7 +30,7 @@ fi
 
 mkdir -p "$ARTIFACT_DIR" "$LOG_DIR"
 
-echo "RepoPilot Agent Worker 初始、检索、补丁草稿与安全预检节点 smoke"
+echo "RepoPilot Agent Worker 初始、检索、补丁草稿、安全预检与沙箱测试节点 smoke"
 
 PYTHONPATH="$ROOT_DIR/agent-worker" python3 - "$ROOT_DIR" "$SUMMARY_JSON" "$LOG_DIR" <<'PY'
 import json
@@ -50,7 +50,15 @@ from urllib.request import Request, urlopen
 root_dir = Path(sys.argv[1])
 summary_path = Path(sys.argv[2])
 log_dir = Path(sys.argv[3])
-captured = {"gets": [], "steps": [], "toolCalls": [], "modelCalls": [], "patches": [], "safetyChecks": []}
+captured = {
+    "gets": [],
+    "steps": [],
+    "toolCalls": [],
+    "modelCalls": [],
+    "patches": [],
+    "safetyChecks": [],
+    "sandboxRuns": [],
+}
 
 
 def free_port() -> int:
@@ -277,6 +285,41 @@ class UserService {
             }
             self.respond({"success": True, "data": data, "code": None, "message": None, "traceId": "node-smoke"})
             return
+        if parsed.path.endswith("/sandbox-tests"):
+            captured["sandboxRuns"].append(event)
+            data = {
+                "patchId": 881,
+                "agentTaskId": 303,
+                "agentRunId": 606,
+                "patchStatus": "APPLIED",
+                "applied": True,
+                "testsPassed": True,
+                "applyStepId": 991,
+                "applyStepStatus": "SUCCESS",
+                "applyResult": {
+                    "command": "docker run --rm ... git apply ../patch.diff",
+                    "exitCode": 0,
+                    "timedOut": False,
+                    "durationMs": 25,
+                    "logExcerpt": "",
+                    "logPath": "/workspace/runs/606/patch-apply.log",
+                },
+                "testStepId": 992,
+                "testStepStatus": "SUCCESS",
+                "testRunId": 993,
+                "testStatus": "PASSED",
+                "testRun": {
+                    "testRunId": 993,
+                    "patchId": 881,
+                    "status": "PASSED",
+                    "command": "docker run --rm ... mvn -q test",
+                    "exitCode": 0,
+                    "durationMs": 120,
+                    "logExcerpt": "",
+                },
+            }
+            self.respond({"success": True, "data": data, "code": None, "message": None, "traceId": "node-smoke"})
+            return
         if not parsed.path.endswith("/steps"):
             self.send_response(404)
             self.end_headers()
@@ -364,7 +407,11 @@ try:
     )
 
     deadline = time.time() + 10
-    while (len(captured["steps"]) < 5 or len(captured["safetyChecks"]) < 1) and time.time() < deadline:
+    while (
+        len(captured["steps"]) < 5
+        or len(captured["safetyChecks"]) < 1
+        or len(captured["sandboxRuns"]) < 1
+    ) and time.time() < deadline:
         time.sleep(0.1)
 finally:
     worker.terminate()
@@ -385,12 +432,15 @@ if len(captured["steps"]) < 5:
     raise SystemExit(f"expected five worker step callbacks, got {captured['steps']}")
 if len(captured["safetyChecks"]) != 1:
     raise SystemExit(f"expected one worker safety check callback, got {captured['safetyChecks']}")
+if len(captured["sandboxRuns"]) != 1:
+    raise SystemExit(f"expected one worker sandbox test callback, got {captured['sandboxRuns']}")
 callback_events = (
     captured["steps"]
     + captured["toolCalls"]
     + captured["modelCalls"]
     + captured["patches"]
     + captured["safetyChecks"]
+    + captured["sandboxRuns"]
 )
 if any(event["token"] != "node-smoke-token" for event in captured["gets"] + callback_events):
     raise SystemExit("worker internal token header mismatch")
@@ -504,6 +554,15 @@ if safety_event.get("body") != {}:
 if safety_event.get("path") != "/api/internal/agent-worker/runs/606/patches/881/safety":
     raise SystemExit(f"safety check path mismatch: {safety_event}")
 
+sandbox_runs = captured["sandboxRuns"]
+sandbox_event = sandbox_runs[0]
+if sandbox_event.get("contentType") != "application/json":
+    raise SystemExit(f"sandbox test content type mismatch: {sandbox_runs}")
+if sandbox_event.get("body") != {}:
+    raise SystemExit(f"sandbox test body mismatch: {sandbox_event}")
+if sandbox_event.get("path") != "/api/internal/agent-worker/runs/606/patches/881/sandbox-tests":
+    raise SystemExit(f"sandbox test path mismatch: {sandbox_event}")
+
 summary = {
     "generatedAt": datetime.now(timezone.utc).isoformat(),
     "worker": {
@@ -569,6 +628,14 @@ summary = {
         }
         for event in safety_checks
     ],
+    "sandboxRuns": [
+        {
+            "path": event["path"],
+            "requestBody": event["body"],
+            "tokenHeaderPresent": event["token"] == "node-smoke-token",
+        }
+        for event in sandbox_runs
+    ],
     "loadTaskContext": {
         "repoFullName": load_output["repoFullName"],
         "fileCount": load_output["fileCount"],
@@ -604,9 +671,14 @@ summary = {
     },
 }
 summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-print("Agent Worker 初始、检索、补丁草稿与安全预检节点验证通过。")
+print("Agent Worker 初始、检索、补丁草稿、安全预检与沙箱测试节点验证通过。")
 print(f"Steps: {', '.join(step['stepName'] for step in summary['steps'])}")
 print(f"Tool calls: {len(summary['toolCalls'])}")
-print(f"Model calls: {len(summary['modelCalls'])}; Patches: {len(summary['patches'])}; Safety checks: {len(summary['safetyChecks'])}")
+print(
+    f"Model calls: {len(summary['modelCalls'])}; "
+    f"Patches: {len(summary['patches'])}; "
+    f"Safety checks: {len(summary['safetyChecks'])}; "
+    f"Sandbox runs: {len(summary['sandboxRuns'])}"
+)
 print(f"证据文件: {summary_path}")
 PY
