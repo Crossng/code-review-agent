@@ -1,3 +1,4 @@
+import json
 import sys
 import threading
 import unittest
@@ -106,6 +107,11 @@ class BackendApiClientTest(unittest.TestCase):
             self.assertEqual(context["runId"], 606)
             self.assertEqual(stub.count(context_path), 2)
             self.assertEqual(stub.count(tool_call_path), 1)
+            self.assertEqual(len(stub.request_bodies), 1)
+            recorded_call = json.loads(stub.request_bodies[0])
+            self.assertEqual(recorded_call["output"]["retryAttemptCount"], 1)
+            self.assertEqual(recorded_call["output"]["retryAttempts"][0]["attempt"], 1)
+            self.assertIn("HTTP 503", recorded_call["output"]["retryAttempts"][0]["message"])
         finally:
             stub.stop()
 

@@ -633,6 +633,15 @@ if "UserServiceTest pagination" not in retrieve_step.get("queries", []):
 model_by_step = {event["body"]["step_name"]: event["body"] for event in captured["modelCalls"]}
 if set(model_by_step) != {"plan_task", "generate_patch"}:
     raise SystemExit(f"model call steps mismatch: {model_by_step}")
+tool_by_name = {event["body"]["tool_name"]: event["body"] for event in captured["toolCalls"]}
+context_tool = tool_by_name.get("load_run_context")
+if context_tool is None:
+    raise SystemExit(f"load_run_context tool audit missing: {tool_by_name}")
+context_retry_output = context_tool.get("output", {})
+if context_retry_output.get("retryAttemptCount") != 1:
+    raise SystemExit(f"context retry audit missing retryAttemptCount: {context_tool}")
+if "HTTP 503" not in context_retry_output.get("retryAttempts", [{}])[0].get("message", ""):
+    raise SystemExit(f"context retry audit missing HTTP 503 message: {context_tool}")
 plan_model = model_by_step["plan_task"]
 if plan_model.get("model_provider") != "OPENAI_COMPATIBLE":
     raise SystemExit(f"plan_task model provider mismatch: {plan_model}")
@@ -647,6 +656,11 @@ if planner_api_key in serialized_plan_model or "Authorization" in serialized_pla
     raise SystemExit(f"plan_task model audit leaked credential material: {plan_model}")
 if "模型计划摘要" not in serialized_plan_model:
     raise SystemExit(f"plan_task model audit missing assistant content: {plan_model}")
+plan_retry_response = plan_model.get("response", {})
+if plan_retry_response.get("retryAttemptCount") != 1:
+    raise SystemExit(f"plan_task model retry audit missing retryAttemptCount: {plan_model}")
+if "HTTP 429" not in plan_retry_response.get("retryAttempts", [{}])[0].get("message", ""):
+    raise SystemExit(f"plan_task model retry audit missing HTTP 429 message: {plan_model}")
 patch_model = model_by_step["generate_patch"]
 if patch_model.get("model_provider") != "AGENT_WORKER":
     raise SystemExit(f"generate_patch model call mismatch: {patch_model}")
@@ -680,6 +694,8 @@ summary = {
         "transientFailures": captured["transientFailures"],
         "plannerRequestCount": len(captured["plannerRequests"]),
         "contextGetCount": context_get_count,
+        "plannerAuditRetryAttemptCount": plan_retry_response.get("retryAttemptCount"),
+        "contextAuditRetryAttemptCount": context_retry_output.get("retryAttemptCount"),
         "maxAttempts": 3,
     },
     "steps": [
@@ -702,6 +718,7 @@ summary = {
             "tokenHeaderPresent": event["token"] == "planner-smoke-token",
             "apiKeyInAudit": planner_api_key in json.dumps(event["body"], ensure_ascii=False),
             "authorizationInAudit": "Authorization" in json.dumps(event["body"], ensure_ascii=False),
+            "retryAttemptCount": event["body"].get("response", {}).get("retryAttemptCount", 0),
         }
         for event in captured["modelCalls"]
     ],

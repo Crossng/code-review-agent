@@ -23,6 +23,7 @@ def call_with_retry(
     operation: Callable[[], T],
     policy: RetryPolicy,
     is_retryable: Optional[Callable[[Exception], bool]] = None,
+    on_retry: Optional[Callable[[int, Exception], None]] = None,
 ) -> T:
     retry_policy = policy.normalized()
     classifier = is_retryable or is_retryable_worker_error
@@ -33,6 +34,8 @@ def call_with_retry(
         except Exception as error:
             if attempt >= retry_policy.max_attempts or not classifier(error):
                 raise
+            if on_retry is not None:
+                on_retry(attempt, error)
             if retry_policy.backoff_seconds > 0:
                 time.sleep(retry_policy.backoff_seconds * attempt)
             attempt += 1

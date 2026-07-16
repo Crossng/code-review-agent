@@ -37,6 +37,8 @@ import com.repopilot.common.ApiException;
 import com.repopilot.indexer.dto.CodeSearchResponse;
 import com.repopilot.indexer.dto.CodeSearchResultResponse;
 import com.repopilot.indexer.service.CodeSearchService;
+import com.repopilot.modelcall.domain.ModelCallLog;
+import com.repopilot.modelcall.repository.ModelCallLogRepository;
 import com.repopilot.modelcall.service.ModelCallLogService;
 import com.repopilot.notification.service.TaskStreamService;
 import com.repopilot.patch.domain.PatchRecord;
@@ -47,6 +49,8 @@ import com.repopilot.project.repository.ProjectRepository;
 import com.repopilot.sandbox.domain.TestRun;
 import com.repopilot.sandbox.domain.TestRunStatus;
 import com.repopilot.sandbox.service.SandboxTestService;
+import com.repopilot.toolcall.domain.ToolCallLog;
+import com.repopilot.toolcall.repository.ToolCallLogRepository;
 import com.repopilot.toolcall.service.ToolCallLogService;
 import com.repopilot.user.domain.User;
 import com.repopilot.user.repository.UserRepository;
@@ -82,6 +86,8 @@ public class AgentTaskService {
     private final PatchRepairService patchRepairService;
     private final ModelCallLogService modelCallLogService;
     private final ToolCallLogService toolCallLogService;
+    private final ModelCallLogRepository modelCallLogRepository;
+    private final ToolCallLogRepository toolCallLogRepository;
     private final TaskStreamService taskStreamService;
     private final ProjectWriteGuardService projectWriteGuardService;
     private final AgentWorkerGateway agentWorkerGateway;
@@ -105,6 +111,8 @@ public class AgentTaskService {
             PatchRepairService patchRepairService,
             ModelCallLogService modelCallLogService,
             ToolCallLogService toolCallLogService,
+            ModelCallLogRepository modelCallLogRepository,
+            ToolCallLogRepository toolCallLogRepository,
             TaskStreamService taskStreamService,
             ProjectWriteGuardService projectWriteGuardService,
             AgentWorkerGateway agentWorkerGateway,
@@ -127,6 +135,8 @@ public class AgentTaskService {
         this.patchRepairService = patchRepairService;
         this.modelCallLogService = modelCallLogService;
         this.toolCallLogService = toolCallLogService;
+        this.modelCallLogRepository = modelCallLogRepository;
+        this.toolCallLogRepository = toolCallLogRepository;
         this.taskStreamService = taskStreamService;
         this.projectWriteGuardService = projectWriteGuardService;
         this.agentWorkerGateway = agentWorkerGateway;
@@ -651,8 +661,10 @@ public class AgentTaskService {
             throw new ApiException(HttpStatus.NOT_FOUND, "AGENT_RUN_NOT_FOUND", "Agent task has no current run");
         }
         List<AgentStep> steps = agentStepRepository.findByAgentRunIdOrderByStartedAtAsc(run.getId());
+        List<ModelCallLog> modelCalls = modelCallLogRepository.findByAgentRunIdOrderByStartedAtAsc(run.getId());
+        List<ToolCallLog> toolCalls = toolCallLogRepository.findByAgentRunIdOrderByStartedAtAsc(run.getId());
         Instant generatedAt = Instant.now();
-        List<AgentRunReportSectionResponse> sections = runReportSections(steps);
+        List<AgentRunReportSectionResponse> sections = runReportSections(steps, modelCalls, toolCalls);
         String markdown = runReportMarkdown(task, run, generatedAt, sections);
         return new AgentRunReportResponse(
                 task.getId(),
@@ -671,9 +683,14 @@ public class AgentTaskService {
         );
     }
 
-    private List<AgentRunReportSectionResponse> runReportSections(List<AgentStep> steps) {
+    private List<AgentRunReportSectionResponse> runReportSections(
+            List<AgentStep> steps,
+            List<ModelCallLog> modelCalls,
+            List<ToolCallLog> toolCalls
+    ) {
         List<AgentRunReportSectionResponse> sections = new ArrayList<>();
         addWorkerSection(sections, latestStepByName(steps, "agent_worker_start"));
+        addRetrySection(sections, modelCalls, toolCalls);
         addPlanSection(sections, latestStepByName(steps, "plan_task"));
         addRetrievalSection(sections, latestStepByName(steps, "retrieve_context"));
         addPatchSection(sections, latestStepByName(steps, "generate_patch"));
@@ -723,6 +740,107 @@ public class AgentTaskService {
                 facts,
                 graphNodes.stream().limit(10).toList()
         ));
+    }
+
+    private void addRetrySection(
+            List<AgentRunReportSectionResponse> sections,
+            List<ModelCallLog> modelCalls,
+            List<ToolCallLog> toolCalls
+    ) {
+        List<RetryEvidence> evidence = new ArrayList<>();
+        for (ModelCallLog modelCall : modelCalls) {
+            List<JsonNode> attempts = retryAttempts(jsonNode(modelCall.getResponseJson()));
+            if (attempts.isEmpty()) {
+                continue;
+            }
+            evidence.add(new RetryEvidence(
+                    "模型",
+                    modelCall.getStepName(),
+                    modelCall.getModelProvider() + "/" + modelCall.getModelName(),
+                    modelCall.getStatus().name(),
+                    attempts.size(),
+                    firstRetryMessage(attempts),
+                    modelCall.getFinishedAt()
+            ));
+        }
+        for (ToolCallLog toolCall : toolCalls) {
+            List<JsonNode> attempts = retryAttempts(jsonNode(toolCall.getOutputJson()));
+            if (attempts.isEmpty()) {
+                continue;
+            }
+            evidence.add(new RetryEvidence(
+                    "只读工具",
+                    toolCall.getToolName(),
+                    "",
+                    toolCall.getStatus().name(),
+                    attempts.size(),
+                    firstRetryMessage(attempts),
+                    toolCall.getFinishedAt()
+            ));
+        }
+        if (evidence.isEmpty()) {
+            return;
+        }
+        int retryAttempts = evidence.stream().mapToInt(RetryEvidence::attemptCount).sum();
+        long recoveredCalls = evidence.stream()
+                .filter(item -> "SUCCESS".equals(item.status()))
+                .count();
+        long modelEvents = evidence.stream().filter(item -> "模型".equals(item.category())).count();
+        long toolEvents = evidence.stream().filter(item -> "只读工具".equals(item.category())).count();
+        Instant finishedAt = evidence.stream()
+                .map(RetryEvidence::finishedAt)
+                .filter(value -> value != null)
+                .max(Instant::compareTo)
+                .orElse(null);
+        List<String> facts = compactList(
+                "重试失败尝试：" + retryAttempts,
+                "恢复调用：" + recoveredCalls + "/" + evidence.size(),
+                "模型调用：" + modelEvents,
+                "只读工具：" + toolEvents
+        );
+        List<String> highlights = evidence.stream()
+                .limit(6)
+                .map(this::retryEvidenceText)
+                .toList();
+        sections.add(new AgentRunReportSectionResponse(
+                "worker_retry",
+                "Worker 重试恢复证据",
+                "worker_retry_recovery",
+                AgentStepStatus.SUCCESS,
+                finishedAt,
+                "本次 Worker primary 记录到 " + retryAttempts + " 次可恢复失败尝试，其中 "
+                        + recoveredCalls + " 个调用在有限重试后成功恢复；写型 callback 仍不做透明重试。",
+                facts,
+                highlights
+        ));
+    }
+
+    private List<JsonNode> retryAttempts(JsonNode node) {
+        return array(node, "retryAttempts");
+    }
+
+    private String firstRetryMessage(List<JsonNode> attempts) {
+        if (attempts.isEmpty()) {
+            return "";
+        }
+        JsonNode first = attempts.get(0);
+        String message = text(first, "message", "");
+        if (message.isBlank()) {
+            return text(first, "errorType", "");
+        }
+        return truncate(message, 140);
+    }
+
+    private String retryEvidenceText(RetryEvidence evidence) {
+        String subject = evidence.category() + " " + evidence.name();
+        if (!evidence.detail().isBlank()) {
+            subject += " (" + evidence.detail() + ")";
+        }
+        String outcome = "SUCCESS".equals(evidence.status())
+                ? "失败 " + evidence.attemptCount() + " 次后恢复"
+                : "重试 " + evidence.attemptCount() + " 次后仍失败";
+        String message = evidence.firstFailure().isBlank() ? "" : "；首次失败：" + evidence.firstFailure();
+        return subject + "：" + outcome + message;
     }
 
     private void addPlanSection(List<AgentRunReportSectionResponse> sections, AgentStep step) {
@@ -1070,6 +1188,17 @@ public class AgentTaskService {
             markdown.append("- ").append(value).append("\n");
         }
         markdown.append("\n");
+    }
+
+    private record RetryEvidence(
+            String category,
+            String name,
+            String detail,
+            String status,
+            int attemptCount,
+            String firstFailure,
+            Instant finishedAt
+    ) {
     }
 
     private boolean stopIfCancelled(AgentTask task, AgentRun run, boolean cancellationAware) {

@@ -617,6 +617,11 @@ if coder_api_key in serialized_patch_model or "Authorization" in serialized_patc
     raise SystemExit(f"generate_patch model audit leaked credential material: {patch_model}")
 if coder_changed_path not in serialized_patch_model:
     raise SystemExit(f"generate_patch model audit missing changed path: {patch_model}")
+patch_retry_response = patch_model.get("response", {})
+if patch_retry_response.get("retryAttemptCount") != 1:
+    raise SystemExit(f"generate_patch model retry audit missing retryAttemptCount: {patch_model}")
+if "HTTP 429" not in patch_retry_response.get("retryAttempts", [{}])[0].get("message", ""):
+    raise SystemExit(f"generate_patch model retry audit missing HTTP 429 message: {patch_model}")
 
 patch_body = captured["patches"][0]["body"]
 if patch_body.get("generation_mode") != "LLM_CODER_DRAFT":
@@ -659,6 +664,7 @@ summary = {
     "retryEvidence": {
         "transientFailures": captured["transientFailures"],
         "coderRequestCount": len(captured["coderRequests"]),
+        "coderAuditRetryAttemptCount": patch_retry_response.get("retryAttemptCount"),
         "maxAttempts": 3,
     },
     "steps": [
@@ -677,6 +683,7 @@ summary = {
             "promptTokens": event["body"].get("prompt_tokens"),
             "completionTokens": event["body"].get("completion_tokens"),
             "totalTokens": event["body"].get("total_tokens"),
+            "retryAttemptCount": event["body"].get("response", {}).get("retryAttemptCount", 0),
         }
         for event in captured["modelCalls"]
     ],

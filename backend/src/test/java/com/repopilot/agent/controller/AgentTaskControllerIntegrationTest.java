@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -23,9 +24,15 @@ import com.repopilot.agent.domain.AgentTaskType;
 import com.repopilot.agent.repository.AgentRunRepository;
 import com.repopilot.agent.repository.AgentStepRepository;
 import com.repopilot.agent.repository.AgentTaskRepository;
+import com.repopilot.modelcall.domain.ModelCallLog;
+import com.repopilot.modelcall.domain.ModelCallStatus;
+import com.repopilot.modelcall.repository.ModelCallLogRepository;
 import com.repopilot.project.domain.Project;
 import com.repopilot.project.domain.ProjectStatus;
 import com.repopilot.project.repository.ProjectRepository;
+import com.repopilot.toolcall.domain.ToolCallLog;
+import com.repopilot.toolcall.domain.ToolCallStatus;
+import com.repopilot.toolcall.repository.ToolCallLogRepository;
 import com.repopilot.user.domain.User;
 import com.repopilot.user.repository.UserRepository;
 import org.junit.jupiter.api.AfterEach;
@@ -64,6 +71,12 @@ class AgentTaskControllerIntegrationTest {
 
     @Autowired
     private AgentStepRepository agentStepRepository;
+
+    @Autowired
+    private ModelCallLogRepository modelCallLogRepository;
+
+    @Autowired
+    private ToolCallLogRepository toolCallLogRepository;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -310,6 +323,85 @@ class AgentTaskControllerIntegrationTest {
                 .andExpect(jsonPath("$.code").value("AGENT_TASK_FORBIDDEN"));
     }
 
+    @Test
+    void runReportShowsWorkerRetryEvidenceFromModelAndToolAudits() throws Exception {
+        String ownerToken = register(ownerEmail);
+        User owner = userRepository.findByEmail(ownerEmail).orElseThrow();
+        Project project = project(owner, "owner/retry-api", ProjectStatus.READY);
+        AgentTask task = task(
+                owner,
+                project,
+                AgentTaskType.FEATURE,
+                AgentTaskStatus.WAITING_HUMAN_APPROVAL,
+                "Expose Worker retry diagnostics",
+                "Show transient retry recovery in the run report."
+        );
+        AgentRun run = new AgentRun(task);
+        run.markSuccess();
+        run = agentRunRepository.save(run);
+        task.setCurrentRun(run);
+        agentTaskRepository.save(task);
+
+        Instant startedAt = Instant.now();
+        modelCallLogRepository.save(new ModelCallLog(
+                run,
+                "plan_task",
+                "OPENAI_COMPATIBLE",
+                "gpt-worker-planner-test",
+                json(Map.of("mode", "openai-compatible")),
+                json(Map.of(
+                        "retryAttemptCount", 1,
+                        "retryAttempts", List.of(Map.of(
+                                "attempt", 1,
+                                "errorType", "WorkerModelError",
+                                "message", "Worker model returned HTTP 429: rate limited",
+                                "retryable", true
+                        ))
+                )),
+                ModelCallStatus.SUCCESS,
+                10,
+                5,
+                15,
+                120,
+                null,
+                startedAt,
+                startedAt.plusMillis(120)
+        ));
+        toolCallLogRepository.save(new ToolCallLog(
+                run,
+                "load_run_context",
+                json(Map.of()),
+                json(Map.of(
+                        "retryAttemptCount", 1,
+                        "retryAttempts", List.of(Map.of(
+                                "attempt", 1,
+                                "errorType", "BackendApiError",
+                                "message", "Backend internal API failed with HTTP 503: TEMPORARY_BACKEND_FAILURE",
+                                "retryable", true
+                        ))
+                )),
+                ToolCallStatus.SUCCESS,
+                80,
+                null,
+                startedAt,
+                startedAt.plusMillis(80)
+        ));
+
+        mockMvc.perform(get("/api/agent/tasks/{id}/run-report", task.getId())
+                        .header(AUTHORIZATION, bearer(ownerToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.sections.length()").value(1))
+                .andExpect(jsonPath("$.data.sections[0].key").value("worker_retry"))
+                .andExpect(jsonPath("$.data.sections[0].title").value("Worker 重试恢复证据"))
+                .andExpect(jsonPath("$.data.sections[0].facts[0]").value("重试失败尝试：2"))
+                .andExpect(jsonPath("$.data.sections[0].facts[1]").value("恢复调用：2/2"))
+                .andExpect(jsonPath("$.data.sections[0].highlights[0]").value(containsString("模型 plan_task")))
+                .andExpect(jsonPath("$.data.sections[0].highlights[1]").value(containsString("只读工具 load_run_context")))
+                .andExpect(jsonPath("$.data.markdown").value(containsString("## Worker 重试恢复证据")))
+                .andExpect(jsonPath("$.data.markdown").value(containsString("写型 callback 仍不做透明重试")));
+    }
+
     private String register(String email) throws Exception {
         MvcResult result = mockMvc.perform(post("/api/auth/register")
                         .contentType(APPLICATION_JSON)
@@ -346,6 +438,26 @@ class AgentTaskControllerIntegrationTest {
     private void cleanupUser(String email) {
         jdbcTemplate.update("""
                 delete from agent_step
+                where agent_run_id in (
+                    select run.id
+                    from agent_run run
+                    join agent_task task on task.id = run.agent_task_id
+                    join app_user app on app.id = task.user_id
+                    where app.email = ?
+                )
+                """, email);
+        jdbcTemplate.update("""
+                delete from model_call_log
+                where agent_run_id in (
+                    select run.id
+                    from agent_run run
+                    join agent_task task on task.id = run.agent_task_id
+                    join app_user app on app.id = task.user_id
+                    where app.email = ?
+                )
+                """, email);
+        jdbcTemplate.update("""
+                delete from tool_call_log
                 where agent_run_id in (
                     select run.id
                     from agent_run run

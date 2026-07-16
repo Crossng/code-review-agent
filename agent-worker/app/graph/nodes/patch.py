@@ -240,14 +240,7 @@ def generate_model_patch_draft(
             model_name=model_result.model,
             status="SUCCESS",
             prompt=model_result.prompt,
-            response={
-                "modelResponse": model_result.response,
-                "parsedDiff": {
-                    "format": parsed["format"],
-                    "changedPaths": changed_paths,
-                    "diffLineCount": len(str(parsed["diffContent"]).splitlines()),
-                },
-            },
+            response=model_patch_response(model_result, parsed, changed_paths),
             prompt_tokens=model_result.prompt_tokens,
             completion_tokens=model_result.completion_tokens,
             total_tokens=model_result.total_tokens,
@@ -255,6 +248,25 @@ def generate_model_patch_draft(
         ),
     )
     return draft
+
+
+def model_patch_response(
+    model_result: Any,
+    parsed: dict[str, Any],
+    changed_paths: list[str],
+) -> dict[str, Any]:
+    response = {
+        "modelResponse": model_result.response,
+        "parsedDiff": {
+            "format": parsed["format"],
+            "changedPaths": changed_paths,
+            "diffLineCount": len(str(parsed["diffContent"]).splitlines()),
+        },
+    }
+    if model_result.retry_attempts:
+        response["retryAttempts"] = model_result.retry_attempts
+        response["retryAttemptCount"] = len(model_result.retry_attempts)
+    return response
 
 
 def build_coder_model_prompt(

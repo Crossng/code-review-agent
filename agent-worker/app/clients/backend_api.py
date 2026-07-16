@@ -147,12 +147,18 @@ class BackendApiClient:
         )
         return list(response)
 
-    def _get_internal(self, path: str, params: Optional[dict[str, Any]] = None) -> Any:
+    def _get_internal(
+        self,
+        path: str,
+        params: Optional[dict[str, Any]] = None,
+        retry_attempts: Optional[list[dict[str, Any]]] = None,
+    ) -> Any:
         query = urlencode({key: value for key, value in (params or {}).items() if value is not None})
         request_path = f"{path}?{query}" if query else path
         return call_with_retry(
             lambda: self._request("GET", request_path, allow_retryable_errors=True),
             self.retry_policy,
+            on_retry=lambda attempt, error: append_retry_attempt(retry_attempts, attempt, error),
         ).get("data")
 
     def _get_tool(
@@ -164,29 +170,38 @@ class BackendApiClient:
         output_summary: Callable[[Any], dict[str, Any]],
     ) -> Any:
         input_payload = {key: value for key, value in (params or {}).items() if value is not None}
+        retry_attempts: list[dict[str, Any]] = []
         started_at = time.monotonic()
         try:
-            response = self._get_internal(path, params)
+            response = self._get_internal(path, params, retry_attempts)
+            output = output_summary(response)
+            if retry_attempts:
+                output["retryAttempts"] = retry_attempts
+                output["retryAttemptCount"] = len(retry_attempts)
             self._record_tool_call_quietly(
                 run_id,
                 AgentToolCallRecordRequest(
                     tool_name=tool_name,
                     status="SUCCESS",
                     input=input_payload,
-                    output=output_summary(response),
+                    output=output,
                     duration_ms=elapsed_ms(started_at),
                 ),
             )
             return response
         except Exception as error:
             message = str(error)[:4000]
+            output: dict[str, Any] = {"error": message[:1000]}
+            if retry_attempts:
+                output["retryAttempts"] = retry_attempts
+                output["retryAttemptCount"] = len(retry_attempts)
             self._record_tool_call_quietly(
                 run_id,
                 AgentToolCallRecordRequest(
                     tool_name=tool_name,
                     status="FAILED",
                     input=input_payload,
-                    output={"error": message[:1000]},
+                    output=output,
                     duration_ms=elapsed_ms(started_at),
                     error_message=message,
                 ),
@@ -251,6 +266,23 @@ class BackendApiClient:
 
 def elapsed_ms(started_at: float) -> int:
     return max(0, int((time.monotonic() - started_at) * 1000))
+
+
+def append_retry_attempt(
+    retry_attempts: Optional[list[dict[str, Any]]],
+    attempt: int,
+    error: Exception,
+) -> None:
+    if retry_attempts is None:
+        return
+    retry_attempts.append(
+        {
+            "attempt": attempt,
+            "errorType": error.__class__.__name__,
+            "message": text_preview(str(error), 500),
+            "retryable": bool(getattr(error, "retryable", False)),
+        }
+    )
 
 
 def summarize_run_context(context: dict[str, Any]) -> dict[str, Any]:

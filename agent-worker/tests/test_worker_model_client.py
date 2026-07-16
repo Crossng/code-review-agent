@@ -206,6 +206,11 @@ class WorkerModelClientTest(unittest.TestCase):
             assert result is not None
             self.assertEqual(result.text, "已恢复，继续执行结构化计划。")
             self.assertEqual(stub.request_count, 2)
+            self.assertIsNotNone(result.retry_attempts)
+            assert result.retry_attempts is not None
+            self.assertEqual(len(result.retry_attempts), 1)
+            self.assertEqual(result.retry_attempts[0]["attempt"], 1)
+            self.assertIn("HTTP 429", result.retry_attempts[0]["message"])
         finally:
             stub.stop()
 

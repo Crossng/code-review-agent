@@ -37,6 +37,7 @@ class WorkerModelResult:
     prompt_tokens: Optional[int] = None
     completion_tokens: Optional[int] = None
     total_tokens: Optional[int] = None
+    retry_attempts: Optional[list[dict[str, Any]]] = None
 
 
 class WorkerModelError(ValueError):
@@ -87,12 +88,14 @@ class WorkerModelClient:
         if mode == "fixture":
             return self._fixture_response(step_name, prompt)
         if mode in {"openai", "openai-compatible"}:
+            retry_attempts: list[dict[str, Any]] = []
             return call_with_retry(
-                lambda: self._openai_compatible_response(step_name, prompt),
+                lambda: self._openai_compatible_response(step_name, prompt, retry_attempts),
                 RetryPolicy(
                     max_attempts=self.settings.retry_max_attempts,
                     backoff_seconds=self.settings.retry_backoff_seconds,
                 ),
+                on_retry=lambda attempt, error: retry_attempts.append(retry_attempt_summary(attempt, error)),
             )
         raise ValueError(f"Unsupported worker model mode: {self.settings.mode}")
 
@@ -116,7 +119,12 @@ class WorkerModelClient:
             duration_ms=max(0, int((time.monotonic() - started_at) * 1000)),
         )
 
-    def _openai_compatible_response(self, step_name: str, prompt: dict[str, Any]) -> WorkerModelResult:
+    def _openai_compatible_response(
+        self,
+        step_name: str,
+        prompt: dict[str, Any],
+        retry_attempts: Optional[list[dict[str, Any]]] = None,
+    ) -> WorkerModelResult:
         api_key = required(
             self.settings.api_key,
             self.api_key_required_message,
@@ -148,6 +156,7 @@ class WorkerModelClient:
             prompt_tokens=positive_int_or_none(usage.get("prompt_tokens")),
             completion_tokens=positive_int_or_none(usage.get("completion_tokens")),
             total_tokens=positive_int_or_none(usage.get("total_tokens")),
+            retry_attempts=retry_attempts or None,
         )
 
     def _chat_completion_request(self, step_name: str, prompt: dict[str, Any], model: str) -> dict[str, Any]:
@@ -336,3 +345,12 @@ def excerpt(value: str, limit: int = 2000) -> str:
     if len(text) <= limit:
         return text
     return text[:limit].rstrip() + "\n..."
+
+
+def retry_attempt_summary(attempt: int, error: Exception) -> dict[str, Any]:
+    return {
+        "attempt": attempt,
+        "errorType": error.__class__.__name__,
+        "message": excerpt(str(error), 500),
+        "retryable": bool(getattr(error, "retryable", False)),
+    }

@@ -259,7 +259,9 @@ Worker primary 的自动重试只覆盖可恢复、低副作用的路径：OpenA
 
 Worker 写型 callback 不做透明重试，包括 `record_step`、`record_model_call`、`record_patch`、`update_status`、`approval-ready` 等会落库或推进状态的请求，避免 HTTP 超时后重复写 patch、重复推进审批或污染审计记录。
 
-`./scripts/agent-worker-planner-smoke.sh` 会让后端 `/context` 首次返回 `503`、Planner 模型首次返回 `429`，随后验证 Worker 自动重试并恢复；`./scripts/agent-worker-coder-model-smoke.sh` 会让 Coder 模型首次返回 `429` 并验证恢复后的 `LLM_CODER_DRAFT` 仍继续进入安全、沙箱、审查和审批后置门。
+Worker 会把恢复证据写入正式审计：模型调用的 `response.retryAttempts` 记录 Planner/Coder 模型临时失败，只读工具调用的 `output.retryAttempts` 记录后端 GET 工具临时失败，并同步 `retryAttemptCount`。后端运行报告会把这些审计汇总成 `Worker 重试恢复证据` 小节，前端任务详情也会通过 run report sections 展示该诊断。
+
+`./scripts/agent-worker-planner-smoke.sh` 会让后端 `/context` 首次返回 `503`、Planner 模型首次返回 `429`，随后验证 Worker 自动重试并恢复，并断言 tool/model audit 里的 retry 字段；`./scripts/agent-worker-coder-model-smoke.sh` 会让 Coder 模型首次返回 `429`，验证恢复后的 `LLM_CODER_DRAFT` 仍继续进入安全、沙箱、审查和审批后置门，并断言 Coder model audit 里的 retry 字段。
 
 ## Backend Patch Callback
 

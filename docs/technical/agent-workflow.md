@@ -170,6 +170,8 @@ Worker 写型 callback 不做透明重试，包括 step/model/tool/patch/status 
 
 端到端 smoke 也固定了这条边界：`./scripts/agent-worker-planner-smoke.sh` 注入一次后端 `/context` `503` 和一次 Planner 模型 `429`，恢复后证据写入 `retryEvidence.contextGetCount=2`、`plannerRequestCount=2`；`./scripts/agent-worker-coder-model-smoke.sh` 注入一次 Coder 模型 `429`，恢复后证据写入 `retryEvidence.coderRequestCount=2`。
 
+Worker 恢复证据现在也会进入正式审计数据：模型调用的 `response.retryAttempts` 记录 OpenAI-compatible Planner/Coder 的可恢复失败尝试，只读工具调用的 `output.retryAttempts` 记录后端 GET 工具的可恢复失败尝试，并同步写入 `retryAttemptCount`。后端 `GET /api/agent/tasks/{id}/run-report` 会扫描当前 run 的 model/tool audit，生成 `Worker 重试恢复证据` 小节，汇总失败尝试数、恢复调用数、模型/工具来源和首次失败摘要；前端任务详情在有 run report 时直接展示后端 report sections，因此该诊断小节会出现在 Agent 执行证据面板、可复制/下载的 Markdown 和运行报告快照中。
+
 ## 7. 检索输出格式
 
 RetrieverAgent 输出：

@@ -2810,7 +2810,10 @@ function AgentEvidencePanel({
   onCopyRunReportSnapshot: (snapshotId: number) => void;
   onDownloadRunReportSnapshot: (snapshotId: number) => void;
 }) {
-  const evidence = useMemo(() => agentEvidenceFromSteps(steps), [steps]);
+  const evidence = useMemo(
+    () => runReport ? agentEvidenceFromRunReport(runReport) : agentEvidenceFromSteps(steps),
+    [runReport, steps]
+  );
   return (
     <section className="panel" id="agent-evidence">
       <div className="panelHeader">
@@ -3476,6 +3479,19 @@ function agentEvidenceFromSteps(steps: AgentStep[]): AgentEvidenceItem[] {
   }
 
   return items;
+}
+
+function agentEvidenceFromRunReport(report: AgentRunReport): AgentEvidenceItem[] {
+  return report.sections.map((section) => ({
+    key: section.key,
+    label: section.title,
+    stepName: section.stepName,
+    status: section.status,
+    finishedAt: section.finishedAt,
+    summary: section.summary,
+    meta: section.facts,
+    highlights: section.highlights
+  }));
 }
 
 function latestStepByName(steps: AgentStep[], stepName: string) {

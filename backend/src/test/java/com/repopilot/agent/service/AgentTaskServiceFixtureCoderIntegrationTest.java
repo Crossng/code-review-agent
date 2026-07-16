@@ -254,6 +254,8 @@ class AgentTaskServiceFixtureCoderIntegrationTest {
                 patchRepairService,
                 new ModelCallLogService(modelCallLogRepository, objectMapper),
                 new ToolCallLogService(toolCallLogRepository, objectMapper),
+                modelCallLogRepository,
+                toolCallLogRepository,
                 taskStreamService,
                 projectWriteGuardService,
                 agentWorkerGateway,

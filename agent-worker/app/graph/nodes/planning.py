@@ -61,7 +61,7 @@ def plan_task(
                 model_name=model_result.model,
                 status="SUCCESS",
                 prompt=model_result.prompt,
-                response=model_result.response,
+                response=model_call_response(model_result.response, model_result.retry_attempts),
                 prompt_tokens=model_result.prompt_tokens,
                 completion_tokens=model_result.completion_tokens,
                 total_tokens=model_result.total_tokens,
@@ -156,6 +156,14 @@ def parse_model_plan(text: str) -> dict[str, Any]:
         "testStrategy": first_text(parsed.get("testStrategy"), parsed.get("validation")),
         "format": "json_object",
     }
+
+
+def model_call_response(response: dict[str, Any], retry_attempts: Optional[list[dict[str, Any]]]) -> dict[str, Any]:
+    output = dict(response or {})
+    if retry_attempts:
+        output["retryAttempts"] = retry_attempts
+        output["retryAttemptCount"] = len(retry_attempts)
+    return output
 
 
 def parse_json_object(text: str) -> Optional[dict[str, Any]]:
