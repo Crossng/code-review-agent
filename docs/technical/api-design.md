@@ -683,6 +683,8 @@ GET /api/agent/tasks?projectId=1&status=WAITING_HUMAN_APPROVAL&taskType=FEATURE&
 
 从 `CREATED` 或 `FAILED_TEST` 状态启动任务。接口会创建新的 `agent_run`，将任务切换到 `GENERATING_PATCH`，并把长流程提交到后台执行器；响应返回时 run 通常仍为 `RUNNING`，前端应订阅任务 SSE 事件并通过任务详情、步骤列表、测试记录和审计日志刷新当前进度，轮询作为断线兜底。
 
+当 `REPOPILOT_AGENT_WORKER_ENABLED=true` 且 callback token 已配置时，后台执行器会先把 run 启动契约发给 Python Agent Worker；Worker 启动成功后 `agent_worker_start.output.execution_mode=WORKER_PRIMARY`，后端不再继续本地 patch 生成链路，后续由 Worker callback 写入步骤、patch、测试、审查和人工审批暂停点。Worker 启动失败时会写入失败 step 并继续 Spring Boot 本地 executor 兜底；缺少 callback token 时只记录启动桥证据并继续本地 executor。
+
 如果同一项目已有其他任务处于写入型运行状态，接口返回 `409 PROJECT_WRITE_TASK_RUNNING`，不会创建新的 run。写入型状态包括索引、规划、检索、patch 生成、沙箱应用、测试、修复、审查和 PR 创建。
 
 响应：

@@ -89,9 +89,9 @@
 
 - 启动 PostgreSQL/Redis、真实 Spring Boot 后端、真实 FastAPI Worker 和本地 OpenAI-compatible Coder 模型 stub。
 - 创建临时用户、本地 `examples/demo-spring-repo` 项目，执行 clone 和 index。
-- 创建 Worker-only run，直接调用 Worker `/runs/{runId}/start`，避免 Spring Boot 本地 executor 兜底链路混入证据。
+- 通过标准后端 `/api/agent/tasks/{taskId}/run` 启动 run，验证后端 `agent_worker_start` 进入 `WORKER_PRIMARY` 主执行模式，且不会混入 Spring Boot 本地 executor 生成的 patch。
 - 让 Worker Coder stub 生成真实 Java diff：给 User 模块新增 `GET /api/users/summary` 汇总接口。
-- 验证 `LLM_CODER_DRAFT`、`OPENAI_COMPATIBLE`、模型 token usage、密钥不落审计、工具读取审计、diff 安全预检、Docker 沙箱 `mvn -q test`、风险审查和人工审批暂停点。
+- 验证 `LLM_CODER_DRAFT`、`OPENAI_COMPATIBLE`、模型 token usage、密钥不落审计、工具读取审计、diff 安全预检、Docker 沙箱 `mvn -q test`、风险审查、人工审批暂停点和单一 Worker patch 产物。
 - 使用标准用户 JWT 审批 Worker patch，随后调用 PR preflight 和 `/pull-request`，验证本地 `DRAFT_READY` 分支/commit 草稿可准备。
 - 将证据写入 `output/agent-worker-business-smoke/last-run.json`，并清理本次临时业务数据和 workspace。
 

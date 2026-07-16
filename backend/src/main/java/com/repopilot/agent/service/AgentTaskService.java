@@ -256,7 +256,9 @@ public class AgentTaskService {
         if (stopIfCancelled(task, run, cancellationAware)) {
             return new RunExecution(run, null);
         }
-        startAgentWorkerIfEnabled(task, run);
+        if (startAgentWorkerIfEnabled(task, run)) {
+            return new RunExecution(run, null);
+        }
         List<String> queries = candidateQueries(task);
         RunContext context = toolCallLogService.record(
                 run,
@@ -711,7 +713,7 @@ public class AgentTaskService {
             facts.add("Graph nodes: " + graphNodes.size());
         }
         String summary = step.getStatus() == AgentStepStatus.SUCCESS
-                ? "后端已把本次 run 的启动契约发送给 Python Agent Worker。"
+                ? workerSummary(output)
                 : "后端尝试启动 Python Agent Worker 失败，当前仍保留 Spring Boot 本地执行兜底。";
         sections.add(section(
                 "worker",
@@ -1109,19 +1111,34 @@ public class AgentTaskService {
         taskStreamService.publishStreamComplete(task, run, message);
     }
 
-    private void startAgentWorkerIfEnabled(AgentTask task, AgentRun run) {
+    private boolean startAgentWorkerIfEnabled(AgentTask task, AgentRun run) {
         if (!agentWorkerGateway.isEnabled()) {
-            return;
+            return false;
         }
+        boolean primaryExecution = agentWorkerGateway.isPrimaryExecutionReady();
         Map<String, Object> input = new LinkedHashMap<>();
         input.put("runId", run.getId());
         input.put("taskId", task.getId());
         input.put("projectId", task.getProject().getId());
         input.put("repoPath", task.getProject().getLocalPath());
         input.put("baseBranch", task.getProject().getDefaultBranch());
+        input.put("primaryExecution", primaryExecution);
         try {
             AgentWorkerStartResult result = agentWorkerGateway.startRun(run);
-            saveStep(run, "agent_worker_start", AgentStepStatus.SUCCESS, input, result);
+            Map<String, Object> output = new LinkedHashMap<>();
+            output.put("run_id", result.runId());
+            output.put("accepted", result.accepted());
+            output.put("status", result.status());
+            output.put("graph_nodes", result.graphNodes());
+            output.put("execution_mode", primaryExecution ? "WORKER_PRIMARY" : "SHADOW_FALLBACK");
+            output.put(
+                    "handoff",
+                    primaryExecution
+                            ? "后端已交给 Python Agent Worker 继续执行，等待 Worker callback 回写后续步骤。"
+                            : "后端仅记录 Worker 启动证据，当前仍继续 Spring Boot 本地执行。"
+            );
+            saveStep(run, "agent_worker_start", AgentStepStatus.SUCCESS, input, output);
+            return primaryExecution;
         } catch (RuntimeException exception) {
             saveStep(
                     run,
@@ -1131,7 +1148,19 @@ public class AgentTaskService {
                     Map.of("code", workerErrorCode(exception), "message", safeErrorMessage(exception)),
                     safeErrorMessage(exception)
             );
+            return false;
         }
+    }
+
+    private String workerSummary(JsonNode output) {
+        String executionMode = text(output, "execution_mode", null);
+        if ("WORKER_PRIMARY".equals(executionMode)) {
+            return "后端已把本次 run 交给 Python Agent Worker 作为主执行链路，后续步骤等待 Worker callback 回写。";
+        }
+        if ("SHADOW_FALLBACK".equals(executionMode)) {
+            return "后端已记录 Python Agent Worker 启动证据，同时继续 Spring Boot 本地执行链路。";
+        }
+        return "后端已把本次 run 的启动契约发送给 Python Agent Worker。";
     }
 
     private String workerErrorCode(RuntimeException exception) {

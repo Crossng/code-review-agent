@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { createWriteStream } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
@@ -76,7 +76,8 @@ try {
         BACKEND_PORT: String(backendPort),
         REPOPILOT_WORKSPACE_ROOT: workspaceRoot,
         REPOPILOT_AGENT_WORKER_CALLBACK_TOKEN: workerToken,
-        REPOPILOT_AGENT_WORKER_ENABLED: "false",
+        REPOPILOT_AGENT_WORKER_ENABLED: "true",
+        REPOPILOT_AGENT_WORKER_URL: workerUrl,
         REPOPILOT_CODER_MODE: "disabled",
         REPOPILOT_GITHUB_ENABLED: "false",
         REPOPILOT_MAVEN_CACHE: "../.m2",
@@ -128,7 +129,6 @@ try {
   const indexResult = await apiPost(apiBase, `/projects/${project.id}/index`, token, {});
   console.log(`索引完成: files=${indexResult.fileCount}, symbols=${indexResult.symbolCount}, chunks=${indexResult.chunkCount}`);
 
-  const indexedProject = await apiGet(apiBase, `/projects/${project.id}`, token);
   const task = await apiPost(apiBase, "/agent/tasks", token, {
     projectId: project.id,
     taskType: "FEATURE",
@@ -137,19 +137,9 @@ try {
   });
   console.log(`任务已创建: #${task.id}`);
 
-  const runId = createWorkerOnlyRun(task.id);
-  console.log(`Worker-only run 已创建: #${runId}`);
-
-  const workerStart = await workerPost(`${workerUrl}/runs/${runId}/start`, {
-    task_id: task.id,
-    project_id: project.id,
-    user_request: `${taskTitle}\n\n${taskDescription}`,
-    repo_path: indexedProject.localPath,
-    base_branch: indexedProject.defaultBranch
-  });
-  if (workerStart.run_id !== runId || workerStart.accepted !== true || workerStart.status !== "QUEUED") {
-    throw new Error(`Worker start 响应不符合预期: ${JSON.stringify(workerStart)}`);
-  }
+  const run = await apiPost(apiBase, `/agent/tasks/${task.id}/run`, token, {});
+  const runId = run.id;
+  console.log(`后端 Worker bridge run 已启动: #${runId}`);
 
   const approvalReadyTask = await waitForWorkerPatchReady(apiBase, token, task.id, runId);
   console.log(`任务进入人工审批: ${approvalReadyTask.status}`);
@@ -162,7 +152,7 @@ try {
     apiGet(apiBase, `/agent/runs/${runId}/tool-calls`, token),
     apiGet(apiBase, `/agent/tasks/${task.id}/run-report`, token)
   ]);
-  const workerPatch = assertWorkerEvidence({ steps, patches, testRuns, modelCalls, toolCalls, runReport });
+  const { workerPatch, workerStart } = assertWorkerEvidence({ steps, patches, testRuns, modelCalls, toolCalls, runReport });
   assertModelRequest();
   console.log(`Worker patch 可审批: #${workerPatch.id} ${workerPatch.generationProvider}/${workerPatch.generationModel}`);
 
@@ -321,36 +311,6 @@ function businessDiff() {
   ].join("\n");
 }
 
-function createWorkerOnlyRun(taskId) {
-  const sql = [
-    "with inserted as (",
-    `  insert into agent_run(agent_task_id, status, started_at) values (${Number(taskId)}, 'RUNNING', now()) returning id`,
-    "), updated as (",
-    "  update agent_task",
-    "  set current_run_id = (select id from inserted), status = 'GENERATING_PATCH', updated_at = now()",
-    `  where id = ${Number(taskId)}`,
-    "  returning current_run_id",
-    ")",
-    "select current_run_id from updated;"
-  ].join("\n");
-  const result = spawnSync(
-    "docker",
-    ["compose", "exec", "-T", "postgres", "psql", "-U", process.env.POSTGRES_USER ?? "repopilot", "-d", process.env.POSTGRES_DB ?? "repopilot", "-At", "-v", "ON_ERROR_STOP=1", "-c", sql],
-    { cwd: repoRoot, encoding: "utf8" }
-  );
-  if (result.status !== 0) {
-    const error = new Error("无法创建 Worker-only run");
-    error.details = `${result.stdout}\n${result.stderr}`;
-    throw error;
-  }
-  const runIdMatch = result.stdout.match(/^\s*(\d+)\s*$/m);
-  const runId = Number(runIdMatch?.[1]);
-  if (!Number.isInteger(runId) || runId <= 0) {
-    throw new Error(`Worker-only run id 无效: ${result.stdout}`);
-  }
-  return runId;
-}
-
 async function waitForWorkerPatchReady(apiBase, token, taskId, runId) {
   const startedAt = Date.now();
   let lastStatus = "";
@@ -381,6 +341,7 @@ async function waitForWorkerPatchReady(apiBase, token, taskId, runId) {
 
 function assertWorkerEvidence({ steps, patches, testRuns, modelCalls, toolCalls, runReport }) {
   const stepNames = [
+    "agent_worker_start",
     "load_task_context",
     "ensure_index",
     "plan_task",
@@ -394,6 +355,11 @@ function assertWorkerEvidence({ steps, patches, testRuns, modelCalls, toolCalls,
   for (const stepName of stepNames) {
     assertStepSucceeded(steps, stepName);
   }
+  const workerStartStep = steps.find((step) => step.stepName === "agent_worker_start" && step.status === "SUCCESS");
+  const workerStart = parseStepOutput(workerStartStep, "agent_worker_start");
+  if (workerStart.execution_mode !== "WORKER_PRIMARY" || workerStart.accepted !== true || workerStart.status !== "QUEUED") {
+    throw new Error(`后端 Worker bridge 未进入主执行模式: ${JSON.stringify(workerStart)}`);
+  }
   const approvalStep = steps.find((step) => step.stepName === "waiting_human_approval");
   if (!approvalStep || approvalStep.status !== "PENDING") {
     throw new Error("缺少 waiting_human_approval PENDING step。");
@@ -401,6 +367,9 @@ function assertWorkerEvidence({ steps, patches, testRuns, modelCalls, toolCalls,
   const workerPatch = patches.find((patch) => isExpectedWorkerPatch(patch));
   if (!workerPatch) {
     throw new Error("缺少 Worker Coder 生成的 OPENAI_COMPATIBLE / LLM_CODER_DRAFT patch。");
+  }
+  if (patches.length !== 1) {
+    throw new Error(`当前任务产生了 ${patches.length} 个 patch，预期只有 Worker primary 生成的 1 个。`);
   }
   if (workerPatch.status !== "APPLIED") {
     throw new Error(`Worker patch status=${workerPatch.status}，预期 APPLIED。`);
@@ -440,7 +409,15 @@ function assertWorkerEvidence({ steps, patches, testRuns, modelCalls, toolCalls,
   if (!Array.isArray(runReport.sections) || runReport.sections.length < 5) {
     throw new Error("运行报告没有生成足够的 Agent evidence sections。");
   }
-  return workerPatch;
+  return { workerPatch, workerStart };
+}
+
+function parseStepOutput(step, stepName) {
+  try {
+    return JSON.parse(step.outputJson);
+  } catch (error) {
+    throw new Error(`${stepName} step output 不是合法 JSON: ${error.message}`);
+  }
 }
 
 function assertModelRequest() {
@@ -538,18 +515,6 @@ async function apiRequest(apiBase, path, { method, token, body }) {
     throw error;
   }
   return payload?.data;
-}
-
-async function workerPost(url, body) {
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body)
-  });
-  if (!response.ok) {
-    throw new Error(`Worker 请求失败: ${response.status} ${await response.text()}`);
-  }
-  return response.json();
 }
 
 async function waitForJson(url, predicate, label) {

@@ -291,10 +291,11 @@ class AgentTaskServiceRegenerationTest {
     }
 
     @Test
-    void runRecordsAgentWorkerStartStepWhenBridgeIsEnabled() {
+    void runHandsOffToAgentWorkerPrimaryExecutionWhenBridgeIsReady() {
         Fixture fixture = fixture(AgentTaskStatus.CREATED);
-        stubSuccessfulPipeline(fixture);
+        when(agentTaskRepository.findById(fixture.task().getId())).thenReturn(Optional.of(fixture.task()));
         when(agentWorkerGateway.isEnabled()).thenReturn(true);
+        when(agentWorkerGateway.isPrimaryExecutionReady()).thenReturn(true);
         when(agentWorkerGateway.startRun(any(AgentRun.class)))
                 .thenReturn(new AgentWorkerStartResult(
                         200L,
@@ -303,9 +304,14 @@ class AgentTaskServiceRegenerationTest {
                         List.of("load_task_context", "ensure_index", "plan_task")
                 ));
 
-        agentTaskService.run(fixture.task().getId(), fixture.user().getId());
+        AgentRun run = agentTaskService.run(fixture.task().getId(), fixture.user().getId());
 
+        assertThat(run.getStatus()).isEqualTo(AgentRunStatus.RUNNING);
+        assertThat(fixture.task().getStatus()).isEqualTo(AgentTaskStatus.GENERATING_PATCH);
         verify(agentWorkerGateway).startRun(any(AgentRun.class));
+        verify(codeSearchService, never()).search(any(), anyString(), anyInt());
+        verify(patchGenerationService, never()).generatePatch(any(), any(), any());
+        verify(sandboxTestService, never()).prepareWorkspace(any(), any());
         ArgumentCaptor<AgentStep> stepCaptor = ArgumentCaptor.forClass(AgentStep.class);
         verify(agentStepRepository, atLeastOnce()).save(stepCaptor.capture());
         assertThat(stepCaptor.getAllValues())
@@ -315,8 +321,11 @@ class AgentTaskServiceRegenerationTest {
                     assertThat(step.getOutputJson())
                             .contains("\"run_id\":200")
                             .contains("\"accepted\":true")
-                            .contains("\"graph_nodes\"");
+                            .contains("\"graph_nodes\"")
+                            .contains("\"execution_mode\":\"WORKER_PRIMARY\"");
                 });
+        assertThat(stepCaptor.getAllValues())
+                .noneSatisfy(step -> assertThat(step.getStepName()).isEqualTo("waiting_human_approval"));
     }
 
     @Test
@@ -324,6 +333,7 @@ class AgentTaskServiceRegenerationTest {
         Fixture fixture = fixture(AgentTaskStatus.CREATED);
         stubSuccessfulPipeline(fixture);
         when(agentWorkerGateway.isEnabled()).thenReturn(true);
+        when(agentWorkerGateway.isPrimaryExecutionReady()).thenReturn(true);
         when(agentWorkerGateway.startRun(any(AgentRun.class)))
                 .thenThrow(new ApiException(
                         org.springframework.http.HttpStatus.BAD_GATEWAY,

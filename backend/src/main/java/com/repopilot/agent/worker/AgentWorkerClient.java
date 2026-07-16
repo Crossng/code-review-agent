@@ -48,12 +48,20 @@ public class AgentWorkerClient implements AgentWorkerGateway {
     }
 
     @Override
+    public boolean isPrimaryExecutionReady() {
+        return properties.isEnabled()
+                && properties.getCallbackToken() != null
+                && !properties.getCallbackToken().isBlank();
+    }
+
+    @Override
     public AgentWorkerStartResult startRun(AgentRun run) {
         AgentTask task = run.getAgentTask();
         Project project = task.getProject();
         AgentWorkerStartRequest request = AgentWorkerStartRequest.from(task, project);
         String body = json(request);
         HttpRequest httpRequest = HttpRequest.newBuilder(startUri(run))
+                .version(HttpClient.Version.HTTP_1_1)
                 .timeout(Duration.ofSeconds(Math.max(1, properties.getTimeoutSeconds())))
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(body))
@@ -68,7 +76,10 @@ public class AgentWorkerClient implements AgentWorkerGateway {
             throw startFailed("Agent Worker 启动请求被中断", exception);
         }
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw startFailed("Agent Worker 返回非成功状态：" + response.statusCode(), null);
+            throw startFailed(
+                    "Agent Worker 返回非成功状态：" + response.statusCode() + responseBodyMessage(response.body()),
+                    null
+            );
         }
         try {
             AgentWorkerStartResult result = objectMapper.readValue(response.body(), AgentWorkerStartResult.class);
@@ -103,6 +114,17 @@ public class AgentWorkerClient implements AgentWorkerGateway {
         } catch (JsonProcessingException exception) {
             throw startFailed("Agent Worker 请求无法序列化：" + exception.getOriginalMessage(), exception);
         }
+    }
+
+    private String responseBodyMessage(String responseBody) {
+        if (responseBody == null || responseBody.isBlank()) {
+            return "";
+        }
+        String compactBody = responseBody.replaceAll("\\s+", " ").trim();
+        if (compactBody.length() > 800) {
+            compactBody = compactBody.substring(0, 800) + "...";
+        }
+        return "，响应：" + compactBody;
     }
 
     private ApiException startFailed(String message, Throwable cause) {

@@ -6,5 +6,7 @@ public interface AgentWorkerGateway {
 
     boolean isEnabled();
 
+    boolean isPrimaryExecutionReady();
+
     AgentWorkerStartResult startRun(AgentRun run);
 }

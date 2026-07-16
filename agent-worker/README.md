@@ -94,13 +94,13 @@ The planner smoke script checks:
 
 - PostgreSQL/Redis, Spring Boot backend, FastAPI worker and a local OpenAI-compatible Coder stub are started together.
 - The script creates and indexes the local demo Spring repository.
-- A Worker-only run is created so the evidence comes from the Worker path instead of the Spring Boot fallback executor.
+- The script starts a normal backend run through `/api/agent/tasks/{taskId}/run`, verifies `agent_worker_start.execution_mode=WORKER_PRIMARY`, and asserts that only the Worker patch is produced.
 - The Worker Coder stub generates a real Java diff for `GET /api/users/summary`, records `LLM_CODER_DRAFT / OPENAI_COMPATIBLE`, passes safety, Docker Maven tests, review and approval-ready gates, then uses the standard user approval and local PR draft APIs.
 - Evidence is written to `output/agent-worker-business-smoke/last-run.json`.
 
 ## Backend Start Bridge
 
-The Spring Boot backend can shadow-dispatch a run start contract to this worker when configured:
+The Spring Boot backend can dispatch a run start contract to this worker when configured:
 
 ```yaml
 repopilot:
@@ -110,6 +110,8 @@ repopilot:
 ```
 
 When enabled, backend run execution records an `agent_worker_start` step with the worker response. If the worker call fails, the failure is recorded as step evidence and the current Spring Boot executor continues as the local fallback.
+
+When both `REPOPILOT_AGENT_WORKER_ENABLED=true` and `REPOPILOT_AGENT_WORKER_CALLBACK_TOKEN` are configured, a successful worker start is treated as `WORKER_PRIMARY`: the backend stops its local executor for that run and waits for Worker callbacks to write steps, patch, sandbox results, review and approval-ready state. If the callback token is missing, the start bridge remains a shadow signal and the Spring Boot executor continues locally.
 
 ## Backend Step Callback
 
@@ -312,6 +314,6 @@ This keeps LangGraph wiring small and makes future model-backed nodes easier to 
 
 Next implementation steps:
 
-1. Promote the Worker-only business smoke path toward the backend Worker bridge as the primary execution path.
-2. Keep expanding model-backed Coder business scenarios while preserving parser, safety, sandbox, review and approval gates.
+1. Expand model-backed Worker Coder business scenarios while preserving parser, safety, sandbox, review and approval gates.
+2. Keep hardening Worker primary execution for cancellation, retries and failure recovery.
 3. Exercise Worker-approved patches against real remote GitHub PR publishing once a token-backed demo repository is available.

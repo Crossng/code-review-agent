@@ -102,6 +102,15 @@ class AgentWorkerClientTest {
         assertThat(client(false).isEnabled()).isFalse();
     }
 
+    @Test
+    void primaryExecutionRequiresEnabledBridgeAndCallbackToken() throws Exception {
+        startServer(200, Map.of(), new AtomicReference<>(), new AtomicReference<>(), new AtomicReference<>());
+
+        assertThat(client(true, "worker-token").isPrimaryExecutionReady()).isTrue();
+        assertThat(client(true, "").isPrimaryExecutionReady()).isFalse();
+        assertThat(client(false, "worker-token").isPrimaryExecutionReady()).isFalse();
+    }
+
     private void startServer(
             int statusCode,
             Map<String, Object> response,
@@ -125,10 +134,15 @@ class AgentWorkerClientTest {
     }
 
     private AgentWorkerClient client(boolean enabled) {
+        return client(enabled, "worker-token");
+    }
+
+    private AgentWorkerClient client(boolean enabled, String callbackToken) {
         AgentWorkerProperties properties = new AgentWorkerProperties();
         properties.setEnabled(enabled);
         properties.setBaseUrl("http://127.0.0.1:" + server.getAddress().getPort());
         properties.setTimeoutSeconds(3);
+        properties.setCallbackToken(callbackToken);
         return new AgentWorkerClient(properties, objectMapper, HttpClient.newHttpClient());
     }
 
