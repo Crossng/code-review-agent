@@ -48,7 +48,8 @@ The node smoke script checks:
 - `POST /runs/{run_id}/start` schedules initial worker nodes when `REPOPILOT_AGENT_WORKER_CALLBACK_TOKEN` is configured.
 - The worker reads run context/files/symbols/search/file through the backend tool bridge.
 - Every run-scoped tool read is automatically recorded through `/tool-calls` with a bounded output summary.
-- The worker records `load_task_context`, `ensure_index`, deterministic `plan_task` and `retrieve_context` SUCCESS steps.
+- The worker records `load_task_context`, `ensure_index`, deterministic `plan_task`, `retrieve_context` and `generate_patch` SUCCESS steps.
+- The worker records a deterministic `generate_patch` model call and a `WORKER_SAFE_PLANNING_DRAFT` patch draft.
 - Evidence is written to `output/agent-worker-node-smoke/last-run.json`.
 
 ## Backend Start Bridge
@@ -181,6 +182,7 @@ When `REPOPILOT_AGENT_WORKER_CALLBACK_TOKEN` is configured, `/runs/{run_id}/star
 2. `ensure_index` checks that the run has file and Java symbol signals, then records index readiness evidence.
 3. `plan_task` builds a deterministic Spring implementation plan, runs a few code searches for evidence, then records a SUCCESS step.
 4. `retrieve_context` reuses plan search queries, deduplicates code chunks, reads key file previews and records a SUCCESS step.
+5. `generate_patch` creates a safe planning draft diff under `.repopilot/`, records a deterministic model-call audit entry, persists the draft through `record_patch(...)` and records a SUCCESS step.
 
 If no callback token is configured, `/start` remains a pure contract endpoint and does not run background nodes. This keeps local smoke tests and bridge-disabled development quiet.
 
@@ -188,4 +190,4 @@ Next implementation steps:
 
 1. Replace the lightweight graph runner with a real LangGraph graph once node contracts stabilize.
 2. Attach future Worker model calls to `record_model_call(...)` automatically.
-3. Start migrating `generate_patch` from the Spring Boot fallback executor into the Python Worker.
+3. Connect Worker-generated patches to the backend safety, sandbox, review and approval chain.

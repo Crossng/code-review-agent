@@ -21,3 +21,4 @@ class AgentRunState(TypedDict, total=False):
     index_status: dict[str, Any]
     plan_output: dict[str, Any]
     retrieval_output: dict[str, Any]
+    patch_output: dict[str, Any]

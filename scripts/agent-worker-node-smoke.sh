@@ -8,7 +8,7 @@ LOG_DIR="$ROOT_DIR/target/agent-worker-node-smoke/logs"
 
 usage() {
   cat <<'EOF'
-RepoPilot Agent Worker 初始与检索节点 smoke
+RepoPilot Agent Worker 初始、检索与补丁草稿节点 smoke
 
 用法:
   ./scripts/agent-worker-node-smoke.sh
@@ -16,8 +16,8 @@ RepoPilot Agent Worker 初始与检索节点 smoke
 说明:
   - 启动本地后端 HTTP stub 和真实 Agent Worker。
   - 调用 /runs/{run_id}/start。
-  - 验证 Worker 后台执行 load_task_context、ensure_index、plan_task 和 retrieve_context。
-  - 校验 Worker 拉取 context/files/symbols/search/file，自动回写 tool call audit，并回写四个 SUCCESS step。
+  - 验证 Worker 后台执行 load_task_context、ensure_index、plan_task、retrieve_context 和 generate_patch。
+  - 校验 Worker 拉取 context/files/symbols/search/file，自动回写 tool call audit，回写 model call audit 和 patch draft，并回写五个 SUCCESS step。
   - 运行证据写入 output/agent-worker-node-smoke/last-run.json。
 EOF
 }
@@ -29,7 +29,7 @@ fi
 
 mkdir -p "$ARTIFACT_DIR" "$LOG_DIR"
 
-echo "RepoPilot Agent Worker 初始与检索节点 smoke"
+echo "RepoPilot Agent Worker 初始、检索与补丁草稿节点 smoke"
 
 PYTHONPATH="$ROOT_DIR/agent-worker" python3 - "$ROOT_DIR" "$SUMMARY_JSON" "$LOG_DIR" <<'PY'
 import json
@@ -49,7 +49,7 @@ from urllib.request import Request, urlopen
 root_dir = Path(sys.argv[1])
 summary_path = Path(sys.argv[2])
 log_dir = Path(sys.argv[3])
-captured = {"gets": [], "steps": [], "toolCalls": []}
+captured = {"gets": [], "steps": [], "toolCalls": [], "modelCalls": [], "patches": []}
 
 
 def free_port() -> int:
@@ -222,6 +222,46 @@ class UserService {
             }
             self.respond({"success": True, "data": data, "code": None, "message": None, "traceId": "node-smoke"})
             return
+        if parsed.path.endswith("/model-calls"):
+            captured["modelCalls"].append(event)
+            data = {
+                "id": 840 + len(captured["modelCalls"]),
+                "agentRunId": 606,
+                "stepName": event["body"]["step_name"],
+                "modelProvider": event["body"]["model_provider"],
+                "modelName": event["body"]["model_name"],
+                "promptJson": json.dumps(event["body"].get("prompt", {}), ensure_ascii=False),
+                "responseJson": json.dumps(event["body"].get("response", {}), ensure_ascii=False),
+                "status": event["body"]["status"],
+                "promptTokens": event["body"].get("prompt_tokens"),
+                "completionTokens": event["body"].get("completion_tokens"),
+                "totalTokens": event["body"].get("total_tokens"),
+                "durationMs": event["body"].get("duration_ms"),
+                "errorMessage": event["body"].get("error_message"),
+                "startedAt": "2026-07-16T00:00:00Z",
+                "finishedAt": "2026-07-16T00:00:01Z",
+            }
+            self.respond({"success": True, "data": data, "code": None, "message": None, "traceId": "node-smoke"})
+            return
+        if parsed.path.endswith("/patches"):
+            captured["patches"].append(event)
+            data = {
+                "id": 880 + len(captured["patches"]),
+                "agentTaskId": 303,
+                "agentRunId": 606,
+                "baseBranch": event["body"].get("base_branch") or "main",
+                "targetBranch": event["body"].get("target_branch") or "repopilot/task-303",
+                "diffContent": event["body"]["diff_content"],
+                "summary": event["body"].get("summary"),
+                "generationMode": event["body"]["generation_mode"],
+                "generationProvider": event["body"]["generation_provider"],
+                "generationModel": event["body"].get("generation_model"),
+                "changedFiles": [{"path": ".repopilot/task-303-worker-plan.md", "changeType": "ADDED"}],
+                "status": "GENERATED",
+                "createdAt": "2026-07-16T00:00:01Z",
+            }
+            self.respond({"success": True, "data": data, "code": None, "message": None, "traceId": "node-smoke"})
+            return
         if not parsed.path.endswith("/steps"):
             self.send_response(404)
             self.end_headers()
@@ -309,7 +349,7 @@ try:
     )
 
     deadline = time.time() + 10
-    while len(captured["steps"]) < 4 and time.time() < deadline:
+    while len(captured["steps"]) < 5 and time.time() < deadline:
         time.sleep(0.1)
 finally:
     worker.terminate()
@@ -326,9 +366,10 @@ if health.get("status") != "UP":
     raise SystemExit(f"worker health mismatch: {health}")
 if start.get("run_id") != 606 or start.get("accepted") is not True or start.get("status") != "QUEUED":
     raise SystemExit(f"worker start mismatch: {start}")
-if len(captured["steps"]) < 4:
-    raise SystemExit(f"expected four worker step callbacks, got {captured['steps']}")
-if any(event["token"] != "node-smoke-token" for event in captured["gets"] + captured["steps"] + captured["toolCalls"]):
+if len(captured["steps"]) < 5:
+    raise SystemExit(f"expected five worker step callbacks, got {captured['steps']}")
+callback_events = captured["steps"] + captured["toolCalls"] + captured["modelCalls"] + captured["patches"]
+if any(event["token"] != "node-smoke-token" for event in captured["gets"] + callback_events):
     raise SystemExit("worker internal token header mismatch")
 
 get_paths = [event["path"] for event in captured["gets"]]
@@ -343,7 +384,7 @@ for expected in [
         raise SystemExit(f"missing backend tool request {expected}: {get_paths}")
 
 step_by_name = {event["body"]["step_name"]: event["body"] for event in captured["steps"]}
-if set(step_by_name) != {"load_task_context", "ensure_index", "plan_task", "retrieve_context"}:
+if set(step_by_name) != {"load_task_context", "ensure_index", "plan_task", "retrieve_context", "generate_patch"}:
     raise SystemExit(f"step names mismatch: {list(step_by_name)}")
 if step_by_name["load_task_context"].get("status") != "SUCCESS":
     raise SystemExit(f"load_task_context status mismatch: {step_by_name['load_task_context']}")
@@ -353,11 +394,14 @@ if step_by_name["plan_task"].get("status") != "SUCCESS":
     raise SystemExit(f"plan_task status mismatch: {step_by_name['plan_task']}")
 if step_by_name["retrieve_context"].get("status") != "SUCCESS":
     raise SystemExit(f"retrieve_context status mismatch: {step_by_name['retrieve_context']}")
+if step_by_name["generate_patch"].get("status") != "SUCCESS":
+    raise SystemExit(f"generate_patch status mismatch: {step_by_name['generate_patch']}")
 
 load_output = step_by_name["load_task_context"].get("output", {})
 ensure_output = step_by_name["ensure_index"].get("output", {})
 plan_output = step_by_name["plan_task"].get("output", {})
 retrieve_output = step_by_name["retrieve_context"].get("output", {})
+patch_output = step_by_name["generate_patch"].get("output", {})
 if load_output.get("repoFullName") != "demo/repo" or load_output.get("fileCount") != 4:
     raise SystemExit(f"load_task_context output mismatch: {load_output}")
 if ensure_output.get("indexReady") is not True or ensure_output.get("javaFileCount") != 4:
@@ -372,6 +416,16 @@ if "给 User 模块新增分页查询接口" not in retrieve_output.get("queries
     raise SystemExit(f"retrieve_context queries mismatch: {retrieve_output}")
 if not any(file.get("path", "").endswith("UserController.java") for file in retrieve_output.get("readFiles", [])):
     raise SystemExit(f"retrieve_context readFiles mismatch: {retrieve_output}")
+if patch_output.get("generationMode") != "WORKER_SAFE_PLANNING_DRAFT":
+    raise SystemExit(f"generate_patch generation mode mismatch: {patch_output}")
+if patch_output.get("generationProvider") != "AGENT_WORKER":
+    raise SystemExit(f"generate_patch provider mismatch: {patch_output}")
+if patch_output.get("generationModel") != "worker-retrieval-plan-v1":
+    raise SystemExit(f"generate_patch model mismatch: {patch_output}")
+if patch_output.get("patchId") != 881 or patch_output.get("patchStatus") != "GENERATED":
+    raise SystemExit(f"generate_patch patch response mismatch: {patch_output}")
+if patch_output.get("diffPath") != ".repopilot/task-303-worker-plan.md":
+    raise SystemExit(f"generate_patch diff path mismatch: {patch_output}")
 
 tool_calls = captured["toolCalls"]
 if len(tool_calls) != len(captured["gets"]):
@@ -389,6 +443,34 @@ if not read_file_tool_calls:
     raise SystemExit(f"missing read_project_file tool audit: {tool_calls}")
 if any("contentPreview" not in event["body"].get("output", {}) for event in read_file_tool_calls):
     raise SystemExit(f"read_project_file output summary mismatch: {read_file_tool_calls}")
+
+model_calls = captured["modelCalls"]
+if len(model_calls) != 1:
+    raise SystemExit(f"model call count mismatch: {model_calls}")
+model_body = model_calls[0]["body"]
+if model_calls[0].get("contentType") != "application/json":
+    raise SystemExit(f"model call content type mismatch: {model_calls}")
+if model_body.get("step_name") != "generate_patch" or model_body.get("status") != "SUCCESS":
+    raise SystemExit(f"model call contract mismatch: {model_body}")
+if model_body.get("model_provider") != "AGENT_WORKER" or model_body.get("model_name") != "worker-retrieval-plan-v1":
+    raise SystemExit(f"model call metadata mismatch: {model_body}")
+
+patches = captured["patches"]
+if len(patches) != 1:
+    raise SystemExit(f"patch callback count mismatch: {patches}")
+patch_body = patches[0]["body"]
+if patches[0].get("contentType") != "application/json":
+    raise SystemExit(f"patch content type mismatch: {patches}")
+if patch_body.get("generation_mode") != "WORKER_SAFE_PLANNING_DRAFT":
+    raise SystemExit(f"patch generation mode mismatch: {patch_body}")
+if patch_body.get("generation_provider") != "AGENT_WORKER":
+    raise SystemExit(f"patch generation provider mismatch: {patch_body}")
+if patch_body.get("generation_model") != "worker-retrieval-plan-v1":
+    raise SystemExit(f"patch generation model mismatch: {patch_body}")
+if not patch_body.get("diff_content", "").startswith("diff --git"):
+    raise SystemExit(f"patch diff contract mismatch: {patch_body}")
+if ".repopilot/task-303-worker-plan.md" not in patch_body.get("diff_content", ""):
+    raise SystemExit(f"patch diff path mismatch: {patch_body}")
 
 summary = {
     "generatedAt": datetime.now(timezone.utc).isoformat(),
@@ -425,6 +507,28 @@ summary = {
         }
         for event in tool_calls
     ],
+    "modelCalls": [
+        {
+            "path": event["path"],
+            "stepName": event["body"]["step_name"],
+            "modelProvider": event["body"]["model_provider"],
+            "modelName": event["body"]["model_name"],
+            "status": event["body"]["status"],
+            "tokenHeaderPresent": event["token"] == "node-smoke-token",
+        }
+        for event in model_calls
+    ],
+    "patches": [
+        {
+            "path": event["path"],
+            "generationMode": event["body"]["generation_mode"],
+            "generationProvider": event["body"]["generation_provider"],
+            "generationModel": event["body"].get("generation_model"),
+            "diffStartsWithGit": event["body"]["diff_content"].startswith("diff --git"),
+            "tokenHeaderPresent": event["token"] == "node-smoke-token",
+        }
+        for event in patches
+    ],
     "loadTaskContext": {
         "repoFullName": load_output["repoFullName"],
         "fileCount": load_output["fileCount"],
@@ -448,10 +552,21 @@ summary = {
         "uniqueResultCount": retrieve_output["uniqueResultCount"],
         "readFiles": [file["path"] for file in retrieve_output["readFiles"]],
     },
+    "generatePatch": {
+        "summary": patch_output["summary"],
+        "patchId": patch_output["patchId"],
+        "patchStatus": patch_output["patchStatus"],
+        "generationMode": patch_output["generationMode"],
+        "generationProvider": patch_output["generationProvider"],
+        "generationModel": patch_output["generationModel"],
+        "diffPath": patch_output["diffPath"],
+        "diffLineCount": patch_output["diffLineCount"],
+    },
 }
 summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-print("Agent Worker 初始与检索节点验证通过。")
+print("Agent Worker 初始、检索与补丁草稿节点验证通过。")
 print(f"Steps: {', '.join(step['stepName'] for step in summary['steps'])}")
 print(f"Tool calls: {len(summary['toolCalls'])}")
+print(f"Model calls: {len(summary['modelCalls'])}; Patches: {len(summary['patches'])}")
 print(f"证据文件: {summary_path}")
 PY
