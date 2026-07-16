@@ -16,6 +16,7 @@ Current slice:
 ../scripts/agent-worker-callback-smoke.sh
 ../scripts/agent-worker-tool-smoke.sh
 ../scripts/agent-worker-node-smoke.sh
+../scripts/agent-worker-planner-smoke.sh
 ```
 
 The contract smoke script checks:
@@ -57,6 +58,16 @@ The node smoke script checks:
 - The worker calls `/api/internal/agent-worker/runs/{run_id}/patches/{patch_id}/review` when sandbox tests pass.
 - The worker calls `/api/internal/agent-worker/runs/{run_id}/patches/{patch_id}/approval-ready` when review passes.
 - Evidence is written to `output/agent-worker-node-smoke/last-run.json`.
+
+The planner smoke script checks:
+
+- A real FastAPI worker starts with a local backend stub and a local OpenAI-compatible Chat Completions stub.
+- `REPOPILOT_WORKER_MODEL_MODE=openai-compatible` makes `plan_task` call `/v1/chat/completions`.
+- The Planner request carries Authorization, model, optional OpenAI organization/project headers, Planner prompt, task/index/search/plan context and `max_completion_tokens`.
+- The `plan_task` step output contains `modelPlanText`, `modelProvider=OPENAI_COMPATIBLE` and the model name returned by the stub.
+- The worker records two model call audits in the run: `plan_task / OPENAI_COMPATIBLE` and `generate_patch / AGENT_WORKER`.
+- The Planner API key is not written into model call prompt/response audit payloads.
+- Evidence is written to `output/agent-worker-planner-smoke/last-run.json`.
 
 ## Backend Start Bridge
 

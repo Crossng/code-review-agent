@@ -9,6 +9,7 @@
 ./scripts/agent-worker-callback-smoke.sh
 ./scripts/agent-worker-tool-smoke.sh
 ./scripts/agent-worker-node-smoke.sh
+./scripts/agent-worker-planner-smoke.sh
 ```
 
 `agent-worker-smoke.sh` 用于验证 Python Agent Worker 的最小服务契约。它会：
@@ -49,6 +50,17 @@
 - 验证 Worker 在风险审查通过后调用 `/patches/{patchId}/approval-ready` 触发后端 `WAITING_HUMAN_APPROVAL` 暂停点。
 - Worker 进入审批暂停点后的用户 approve 和本地 PR 准备链路由后端集成测试覆盖，避免 smoke 脚本绕过人工审批边界。
 - 将证据写入 `output/agent-worker-node-smoke/last-run.json`。
+
+`agent-worker-planner-smoke.sh` 用于验证 Python Agent Worker 的 OpenAI-compatible Planner 模型节点链路。它会：
+
+- 启动本地后端 HTTP stub、本地 Chat Completions 兼容模型 stub 和真实 FastAPI worker。
+- 配置 `REPOPILOT_WORKER_MODEL_MODE=openai-compatible`、模型名、API base URL、API key、`max_completion_tokens` 和可选 organization/project header。
+- 调用 `POST /runs/{run_id}/start`，让 Worker 后台执行 `load_task_context`、`ensure_index`、`plan_task`、`retrieve_context` 和 `generate_patch`。
+- 验证 `plan_task` 真实请求 `/v1/chat/completions`，请求体包含 Planner prompt、任务/索引/检索/确定性计划上下文和模型名。
+- 验证 `plan_task` step output 包含 `modelPlanText`、`modelProvider=OPENAI_COMPATIBLE` 和模型名。
+- 验证本次 run 有两条 model call audit：`plan_task / OPENAI_COMPATIBLE` 和 `generate_patch / AGENT_WORKER`。
+- 验证 Planner API key 只进入 Authorization header，不写入 prompt/response 审计。
+- 将证据写入 `output/agent-worker-planner-smoke/last-run.json`。
 
 ## Real Token Demo Check
 

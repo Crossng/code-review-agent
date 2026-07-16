@@ -66,6 +66,7 @@
 | AC-011h22 | Agent Worker LangGraph 执行器适配可验证 | Python Worker 的 `WorkerGraphRunner` 在 `langgraph` 依赖可导入时使用 LangGraph `StateGraph(AgentRunState)` 编译 `load_task_context -> ensure_index -> plan_task -> retrieve_context -> generate_patch` 初始节点链，并通过 `compile().invoke(...)` 执行；未安装 `langgraph` 的本地开发环境只在 `ImportError` 时回退为同序顺序执行器，`GET /health.graph_engine` 明确返回 `LANGGRAPH` 或 `SEQUENTIAL_FALLBACK`；`agent-worker/tests/test_worker_graph_runner.py` 覆盖顺序兜底、fake LangGraph 编译/边关系/`AgentRunState` schema/`compile().invoke(...)` 调用，`./scripts/agent-worker-smoke.sh` 覆盖健康检查引擎可见性 |
 | AC-011h23 | Agent Worker 节点模块拆分可验证 | `app/graph/initial_nodes.py` 只保留 `run_initial_nodes_safely(...)` 和 `build_initial_graph(...)`，节点实现拆入 `app/graph/nodes/context.py`、`planning.py`、`patch.py` 和 `common.py`；`context.py` 覆盖 `load_task_context`/`ensure_index`，`planning.py` 覆盖 `plan_task`/`retrieve_context`，`patch.py` 覆盖 `generate_patch` 与 safety/sandbox/review/approval-ready 后置门；`agent-worker/tests/test_initial_graph_builder.py` 固定初始节点顺序，`./scripts/agent-worker-node-smoke.sh` 覆盖拆分后的真实 FastAPI Worker + 后端 stub 节点执行、工具审计、模型审计、patch 回写和后置门 callback |
 | AC-011h24 | Agent Worker 模型计划客户端可验证 | Python Agent Worker 提供 `WorkerModelClient` 和 `WorkerModelClientSettings`；`REPOPILOT_WORKER_MODEL_MODE=disabled` 默认不调用模型，保持确定性 `plan_task` 输出；`REPOPILOT_WORKER_MODEL_MODE=fixture` 使用 `REPOPILOT_WORKER_MODEL_FIXTURE_RESPONSE` 生成模型计划摘要；`REPOPILOT_WORKER_MODEL_MODE=openai-compatible` 调用 `${REPOPILOT_WORKER_MODEL_API_BASE_URL}/chat/completions`，携带 Authorization header、`REPOPILOT_WORKER_MODEL_NAME`、Planner system/developer prompt、任务/索引/检索/确定性计划上下文和 `max_completion_tokens`，解析 assistant content 和 usage；模型摘要写入 `plan_task.modelPlanText`、`modelProvider`、`modelName`，token usage 写入 `plan_task` model call audit；API key 不写入 prompt/response 审计；模型模式不生成代码、不绕过 `generate_patch`、安全预检、沙箱测试、风险审查或人工审批；`agent-worker/tests/test_worker_model_client.py` 覆盖 disabled/fixture/openai-compatible HTTP stub/缺 key/缺 model/HTTP 失败，`agent-worker/tests/test_planning_model_node.py` 覆盖 `plan_task` 的模型审计、prompt 结构和确定性计划保留 |
+| AC-011h25 | Agent Worker Planner 模型节点 smoke 可验证 | `./scripts/agent-worker-planner-smoke.sh` 启动本地后端 HTTP stub、本地 OpenAI-compatible Chat Completions stub 和真实 FastAPI Worker，配置 `REPOPILOT_WORKER_MODEL_MODE=openai-compatible` 后调用 `POST /runs/{runId}/start`；脚本验证 `plan_task` 请求 `/v1/chat/completions`，Authorization header、模型名、organization/project header、Planner prompt、任务/索引/检索/确定性计划上下文和 `max_completion_tokens` 均正确；验证 `plan_task` step output 包含 `modelPlanText`、`modelProvider=OPENAI_COMPATIBLE` 和模型名；验证 run 内 model call audit 同时包含 `plan_task / OPENAI_COMPATIBLE` 和 `generate_patch / AGENT_WORKER`，并写入 prompt/completion/total token usage；验证 Planner API key 不出现在 prompt/response 审计；证据写入 `output/agent-worker-planner-smoke/last-run.json` |
 | AC-011i | 工作台概览指标可见 | `GET /api/dashboard/summary` 需要鉴权，只统计当前用户项目、任务和 PR 记录；返回项目总数/READY/FAILED，任务总数/CREATED/运行中/待审批/DONE/失败/CANCELLED，PR 总数/`DRAFT_READY`/`OPEN`/`FAILED`；控制台展示 `DashboardSummaryPanel`，登录后显示空工作区指标，项目索引完成后更新项目 ready 计数，任务到达人工审批点后更新 waiting approval 计数 |
 | AC-011j | Agent 运行表现指标可见 | `GET /api/dashboard/run-metrics` 需要鉴权，只统计当前用户最近 1-30 天 `agent_run`；默认 7 天窗口返回 run 总数、成功/失败/取消/运行中数量、完成 run 数、平均耗时、成功率和每日趋势；控制台展示 `DashboardRunMetricsPanel`，登录后显示 0 runs，首个任务到达人工审批点后显示 runs=1、success rate=100% |
 | AC-011k | 跨项目活动流可见 | `GET /api/dashboard/activity` 需要鉴权，只统计当前用户任务下最近 `agent_step`，按完成/开始时间倒序返回，支持 `limit` 且不返回 step input/output JSON；控制台展示 `DashboardActivityPanel`，登录后显示无活动，首个任务到达人工审批点后显示 `waiting_human_approval` 活动 |
@@ -78,7 +79,7 @@
 | AC-011r | Agent 运行指标窗口可切换 | `DashboardRunMetricsPanel` 提供 7/14/30 天窗口选择；切换到 14 天时前端请求 `GET /api/dashboard/run-metrics?days=14` 并更新面板为 `Last 14 days`；URL 写入 `runMetricsDays=14`，刷新后选择器和指标窗口恢复 |
 | AC-011s | 活动流数量窗口可切换 | `DashboardActivityPanel` 提供 10/25/50 条数量选择；切换到 25 条时前端请求 `GET /api/dashboard/activity?limit=25` 并更新面板为 `0 of latest 25 events` 或对应活动数量；URL 写入 `activityLimit=25`，刷新后选择器和活动窗口恢复 |
 | AC-011t | 工作台概览链接可复制 | `DashboardSummaryPanel` 提供 `Copy overview link`；点击后通过剪贴板写入当前控制台 URL，包含当前 `runMetricsDays`、`activityLimit` 和 `#overview` 锚点，并显示可访问的复制状态提示 |
-| AC-012 | 全链路可演示 | `./scripts/agent-worker-smoke.sh` 可先验证 Python Agent Worker 契约；`./scripts/agent-worker-callback-smoke.sh` 可验证 Python Agent Worker 到后端 step/tool/model/patch/status 回写 client 契约；`./scripts/agent-worker-tool-smoke.sh` 可验证 Python Agent Worker 到后端 run-scoped 工具读取 client 契约；`./scripts/agent-worker-node-smoke.sh` 可验证 Worker 图执行器骨架、`ensure_index`、初始与检索节点执行、自动 tool call audit、`generate_patch` model call audit、`WORKER_SAFE_PLANNING_DRAFT` patch draft、step 回写、safety callback、sandbox callback、review callback 和 approval-ready callback；`./scripts/real-token-demo-check.sh` 可完成演示环境体检；有真实模型 token 时，`./scripts/real-coder-demo.sh` 可验证真实 `OPENAI_COMPATIBLE` Coder 到沙箱测试和人工审批暂停点的 API 级链路；有 GitHub token 和可丢弃 demo 仓库时，`./scripts/real-github-pr-demo.sh` 可验证真实远端分支 push 和 GitHub PR 创建；`./scripts/browser-smoke.sh` 从登录后的工作台概览、Agent run performance 7/14/30 天窗口切换与 URL 恢复、Recent task activity 10/25/50 条数量切换与 URL 恢复、overview 链接复制、演示就绪总览、Coder、GitHub 发布与 Sandbox 配置脱敏状态开始，继续完成仓库接入、项目搜索/状态筛选、项目视图 URL 恢复、项目视图链接复制、Controller API 风险视图、Controller API Markdown 文档复制和 `.md` 下载、代码检索、任务搜索/状态筛选、任务视图 URL 恢复、任务视图链接复制、Agent evidence、run report 复制和 `.md` 下载、运行报告快照保存/复制/下载、真实分页 patch、`changedFiles` 摘要、`validate_patch_safety` 预检、自动风险审查、沙箱测试、Regenerate 新版本校验、PR preflight blocker/ready 状态、人工审批和本地 `DRAFT_READY` PR 准备记录；随后创建 User id 参数校验任务并验证真实 guard patch、测试覆盖和沙箱测试通过；再创建 User count API 任务并验证 `SPRING_USER_COUNT_RECIPE`、真实 count patch、`changedFiles` 和沙箱测试通过；最后创建 User create API 任务并验证 `SPRING_USER_CREATE_RECIPE`、真实 create patch、DTO 文件、`changedFiles` 和沙箱测试通过 |
+| AC-012 | 全链路可演示 | `./scripts/agent-worker-smoke.sh` 可先验证 Python Agent Worker 契约；`./scripts/agent-worker-callback-smoke.sh` 可验证 Python Agent Worker 到后端 step/tool/model/patch/status 回写 client 契约；`./scripts/agent-worker-tool-smoke.sh` 可验证 Python Agent Worker 到后端 run-scoped 工具读取 client 契约；`./scripts/agent-worker-node-smoke.sh` 可验证 Worker 图执行器骨架、`ensure_index`、初始与检索节点执行、自动 tool call audit、`generate_patch` model call audit、`WORKER_SAFE_PLANNING_DRAFT` patch draft、step 回写、safety callback、sandbox callback、review callback 和 approval-ready callback；`./scripts/agent-worker-planner-smoke.sh` 可验证真实 FastAPI Worker 在 OpenAI-compatible stub 下执行 `plan_task` Planner 模型摘要、model call audit、token usage 和密钥不落审计契约；`./scripts/real-token-demo-check.sh` 可完成演示环境体检；有真实模型 token 时，`./scripts/real-coder-demo.sh` 可验证真实 `OPENAI_COMPATIBLE` Coder 到沙箱测试和人工审批暂停点的 API 级链路；有 GitHub token 和可丢弃 demo 仓库时，`./scripts/real-github-pr-demo.sh` 可验证真实远端分支 push 和 GitHub PR 创建；`./scripts/browser-smoke.sh` 从登录后的工作台概览、Agent run performance 7/14/30 天窗口切换与 URL 恢复、Recent task activity 10/25/50 条数量切换与 URL 恢复、overview 链接复制、演示就绪总览、Coder、GitHub 发布与 Sandbox 配置脱敏状态开始，继续完成仓库接入、项目搜索/状态筛选、项目视图 URL 恢复、项目视图链接复制、Controller API 风险视图、Controller API Markdown 文档复制和 `.md` 下载、代码检索、任务搜索/状态筛选、任务视图 URL 恢复、任务视图链接复制、Agent evidence、run report 复制和 `.md` 下载、运行报告快照保存/复制/下载、真实分页 patch、`changedFiles` 摘要、`validate_patch_safety` 预检、自动风险审查、沙箱测试、Regenerate 新版本校验、PR preflight blocker/ready 状态、人工审批和本地 `DRAFT_READY` PR 准备记录；随后创建 User id 参数校验任务并验证真实 guard patch、测试覆盖和沙箱测试通过；再创建 User count API 任务并验证 `SPRING_USER_COUNT_RECIPE`、真实 count patch、`changedFiles` 和沙箱测试通过；最后创建 User create API 任务并验证 `SPRING_USER_CREATE_RECIPE`、真实 create patch、DTO 文件、`changedFiles` 和沙箱测试通过 |
 
 ## 3. Demo 验收脚本
 
@@ -86,29 +87,30 @@
 2. 运行 `./scripts/agent-worker-callback-smoke.sh` 验证 Python Agent Worker step/tool/model/patch/status 回写 client 契约。
 3. 运行 `./scripts/agent-worker-tool-smoke.sh` 验证 Python Agent Worker 工具读取 client 契约。
 4. 运行 `./scripts/agent-worker-node-smoke.sh` 验证 Python Agent Worker 图执行器骨架、`ensure_index`、初始与检索节点执行、自动 tool call audit、`generate_patch` model call audit、`WORKER_SAFE_PLANNING_DRAFT` patch draft、step 回写、safety、sandbox、review 和 approval-ready callback 契约。
-5. 运行 `./scripts/real-token-demo-check.sh` 检查本地闭环、真实模型和远端 GitHub PR 演示前置项；正式真实 token 演示前使用 `--strict`。
-6. 有真实模型 token 时，运行 `./scripts/real-coder-demo.sh` 展示真实 `OPENAI_COMPATIBLE` Coder 从模型调用到沙箱测试和人工审批暂停点的 API 级端到端链路。
-7. 有 GitHub token 和可丢弃 demo 仓库时，运行 `./scripts/real-github-pr-demo.sh` 展示真实远端分支 push 和 GitHub PR 创建。
-8. 启动 Docker Compose。
-9. 注册并登录。
-10. 查看工作台概览、Agent run performance、Recent task activity、Coder、GitHub 发布与 Sandbox 配置状态，确认空工作区计数、run 计数/成功率、空活动流、mode、provider、ready、model/key/token、Docker、Maven cache 和 workspace 配置状态可见且无密钥明文。
-11. 添加 Spring Boot 示例仓库。
-12. Clone 成功后，使用项目搜索和 `READY` 状态筛选仓库行，确认 URL 写入 `projectStatus`、`projectQuery` 和 `projectId`，刷新页面后恢复筛选和 Repository insight 项目选择，复制当前项目视图链接并确认剪贴板 URL 包含项目筛选和 `projectId`，然后重置项目筛选。
-13. 触发索引。
-14. 创建任务：“给 User 模块新增分页查询接口”。
-15. 使用任务搜索筛选分页任务，确认 URL 写入 `taskQuery` 和 `taskId`，刷新页面后恢复任务筛选和任务详情；任务到审批点后按 `WAITING_HUMAN_APPROVAL` 状态筛选，再次刷新确认 `taskStatus`、`taskQuery` 和任务详情恢复，复制当前任务视图链接并确认剪贴板 URL 包含任务筛选和 `taskId`，然后重置任务筛选。
-16. 观察 Agent 步骤、Agent evidence 和日志流，复制、下载并保存当前 run report Markdown，再从运行报告快照复制和下载历史报告。
-17. 查看相关代码检索结果。
-18. 查看新增 `GET /api/users/page`、Service/Mapper 分页逻辑和 `UserServiceTest` 的 diff。
-19. 查看 Maven 测试日志。
-20. 查看 PR preflight，确认未审批 blocker。
-21. 点击 Approve。
-22. 查看 PR preflight，确认本地 branch/commit 可准备且远程 GitHub 状态可解释。
-23. 准备 PR，展示本地 target branch、commit、标题和描述。
-24. 再创建任务：“修复 User id 参数校验 bug”，查看 guard、`UserServiceTest` 和 Maven 测试结果。
-25. 再创建任务：“新增 User count API”，查看 `GET /api/users/count`、`countUsers`、`countAll`、`UserServiceTest` 和 Maven 测试结果。
-26. 再创建任务：“新增 User create API”，查看 `POST /api/users`、`CreateUserRequest`、`createUser`、`save`、`UserServiceTest` 和 Maven 测试结果。
-27. 在启用 GitHub 发布的环境中创建 GitHub PR，并打开 PR 链接展示标题、描述和修改文件。
+5. 运行 `./scripts/agent-worker-planner-smoke.sh` 验证 Python Agent Worker 在 OpenAI-compatible stub 下的 Planner 模型摘要、model call audit、token usage 和密钥不落审计契约。
+6. 运行 `./scripts/real-token-demo-check.sh` 检查本地闭环、真实模型和远端 GitHub PR 演示前置项；正式真实 token 演示前使用 `--strict`。
+7. 有真实模型 token 时，运行 `./scripts/real-coder-demo.sh` 展示真实 `OPENAI_COMPATIBLE` Coder 从模型调用到沙箱测试和人工审批暂停点的 API 级端到端链路。
+8. 有 GitHub token 和可丢弃 demo 仓库时，运行 `./scripts/real-github-pr-demo.sh` 展示真实远端分支 push 和 GitHub PR 创建。
+9. 启动 Docker Compose。
+10. 注册并登录。
+11. 查看工作台概览、Agent run performance、Recent task activity、Coder、GitHub 发布与 Sandbox 配置状态，确认空工作区计数、run 计数/成功率、空活动流、mode、provider、ready、model/key/token、Docker、Maven cache 和 workspace 配置状态可见且无密钥明文。
+12. 添加 Spring Boot 示例仓库。
+13. Clone 成功后，使用项目搜索和 `READY` 状态筛选仓库行，确认 URL 写入 `projectStatus`、`projectQuery` 和 `projectId`，刷新页面后恢复筛选和 Repository insight 项目选择，复制当前项目视图链接并确认剪贴板 URL 包含项目筛选和 `projectId`，然后重置项目筛选。
+14. 触发索引。
+15. 创建任务：“给 User 模块新增分页查询接口”。
+16. 使用任务搜索筛选分页任务，确认 URL 写入 `taskQuery` 和 `taskId`，刷新页面后恢复任务筛选和任务详情；任务到审批点后按 `WAITING_HUMAN_APPROVAL` 状态筛选，再次刷新确认 `taskStatus`、`taskQuery` 和任务详情恢复，复制当前任务视图链接并确认剪贴板 URL 包含任务筛选和 `taskId`，然后重置任务筛选。
+17. 观察 Agent 步骤、Agent evidence 和日志流，复制、下载并保存当前 run report Markdown，再从运行报告快照复制和下载历史报告。
+18. 查看相关代码检索结果。
+19. 查看新增 `GET /api/users/page`、Service/Mapper 分页逻辑和 `UserServiceTest` 的 diff。
+20. 查看 Maven 测试日志。
+21. 查看 PR preflight，确认未审批 blocker。
+22. 点击 Approve。
+23. 查看 PR preflight，确认本地 branch/commit 可准备且远程 GitHub 状态可解释。
+24. 准备 PR，展示本地 target branch、commit、标题和描述。
+25. 再创建任务：“修复 User id 参数校验 bug”，查看 guard、`UserServiceTest` 和 Maven 测试结果。
+26. 再创建任务：“新增 User count API”，查看 `GET /api/users/count`、`countUsers`、`countAll`、`UserServiceTest` 和 Maven 测试结果。
+27. 再创建任务：“新增 User create API”，查看 `POST /api/users`、`CreateUserRequest`、`createUser`、`save`、`UserServiceTest` 和 Maven 测试结果。
+28. 在启用 GitHub 发布的环境中创建 GitHub PR，并打开 PR 链接展示标题、描述和修改文件。
 
 ## 4. 风险验收
 
