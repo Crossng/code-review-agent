@@ -1,3 +1,4 @@
+import json
 import re
 from typing import Any, Optional
 
@@ -13,6 +14,8 @@ MAX_READ_FILES = 3
 CONTENT_PREVIEW_CHARS = 1200
 SEARCH_PREVIEW_CHARS = 500
 MODEL_PLAN_PREVIEW_CHARS = 2000
+MAX_MODEL_PLAN_STEPS = 5
+MAX_MODEL_SEARCH_QUERIES = 5
 
 
 def plan_task(
@@ -45,9 +48,11 @@ def plan_task(
     model_prompt = build_plan_model_prompt(context, loaded_context, request, queries, search_summaries, output)
     model_result = (model_client or WorkerModelClient()).generate_text("plan_task", model_prompt)
     if model_result is not None:
-        output["modelPlanText"] = text_preview(model_result.text, MODEL_PLAN_PREVIEW_CHARS)
+        model_plan = parse_model_plan(model_result.text)
+        output["modelPlanText"] = text_preview(model_plan["summary"], MODEL_PLAN_PREVIEW_CHARS)
         output["modelProvider"] = model_result.provider
         output["modelName"] = model_result.model
+        output["modelPlan"] = model_plan
         backend.record_model_call(
             run_id,
             AgentModelCallRecordRequest(
@@ -88,10 +93,11 @@ def build_plan_model_prompt(
     search_summaries: list[dict[str, Any]],
     deterministic_output: dict[str, Any],
 ) -> dict[str, Any]:
+    index_source = loaded_context.get("indexStatus") or loaded_context.get("loadOutput", {})
     return {
         "role": "PlannerAgent",
         "language": "zh-CN",
-        "instruction": "基于任务、项目索引线索和确定性计划，输出一段中文工程实施计划摘要。",
+        "instruction": "基于任务、项目索引线索和确定性计划，输出结构化中文工程实施建议。",
         "task": {
             "taskId": context.get("taskId"),
             "projectId": context.get("projectId"),
@@ -102,8 +108,8 @@ def build_plan_model_prompt(
             "repoFullName": context.get("repoFullName"),
         },
         "index": {
-            "fileCount": loaded_context.get("indexStatus", {}).get("fileCount"),
-            "symbolCount": loaded_context.get("indexStatus", {}).get("symbolCount"),
+            "fileCount": index_source.get("fileCount"),
+            "symbolCount": index_source.get("symbolCount"),
             "sampleFiles": loaded_context.get("loadOutput", {}).get("sampleFiles", [])[:10],
         },
         "searchQueries": queries,
@@ -114,15 +120,110 @@ def build_plan_model_prompt(
             "testStrategy": deterministic_output.get("testStrategy"),
         },
         "outputContract": {
-            "format": "plain_text",
-            "requirements": [
-                "使用中文",
-                "指出最可能修改的模块",
-                "说明测试与审批前置条件",
-                "不要输出代码块或 diff",
-            ],
+            "format": "json_object",
+            "schema": {
+                "summary": "中文计划摘要",
+                "steps": [{"order": 1, "title": "步骤标题", "reason": "工程理由", "expectedFiles": []}],
+                "searchQueries": ["用于仓库检索的短 query"],
+                "risks": ["风险或注意事项"],
+                "testStrategy": "验证策略",
+            },
+            "requirements": ["使用中文", "不要输出代码块或 diff", "不要输出密钥或多个备选方案"],
         },
     }
+
+
+def parse_model_plan(text: str) -> dict[str, Any]:
+    parsed = parse_json_object(text)
+    if parsed is None:
+        return {
+            "summary": text_preview(text, MODEL_PLAN_PREVIEW_CHARS),
+            "steps": [],
+            "searchQueries": [],
+            "risks": [],
+            "testStrategy": None,
+            "format": "plain_text",
+        }
+
+    summary = first_text(parsed.get("summary"), parsed.get("title"), parsed.get("planSummary"))
+    if summary is None:
+        summary = text_preview(text, MODEL_PLAN_PREVIEW_CHARS)
+    return {
+        "summary": text_preview(summary, MODEL_PLAN_PREVIEW_CHARS),
+        "steps": normalize_model_steps(parsed.get("steps")),
+        "searchQueries": normalize_string_list(parsed.get("searchQueries"), MAX_MODEL_SEARCH_QUERIES),
+        "risks": normalize_string_list(parsed.get("risks"), 5),
+        "testStrategy": first_text(parsed.get("testStrategy"), parsed.get("validation")),
+        "format": "json_object",
+    }
+
+
+def parse_json_object(text: str) -> Optional[dict[str, Any]]:
+    stripped = (text or "").strip()
+    if stripped.startswith("```"):
+        lines = stripped.splitlines()
+        if len(lines) >= 3 and lines[0].startswith("```") and lines[-1].strip() == "```":
+            stripped = "\n".join(lines[1:-1]).strip()
+    try:
+        parsed = json.loads(stripped)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    return parsed
+
+
+def normalize_model_steps(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    steps = []
+    for index, item in enumerate(value[:MAX_MODEL_PLAN_STEPS], start=1):
+        if isinstance(item, dict):
+            title = first_text(item.get("title"), item.get("name"), item.get("action"))
+            if not title:
+                continue
+            steps.append(
+                {
+                    "order": safe_int(item.get("order"), index),
+                    "title": title,
+                    "reason": first_text(item.get("reason"), item.get("why")) or "",
+                    "expectedFiles": normalize_string_list(item.get("expectedFiles"), 5),
+                }
+            )
+        elif isinstance(item, str) and item.strip():
+            steps.append({"order": index, "title": item.strip(), "reason": "", "expectedFiles": []})
+    return steps
+
+
+def normalize_string_list(value: Any, limit: int) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    result = []
+    for item in value:
+        if len(result) >= limit:
+            break
+        if item is None:
+            continue
+        text = str(item).strip()
+        if text and text not in result:
+            result.append(text_preview(text, 200))
+    return result
+
+
+def first_text(*values: Any) -> Optional[str]:
+    for value in values:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def safe_int(value: Any, default: int) -> int:
+    if isinstance(value, int):
+        return value
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def retrieve_context(
@@ -247,10 +348,23 @@ def retrieval_queries(
     context: dict[str, Any],
     request: AgentRunStartRequest,
 ) -> list[str]:
-    queries: list[str] = []
+    deterministic_queries: list[str] = []
     for query in plan_output.get("searchQueries", []):
         if query is not None:
-            add_query(queries, str(query))
+            add_query(deterministic_queries, str(query))
+    model_queries: list[str] = []
+    model_plan = plan_output.get("modelPlan")
+    if isinstance(model_plan, dict):
+        for query in model_plan.get("searchQueries", []):
+            if query is not None:
+                add_query(model_queries, str(query))
+    queries: list[str] = []
+    for query in deterministic_queries[:3]:
+        add_query(queries, query)
+    for query in model_queries[:2]:
+        add_query(queries, query)
+    for query in deterministic_queries[3:]:
+        add_query(queries, query)
     if not queries:
         queries = candidate_queries(context.get("title"), context.get("description"), request.user_request)
     return queries[:5]

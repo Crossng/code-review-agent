@@ -93,6 +93,26 @@ class PlannerStubHandler(BaseHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
             return
+        planner_content = json.dumps(
+            {
+                "summary": "模型计划摘要：优先定位 UserController、UserService 和 UserServiceTest。",
+                "steps": [
+                    {
+                        "order": 1,
+                        "title": "定位分页入口",
+                        "reason": "保持现有 Controller 和 Service 风格一致。",
+                        "expectedFiles": [
+                            "src/main/java/com/example/demo/user/UserController.java",
+                            "src/main/java/com/example/demo/user/UserService.java",
+                        ],
+                    }
+                ],
+                "searchQueries": ["UserServiceTest pagination", "UserMapper limit offset"],
+                "risks": ["分页边界需要测试"],
+                "testStrategy": "生成最小分页 diff 后进入安全预检、沙箱测试和人工审批。",
+            },
+            ensure_ascii=False,
+        )
         response = {
             "model": "gpt-worker-planner-smoke",
             "usage": {
@@ -103,7 +123,7 @@ class PlannerStubHandler(BaseHTTPRequestHandler):
             "choices": [
                 {
                     "message": {
-                        "content": "模型计划摘要：优先定位 UserController、UserService 和 UserServiceTest，生成最小分页 diff 后进入安全预检、沙箱测试和人工审批。"
+                        "content": planner_content
                     }
                 }
             ],
@@ -563,6 +583,15 @@ if plan_output.get("modelName") != "gpt-worker-planner-smoke":
     raise SystemExit(f"plan_task model name mismatch: {plan_output}")
 if "searchQueries" not in plan_output or len(plan_output.get("steps", [])) < 5:
     raise SystemExit(f"plan_task deterministic output missing: {plan_output}")
+model_plan = plan_output.get("modelPlan", {})
+if model_plan.get("format") != "json_object":
+    raise SystemExit(f"plan_task modelPlan format mismatch: {plan_output}")
+if "UserServiceTest pagination" not in model_plan.get("searchQueries", []):
+    raise SystemExit(f"plan_task model search query mismatch: {plan_output}")
+
+retrieve_step = step_by_name["retrieve_context"].get("output", {})
+if "UserServiceTest pagination" not in retrieve_step.get("queries", []):
+    raise SystemExit(f"retrieve_context did not include model query: {retrieve_step}")
 
 model_by_step = {event["body"]["step_name"]: event["body"] for event in captured["modelCalls"]}
 if set(model_by_step) != {"plan_task", "generate_patch"}:
@@ -638,6 +667,7 @@ summary = {
         "modelProvider": plan_output["modelProvider"],
         "modelName": plan_output["modelName"],
         "modelPlanText": plan_output["modelPlanText"],
+        "modelSearchQueries": model_plan["searchQueries"],
         "stepCount": len(plan_output["steps"]),
         "searchQueries": plan_output["searchQueries"],
     },

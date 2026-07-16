@@ -6,7 +6,7 @@ Current slice:
 
 - `GET /health` returns worker health and the active graph execution engine.
 - `POST /runs/{run_id}/start` accepts a run contract and returns the planned MVP graph nodes.
-- `plan_task` supports an optional auditable Worker model client while keeping the deterministic plan as the safe default.
+- `plan_task` supports optional auditable structured Worker Planner advice while keeping the deterministic plan as the safe default.
 - `../scripts/agent-worker-smoke.sh` starts or reuses the worker and verifies both contracts.
 
 ## Local Contract Smoke
@@ -64,7 +64,8 @@ The planner smoke script checks:
 - A real FastAPI worker starts with a local backend stub and a local OpenAI-compatible Chat Completions stub.
 - `REPOPILOT_WORKER_MODEL_MODE=openai-compatible` makes `plan_task` call `/v1/chat/completions`.
 - The Planner request carries Authorization, model, optional OpenAI organization/project headers, Planner prompt, task/index/search/plan context and `max_completion_tokens`.
-- The `plan_task` step output contains `modelPlanText`, `modelProvider=OPENAI_COMPATIBLE` and the model name returned by the stub.
+- The `plan_task` step output contains `modelPlanText`, structured `modelPlan`, `modelProvider=OPENAI_COMPATIBLE` and the model name returned by the stub.
+- `retrieve_context` safely includes selected model-proposed `modelPlan.searchQueries` after the deterministic search queries.
 - The worker records two model call audits in the run: `plan_task / OPENAI_COMPATIBLE` and `generate_patch / AGENT_WORKER`.
 - The Planner API key is not written into model call prompt/response audit payloads.
 - Evidence is written to `output/agent-worker-planner-smoke/last-run.json`.
@@ -178,7 +179,7 @@ export REPOPILOT_WORKER_MODEL_NAME=gpt-worker-planner
 | `REPOPILOT_WORKER_MODEL_MAX_COMPLETION_TOKENS` | `1200` | 写入 Chat Completions 请求的 `max_completion_tokens` |
 | `REPOPILOT_WORKER_MODEL_INSTRUCTION_ROLE` | `developer` | Planner 指令消息角色，只支持 `developer` 或 `system` |
 
-模型模式只增强 `plan_task` 的计划摘要，不直接生成代码、不绕过 `generate_patch`、安全预检、沙箱测试、风险审查或人工审批。
+模型模式会增强 `plan_task` 的结构化计划建议。JSON 响应会被解析为 `modelPlan.summary`、`steps`、`searchQueries`、`risks` 和 `testStrategy`；纯文本响应仍会作为 `modelPlanText` 兼容处理。`retrieve_context` 会在保留确定性 query 的前提下吸收最多两条 `modelPlan.searchQueries`，但模型建议不直接生成代码、不绕过 `generate_patch`、安全预检、沙箱测试、风险审查或人工审批。
 
 ## Backend Patch Callback
 
@@ -227,8 +228,8 @@ When `REPOPILOT_AGENT_WORKER_CALLBACK_TOKEN` is configured, `/runs/{run_id}/star
 
 1. `load_task_context` reads run/task/project context, file samples and symbol samples, then records a SUCCESS step.
 2. `ensure_index` checks that the run has file and Java symbol signals, then records index readiness evidence.
-3. `plan_task` builds a deterministic Spring implementation plan, runs a few code searches for evidence, optionally records a fixture-backed model planning note, then records a SUCCESS step.
-4. `retrieve_context` reuses plan search queries, deduplicates code chunks, reads key file previews and records a SUCCESS step.
+3. `plan_task` builds a deterministic Spring implementation plan, runs a few code searches for evidence, optionally records structured model-backed planning advice, then records a SUCCESS step.
+4. `retrieve_context` reuses deterministic plan search queries, safely adds selected model-proposed queries, deduplicates code chunks, reads key file previews and records a SUCCESS step.
 5. `generate_patch` creates a safe planning draft diff under `.repopilot/`, records a deterministic model-call audit entry, persists the draft through `record_patch(...)`, records a SUCCESS step, calls `validate_patch_safety(...)`, then `run_patch_sandbox_tests(...)` when safety passes, `review_patch(...)` when sandbox tests pass, and `mark_patch_ready_for_approval(...)` when review passes.
 
 If no callback token is configured, `/start` remains a pure contract endpoint and does not run background nodes. This keeps local smoke tests and bridge-disabled development quiet.
