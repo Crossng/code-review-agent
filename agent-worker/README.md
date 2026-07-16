@@ -4,7 +4,7 @@ This module will host the LangGraph workflow for long-running RepoPilot agent ru
 
 Current slice:
 
-- `GET /health` returns worker health.
+- `GET /health` returns worker health and the active graph execution engine.
 - `POST /runs/{run_id}/start` accepts a run contract and returns the planned MVP graph nodes.
 - `../scripts/agent-worker-smoke.sh` starts or reuses the worker and verifies both contracts.
 
@@ -20,7 +20,7 @@ Current slice:
 The contract smoke script checks:
 
 - FastAPI dependencies are importable.
-- `/health` returns `status=UP` and `service=agent-worker`.
+- `/health` returns `status=UP`, `service=agent-worker` and `graph_engine=LANGGRAPH` or `SEQUENTIAL_FALLBACK`.
 - `/runs/303/start` returns `accepted=true`, `status=QUEUED` and the expected MVP graph node list.
 - Evidence is written to `output/agent-worker-smoke/last-run.json`.
 
@@ -190,8 +190,10 @@ When `REPOPILOT_AGENT_WORKER_CALLBACK_TOKEN` is configured, `/runs/{run_id}/star
 
 If no callback token is configured, `/start` remains a pure contract endpoint and does not run background nodes. This keeps local smoke tests and bridge-disabled development quiet.
 
+The initial node chain is now executed through LangGraph `StateGraph` when the `langgraph` dependency is installed. Local development environments that have not installed optional worker dependencies fall back to the same sequential node order and expose that through `/health.graph_engine=SEQUENTIAL_FALLBACK`; real graph environments expose `/health.graph_engine=LANGGRAPH`.
+
 Next implementation steps:
 
-1. Replace the lightweight graph runner with a real LangGraph graph once node contracts stabilize.
-2. Attach future Worker model calls to `record_model_call(...)` automatically.
+1. Attach future Worker model calls to `record_model_call(...)` automatically.
+2. Split larger node implementations into dedicated files as the LangGraph graph grows.
 3. Exercise Worker-approved patches against real remote GitHub PR publishing once a token-backed demo repository is available.

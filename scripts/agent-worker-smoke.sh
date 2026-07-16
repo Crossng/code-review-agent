@@ -134,6 +134,8 @@ expected_nodes = [
 
 if health.get("status") != "UP" or health.get("service") != "agent-worker":
     raise SystemExit(f"health contract mismatch: {health}")
+if health.get("graph_engine") not in ("LANGGRAPH", "SEQUENTIAL_FALLBACK"):
+    raise SystemExit(f"health graph_engine mismatch: {health}")
 
 if start.get("run_id") != 303:
     raise SystemExit(f"start response run_id mismatch: {start}")
@@ -153,5 +155,6 @@ summary = {
 summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 print("Agent Worker 契约验证通过。")
 print(f"Graph nodes: {len(expected_nodes)}")
+print(f"Graph engine: {health.get('graph_engine')}")
 print(f"证据文件: {summary_path}")
 PY

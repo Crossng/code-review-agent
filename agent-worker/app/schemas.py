@@ -20,6 +20,7 @@ class AgentRunStartResponse(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     service: str
+    graph_engine: str
 
 
 class AgentStepRecordRequest(BaseModel):

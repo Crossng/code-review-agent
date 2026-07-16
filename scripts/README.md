@@ -15,7 +15,7 @@
 
 - 检查 `fastapi`、`uvicorn`、`pydantic` 和 `pydantic_settings` 依赖是否可导入。
 - 若 `REPOPILOT_AGENT_WORKER_URL` 已有 worker，则复用；否则临时启动 `agent-worker/app/main.py`。
-- 验证 `GET /health` 返回 `status=UP` 和 `service=agent-worker`。
+- 验证 `GET /health` 返回 `status=UP`、`service=agent-worker` 和 `graph_engine=LANGGRAPH` 或 `SEQUENTIAL_FALLBACK`。
 - 验证 `POST /runs/303/start` 返回 `accepted=true`、`status=QUEUED` 和 MVP graph node 清单。
 - 将证据写入 `output/agent-worker-smoke/last-run.json`。
 

@@ -29,6 +29,7 @@ frontend/vite.config.d.ts
 agent-worker/.venv/
 agent-worker/__pycache__/
 agent-worker/.pytest_cache/
+*.egg-info/
 *.pyc
 
 # RepoPilot runtime workspace
