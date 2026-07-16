@@ -63,6 +63,7 @@ captured = {
     "reviews": [],
     "approvalReady": [],
     "coderRequests": [],
+    "transientFailures": [],
 }
 
 
@@ -111,6 +112,23 @@ class CoderModelStubHandler(BaseHTTPRequestHandler):
         if parsed.path != "/v1/chat/completions":
             self.send_response(404)
             self.end_headers()
+            return
+        if len(captured["coderRequests"]) == 1:
+            captured["transientFailures"].append(
+                {
+                    "kind": "coder_model",
+                    "status": 429,
+                    "path": parsed.path,
+                    "recoveredByRetry": True,
+                }
+            )
+            response = {"error": {"message": "coder smoke transient rate limit"}}
+            encoded = json.dumps(response, ensure_ascii=False).encode("utf-8")
+            self.send_response(429)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
             return
         response = {
             "model": "gpt-worker-coder-smoke",
@@ -447,6 +465,8 @@ env.update(
         "REPOPILOT_WORKER_CODER_MODEL_MAX_COMPLETION_TOKENS": "777",
         "REPOPILOT_WORKER_CODER_MODEL_ORGANIZATION": "org-worker-coder-smoke",
         "REPOPILOT_WORKER_CODER_MODEL_PROJECT": "proj-worker-coder-smoke",
+        "REPOPILOT_WORKER_RETRY_MAX_ATTEMPTS": "3",
+        "REPOPILOT_WORKER_RETRY_BACKOFF_SECONDS": "0",
     }
 )
 worker_log = worker_log_path.open("w", encoding="utf-8")
@@ -494,7 +514,7 @@ try:
     deadline = time.time() + 10
     while (
         len(captured["steps"]) < 5
-        or len(captured["coderRequests"]) < 1
+        or len(captured["coderRequests"]) < 2
         or len(captured["patches"]) < 1
         or len(captured["safetyChecks"]) < 1
         or len(captured["sandboxRuns"]) < 1
@@ -523,8 +543,17 @@ if start.get("run_id") != 606 or start.get("accepted") is not True or start.get(
     raise SystemExit(f"worker start mismatch: {start}")
 if len(captured["steps"]) < 5:
     raise SystemExit(f"expected five worker step callbacks, got {captured['steps']}")
-if len(captured["coderRequests"]) != 1:
-    raise SystemExit(f"expected one coder request, got {captured['coderRequests']}")
+if len(captured["coderRequests"]) != 2:
+    raise SystemExit(f"expected two coder requests after one retry, got {captured['coderRequests']}")
+if captured["transientFailures"] != [
+    {
+        "kind": "coder_model",
+        "status": 429,
+        "path": "/v1/chat/completions",
+        "recoveredByRetry": True,
+    }
+]:
+    raise SystemExit(f"coder retry evidence mismatch: {captured['transientFailures']}")
 if len(captured["patches"]) != 1:
     raise SystemExit(f"expected one patch callback, got {captured['patches']}")
 if len(captured["safetyChecks"]) != 1 or len(captured["sandboxRuns"]) != 1:
@@ -552,7 +581,7 @@ for name, step in step_by_name.items():
     if step.get("status") != "SUCCESS":
         raise SystemExit(f"{name} status mismatch: {step}")
 
-coder_request = captured["coderRequests"][0]
+coder_request = captured["coderRequests"][-1]
 coder_body = coder_request["body"]
 if coder_request.get("authorization") != f"Bearer {coder_api_key}":
     raise SystemExit(f"coder Authorization header mismatch: {coder_request}")
@@ -626,6 +655,11 @@ summary = {
         "project": coder_request.get("project"),
         "model": coder_body.get("model"),
         "maxCompletionTokens": coder_body.get("max_completion_tokens"),
+    },
+    "retryEvidence": {
+        "transientFailures": captured["transientFailures"],
+        "coderRequestCount": len(captured["coderRequests"]),
+        "maxAttempts": 3,
     },
     "steps": [
         {

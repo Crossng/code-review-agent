@@ -259,6 +259,8 @@ Worker primary 的自动重试只覆盖可恢复、低副作用的路径：OpenA
 
 Worker 写型 callback 不做透明重试，包括 `record_step`、`record_model_call`、`record_patch`、`update_status`、`approval-ready` 等会落库或推进状态的请求，避免 HTTP 超时后重复写 patch、重复推进审批或污染审计记录。
 
+`./scripts/agent-worker-planner-smoke.sh` 会让后端 `/context` 首次返回 `503`、Planner 模型首次返回 `429`，随后验证 Worker 自动重试并恢复；`./scripts/agent-worker-coder-model-smoke.sh` 会让 Coder 模型首次返回 `429` 并验证恢复后的 `LLM_CODER_DRAFT` 仍继续进入安全、沙箱、审查和审批后置门。
+
 ## Backend Patch Callback
 
 Worker nodes can persist generated patch drafts before the backend applies the usual safety, sandbox, review and approval gates:
@@ -328,5 +330,5 @@ This keeps LangGraph wiring small and makes future model-backed nodes easier to 
 Next implementation steps:
 
 1. Expand model-backed Worker Coder business scenarios while preserving parser, safety, sandbox, review and approval gates.
-2. Add end-to-end smoke evidence for transient Worker model/tool retry recovery.
+2. Surface Worker retry evidence in run reports or frontend diagnostics where it helps operators debug transient model/tool outages.
 3. Exercise Worker-approved patches against real remote GitHub PR publishing once a token-backed demo repository is available.

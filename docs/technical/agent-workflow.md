@@ -168,6 +168,8 @@ Worker primary 只自动重试可恢复且低副作用的读路径：OpenAI-comp
 
 Worker 写型 callback 不做透明重试，包括 step/model/tool/patch/status 回写和 approval-ready 等会落库或推进状态的请求，避免请求超时后重复写 patch 或重复推进审批。不可恢复失败保持显式失败：HTTP `400/401/403/404/409`、模型输出契约错误、diff parser 错误、安全预检失败、沙箱应用失败、Maven 测试失败和风险审查失败不会自动重试。
 
+端到端 smoke 也固定了这条边界：`./scripts/agent-worker-planner-smoke.sh` 注入一次后端 `/context` `503` 和一次 Planner 模型 `429`，恢复后证据写入 `retryEvidence.contextGetCount=2`、`plannerRequestCount=2`；`./scripts/agent-worker-coder-model-smoke.sh` 注入一次 Coder 模型 `429`，恢复后证据写入 `retryEvidence.coderRequestCount=2`。
+
 ## 7. 检索输出格式
 
 RetrieverAgent 输出：

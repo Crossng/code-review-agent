@@ -60,6 +60,7 @@
 - 配置 `REPOPILOT_WORKER_MODEL_MODE=openai-compatible`、模型名、API base URL、API key、`max_completion_tokens` 和可选 organization/project header。
 - 调用 `POST /runs/{run_id}/start`，让 Worker 后台执行 `load_task_context`、`ensure_index`、`plan_task`、`retrieve_context` 和 `generate_patch`。
 - 验证 `plan_task` 真实请求 `/v1/chat/completions`，请求体包含 Planner prompt、任务/索引/检索/确定性计划上下文和模型名。
+- 验证后端 `/context` 首次 503 后由只读工具重试恢复，Planner 模型首次 429 后由模型重试恢复，并在 `retryEvidence` 中记录恢复证据。
 - 验证 `plan_task` step output 包含 `modelPlanText`、结构化 `modelPlan`、`modelProvider=OPENAI_COMPATIBLE` 和模型名。
 - 验证 `retrieve_context` 会在确定性 query 后安全吸收模型建议的 `modelPlan.searchQueries`。
 - 验证本次 run 有两条 model call audit：`plan_task / OPENAI_COMPATIBLE` 和 `generate_patch / AGENT_WORKER`。
@@ -80,6 +81,7 @@
 - 配置 `REPOPILOT_WORKER_CODER_MODEL_MODE=openai-compatible`、模型名、API base URL、API key、`max_completion_tokens` 和可选 organization/project header。
 - 调用 `POST /runs/{run_id}/start`，让 Worker 后台执行 `load_task_context`、`ensure_index`、`plan_task`、`retrieve_context` 和 `generate_patch`。
 - 验证 `generate_patch` 真实请求 `/v1/chat/completions`，请求体包含 diff-only Coder prompt、计划/检索上下文和模型名。
+- 验证 Coder 模型首次 429 后由模型重试恢复，并在 `retryEvidence` 中记录恢复证据。
 - 验证模型 raw diff 被解析并持久化为 `generationMode=LLM_CODER_DRAFT`、`generationProvider=OPENAI_COMPATIBLE`。
 - 验证模型 diff 仍进入 safety、sandbox、review 和 approval-ready 后置门。
 - 验证 Coder API key 只进入 Authorization header，不写入 prompt/response 审计。

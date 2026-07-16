@@ -62,6 +62,7 @@ captured = {
     "reviews": [],
     "approvalReady": [],
     "plannerRequests": [],
+    "transientFailures": [],
 }
 
 
@@ -92,6 +93,23 @@ class PlannerStubHandler(BaseHTTPRequestHandler):
         if parsed.path != "/v1/chat/completions":
             self.send_response(404)
             self.end_headers()
+            return
+        if len(captured["plannerRequests"]) == 1:
+            captured["transientFailures"].append(
+                {
+                    "kind": "planner_model",
+                    "status": 429,
+                    "path": parsed.path,
+                    "recoveredByRetry": True,
+                }
+            )
+            response = {"error": {"message": "planner smoke transient rate limit"}}
+            encoded = json.dumps(response, ensure_ascii=False).encode("utf-8")
+            self.send_response(429)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
             return
         planner_content = json.dumps(
             {
@@ -152,6 +170,18 @@ class BackendStubHandler(BaseHTTPRequestHandler):
             }
         )
         if parsed.path.endswith("/context"):
+            context_get_count = sum(1 for event in captured["backendGets"] if event["path"].endswith("/context"))
+            if context_get_count == 1:
+                captured["transientFailures"].append(
+                    {
+                        "kind": "backend_context_get",
+                        "status": 503,
+                        "path": parsed.path,
+                        "recoveredByRetry": True,
+                    }
+                )
+                self.respond(api_response({"error": "temporary backend context outage"}), status_code=503)
+                return
             data = {
                 "runId": 606,
                 "runStatus": "RUNNING",
@@ -424,9 +454,9 @@ class UserService {
         }
         self.respond(api_response(data))
 
-    def respond(self, payload):
+    def respond(self, payload, status_code=200):
         encoded = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        self.send_response(200)
+        self.send_response(status_code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(encoded)))
         self.end_headers()
@@ -461,6 +491,8 @@ env.update(
         "REPOPILOT_WORKER_MODEL_INSTRUCTION_ROLE": "developer",
         "REPOPILOT_WORKER_MODEL_ORGANIZATION": "org-planner-smoke",
         "REPOPILOT_WORKER_MODEL_PROJECT": "proj-planner-smoke",
+        "REPOPILOT_WORKER_RETRY_MAX_ATTEMPTS": "3",
+        "REPOPILOT_WORKER_RETRY_BACKOFF_SECONDS": "0",
     }
 )
 worker_log = worker_log_path.open("w", encoding="utf-8")
@@ -509,7 +541,7 @@ try:
     while (
         len(captured["steps"]) < 5
         or len(captured["modelCalls"]) < 2
-        or len(captured["plannerRequests"]) < 1
+        or len(captured["plannerRequests"]) < 2
         or len(captured["approvalReady"]) < 1
     ) and time.time() < deadline:
         time.sleep(0.1)
@@ -532,8 +564,13 @@ if start.get("run_id") != 606 or start.get("accepted") is not True or start.get(
     raise SystemExit(f"worker start mismatch: {start}")
 if len(captured["steps"]) < 5:
     raise SystemExit(f"expected five worker step callbacks, got {captured['steps']}")
-if len(captured["plannerRequests"]) != 1:
-    raise SystemExit(f"expected one planner request, got {captured['plannerRequests']}")
+if len(captured["plannerRequests"]) != 2:
+    raise SystemExit(f"expected two planner requests after one retry, got {captured['plannerRequests']}")
+context_get_count = sum(1 for event in captured["backendGets"] if event["path"].endswith("/context"))
+if context_get_count != 2:
+    raise SystemExit(f"expected context GET to recover after one retry, got {context_get_count}")
+if {failure["kind"] for failure in captured["transientFailures"]} != {"backend_context_get", "planner_model"}:
+    raise SystemExit(f"transient retry evidence mismatch: {captured['transientFailures']}")
 if len(captured["modelCalls"]) != 2:
     raise SystemExit(f"expected two model calls, got {captured['modelCalls']}")
 callback_events = (
@@ -549,7 +586,7 @@ callback_events = (
 if any(event["token"] != "planner-smoke-token" for event in captured["backendGets"] + callback_events):
     raise SystemExit("worker internal token header mismatch")
 
-planner_request = captured["plannerRequests"][0]
+planner_request = captured["plannerRequests"][-1]
 if planner_request["path"] != "/v1/chat/completions":
     raise SystemExit(f"planner path mismatch: {planner_request}")
 if planner_request["authorization"] != f"Bearer {planner_api_key}":
@@ -638,6 +675,12 @@ summary = {
         "maxCompletionTokens": planner_body["max_completion_tokens"],
         "messageRoles": [message["role"] for message in messages],
         "apiKeyInRequestBody": planner_api_key in json.dumps(planner_body, ensure_ascii=False),
+    },
+    "retryEvidence": {
+        "transientFailures": captured["transientFailures"],
+        "plannerRequestCount": len(captured["plannerRequests"]),
+        "contextGetCount": context_get_count,
+        "maxAttempts": 3,
     },
     "steps": [
         {
