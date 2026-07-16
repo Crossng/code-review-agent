@@ -16,8 +16,8 @@ RepoPilot Agent Worker 初始与检索节点 smoke
 说明:
   - 启动本地后端 HTTP stub 和真实 Agent Worker。
   - 调用 /runs/{run_id}/start。
-  - 验证 Worker 后台执行 load_task_context、plan_task 和 retrieve_context。
-  - 校验 Worker 拉取 context/files/symbols/search/file，自动回写 tool call audit，并回写三个 SUCCESS step。
+  - 验证 Worker 后台执行 load_task_context、ensure_index、plan_task 和 retrieve_context。
+  - 校验 Worker 拉取 context/files/symbols/search/file，自动回写 tool call audit，并回写四个 SUCCESS step。
   - 运行证据写入 output/agent-worker-node-smoke/last-run.json。
 EOF
 }
@@ -309,7 +309,7 @@ try:
     )
 
     deadline = time.time() + 10
-    while len(captured["steps"]) < 3 and time.time() < deadline:
+    while len(captured["steps"]) < 4 and time.time() < deadline:
         time.sleep(0.1)
 finally:
     worker.terminate()
@@ -326,8 +326,8 @@ if health.get("status") != "UP":
     raise SystemExit(f"worker health mismatch: {health}")
 if start.get("run_id") != 606 or start.get("accepted") is not True or start.get("status") != "QUEUED":
     raise SystemExit(f"worker start mismatch: {start}")
-if len(captured["steps"]) < 3:
-    raise SystemExit(f"expected three worker step callbacks, got {captured['steps']}")
+if len(captured["steps"]) < 4:
+    raise SystemExit(f"expected four worker step callbacks, got {captured['steps']}")
 if any(event["token"] != "node-smoke-token" for event in captured["gets"] + captured["steps"] + captured["toolCalls"]):
     raise SystemExit("worker internal token header mismatch")
 
@@ -343,20 +343,27 @@ for expected in [
         raise SystemExit(f"missing backend tool request {expected}: {get_paths}")
 
 step_by_name = {event["body"]["step_name"]: event["body"] for event in captured["steps"]}
-if set(step_by_name) != {"load_task_context", "plan_task", "retrieve_context"}:
+if set(step_by_name) != {"load_task_context", "ensure_index", "plan_task", "retrieve_context"}:
     raise SystemExit(f"step names mismatch: {list(step_by_name)}")
 if step_by_name["load_task_context"].get("status") != "SUCCESS":
     raise SystemExit(f"load_task_context status mismatch: {step_by_name['load_task_context']}")
+if step_by_name["ensure_index"].get("status") != "SUCCESS":
+    raise SystemExit(f"ensure_index status mismatch: {step_by_name['ensure_index']}")
 if step_by_name["plan_task"].get("status") != "SUCCESS":
     raise SystemExit(f"plan_task status mismatch: {step_by_name['plan_task']}")
 if step_by_name["retrieve_context"].get("status") != "SUCCESS":
     raise SystemExit(f"retrieve_context status mismatch: {step_by_name['retrieve_context']}")
 
 load_output = step_by_name["load_task_context"].get("output", {})
+ensure_output = step_by_name["ensure_index"].get("output", {})
 plan_output = step_by_name["plan_task"].get("output", {})
 retrieve_output = step_by_name["retrieve_context"].get("output", {})
 if load_output.get("repoFullName") != "demo/repo" or load_output.get("fileCount") != 4:
     raise SystemExit(f"load_task_context output mismatch: {load_output}")
+if ensure_output.get("indexReady") is not True or ensure_output.get("javaFileCount") != 4:
+    raise SystemExit(f"ensure_index output mismatch: {ensure_output}")
+if ensure_output.get("controllerCount") != 1 or ensure_output.get("serviceCount") != 1:
+    raise SystemExit(f"ensure_index symbol summary mismatch: {ensure_output}")
 if "searchQueries" not in plan_output or len(plan_output.get("steps", [])) < 5:
     raise SystemExit(f"plan_task output mismatch: {plan_output}")
 if retrieve_output.get("uniqueResultCount") != 2 or len(retrieve_output.get("readFiles", [])) != 2:
@@ -422,6 +429,13 @@ summary = {
         "repoFullName": load_output["repoFullName"],
         "fileCount": load_output["fileCount"],
         "symbolCount": load_output["symbolCount"],
+    },
+    "ensureIndex": {
+        "summary": ensure_output["summary"],
+        "indexReady": ensure_output["indexReady"],
+        "javaFileCount": ensure_output["javaFileCount"],
+        "controllerCount": ensure_output["controllerCount"],
+        "serviceCount": ensure_output["serviceCount"],
     },
     "planTask": {
         "summary": plan_output["summary"],

@@ -2,6 +2,7 @@ import re
 from typing import Any, Optional
 
 from app.clients.backend_api import BackendApiClient
+from app.graph.runner import WorkerGraphNode, WorkerGraphRunner
 from app.schemas import AgentRunStartRequest, AgentStepRecordRequest
 
 QUERY_TOKEN_PATTERN = re.compile(r"[A-Za-z][A-Za-z0-9_]{2,}|[\u4e00-\u9fff]{2,}")
@@ -15,12 +16,13 @@ SEARCH_PREVIEW_CHARS = 500
 def run_initial_nodes_safely(run_id: int, request: AgentRunStartRequest) -> None:
     client = BackendApiClient()
     current_step = "load_task_context"
+
+    def update_current_step(step_name: str) -> None:
+        nonlocal current_step
+        current_step = step_name
+
     try:
-        loaded_context = load_task_context(run_id, request, client)
-        current_step = "plan_task"
-        plan_output = plan_task(run_id, loaded_context, request, client)
-        current_step = "retrieve_context"
-        retrieve_context(run_id, loaded_context, plan_output, request, client)
+        build_initial_graph(run_id, request, client).run(on_node_start=update_current_step)
     except Exception as error:  # noqa: BLE001 - background task must not crash the worker process
         try:
             client.record_step(
@@ -34,6 +36,52 @@ def run_initial_nodes_safely(run_id: int, request: AgentRunStartRequest) -> None
             )
         except Exception:
             return
+
+
+def build_initial_graph(
+    run_id: int,
+    request: AgentRunStartRequest,
+    client: BackendApiClient,
+) -> WorkerGraphRunner:
+    return WorkerGraphRunner(
+        [
+            WorkerGraphNode(
+                "load_task_context",
+                lambda state: {
+                    "loaded_context": load_task_context(run_id, request, client),
+                },
+            ),
+            WorkerGraphNode(
+                "ensure_index",
+                lambda state: {
+                    "index_status": ensure_index(run_id, state["loaded_context"], request, client),
+                },
+            ),
+            WorkerGraphNode(
+                "plan_task",
+                lambda state: {
+                    "plan_output": plan_task(
+                        run_id,
+                        state["loaded_context"],
+                        request,
+                        client,
+                    ),
+                },
+            ),
+            WorkerGraphNode(
+                "retrieve_context",
+                lambda state: {
+                    "retrieval_output": retrieve_context(
+                        run_id,
+                        state["loaded_context"],
+                        state["plan_output"],
+                        request,
+                        client,
+                    ),
+                },
+            ),
+        ]
+    )
 
 
 def load_task_context(
@@ -80,6 +128,63 @@ def load_task_context(
         "symbols": symbols,
         "loadOutput": output,
     }
+
+
+def ensure_index(
+    run_id: int,
+    loaded_context: dict[str, Any],
+    request: AgentRunStartRequest,
+    client: Optional[BackendApiClient] = None,
+) -> dict[str, Any]:
+    backend = client or BackendApiClient()
+    context = loaded_context["context"]
+    files = list(loaded_context.get("files") or [])
+    symbols = list(loaded_context.get("symbols") or [])
+    file_paths = [str(file.get("path") or "") for file in files]
+    java_files = [path for path in file_paths if path.endswith(".java")]
+    test_files = [path for path in file_paths if "/test/" in path or path.startswith("src/test/")]
+    controller_symbols = [
+        symbol for symbol in symbols if str(symbol.get("symbolType") or "").upper() == "CONTROLLER"
+    ]
+    service_symbols = [
+        symbol for symbol in symbols if str(symbol.get("symbolType") or "").upper() == "SERVICE"
+    ]
+    index_ready = bool(files) and bool(java_files or symbols)
+    missing_signals = []
+    if not files:
+        missing_signals.append("files")
+    if not java_files and not symbols:
+        missing_signals.append("javaFilesOrSymbols")
+
+    output = {
+        "summary": index_summary(context, index_ready, files, java_files, symbols),
+        "indexReady": index_ready,
+        "fileCount": len(files),
+        "javaFileCount": len(java_files),
+        "testFileCount": len(test_files),
+        "symbolCount": len(symbols),
+        "controllerCount": len(controller_symbols),
+        "serviceCount": len(service_symbols),
+        "missingSignals": missing_signals,
+        "sampleJavaFiles": java_files[:8],
+        "sampleControllers": sample_symbols(controller_symbols),
+        "sampleServices": sample_symbols(service_symbols),
+    }
+    backend.record_step(
+        run_id,
+        AgentStepRecordRequest(
+            step_name="ensure_index",
+            status="SUCCESS",
+            input={
+                "runId": run_id,
+                "taskId": request.task_id,
+                "projectId": request.project_id,
+                "source": "agent-worker",
+            },
+            output=output,
+        ),
+    )
+    return output
 
 
 def plan_task(
@@ -179,6 +284,27 @@ def retrieve_context(
         ),
     )
     return output
+
+
+def index_summary(
+    context: dict[str, Any],
+    index_ready: bool,
+    files: list[dict[str, Any]],
+    java_files: list[str],
+    symbols: list[dict[str, Any]],
+) -> str:
+    repo = context.get("repoFullName") or f"project#{context.get('projectId')}"
+    if index_ready:
+        return (
+            f"已确认 {repo} 的代码索引可用："
+            f"{len(files)} 个文件条目、{len(java_files)} 个 Java 文件、"
+            f"{len(symbols)} 个 Java 符号。"
+        )
+    return (
+        f"{repo} 的索引信号不足："
+        f"{len(files)} 个文件条目、{len(java_files)} 个 Java 文件、"
+        f"{len(symbols)} 个 Java 符号。"
+    )
 
 
 def candidate_queries(*values: Optional[str]) -> list[str]:

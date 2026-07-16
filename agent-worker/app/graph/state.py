@@ -17,3 +17,7 @@ class AgentRunState(TypedDict, total=False):
     repair_attempts: int
     review_report: Optional[dict[str, Any]]
     approval_status: str
+    loaded_context: dict[str, Any]
+    index_status: dict[str, Any]
+    plan_output: dict[str, Any]
+    retrieval_output: dict[str, Any]
