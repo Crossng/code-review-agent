@@ -95,10 +95,11 @@
 - 项目关键文件、`git`、`java`、`mvn`、`npm`、`docker` 和 Docker Compose。
 - Docker daemon、PostgreSQL/Redis Compose 状态、沙箱镜像、超时和 Maven cache。
 - 真实 Coder 所需的 `REPOPILOT_CODER_MODE=openai-compatible`、`REPOPILOT_CODER_API_KEY`/`OPENAI_API_KEY` 和 `REPOPILOT_CODER_MODEL`。
+- Worker Planner/Coder 可选模型入口所需的 `REPOPILOT_WORKER_MODEL_MODE`、`REPOPILOT_WORKER_MODEL_API_KEY`、`REPOPILOT_WORKER_MODEL_NAME`、`REPOPILOT_WORKER_CODER_MODEL_MODE`、`REPOPILOT_WORKER_CODER_MODEL_API_KEY` 和 `REPOPILOT_WORKER_CODER_MODEL_NAME`。
 - 远端 GitHub PR 所需的 `REPOPILOT_GITHUB_ENABLED=true` 和 `REPOPILOT_GITHUB_TOKEN`/`GITHUB_TOKEN`。
 - 后端和前端端口是否已有进程监听。
 
-脚本只展示密钥是否配置，不打印 GitHub token、模型 key 或 Authorization header。正式演示前可使用严格模式：
+脚本只展示密钥是否配置，不打印 GitHub token、模型 key 或 Authorization header。Worker Planner/Coder 默认关闭时只提示可选增强；如果显式切到 `fixture` 或 `openai-compatible` 但缺少对应 fixture/model/key，`--strict` 会失败。正式演示前可使用严格模式：
 
 ```bash
 ./scripts/real-token-demo-check.sh --strict

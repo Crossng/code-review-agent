@@ -99,6 +99,84 @@ is_real_coder_mode() {
   [ "$normalized" = "openai" ] || [ "$normalized" = "openai-compatible" ]
 }
 
+is_fixture_mode() {
+  local normalized
+  normalized="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  [ "$normalized" = "fixture" ]
+}
+
+worker_model_status() {
+  local label="$1"
+  local mode="$2"
+  local base_url="$3"
+  local model="$4"
+  local key_var="$5"
+  local fixture_var="$6"
+  local tokens="$7"
+  local openai_key_ready=false
+  local fixture_ready=false
+
+  if configured_any "$key_var" "OPENAI_API_KEY"; then
+    openai_key_ready=true
+  fi
+  if configured_any "$fixture_var"; then
+    fixture_ready=true
+  fi
+
+  pass "$label mode" "$mode"
+  pass "$label API base URL" "$base_url"
+  pass "$label max tokens" "$tokens"
+
+  if is_real_coder_mode "$mode"; then
+    if [ -n "$model" ]; then
+      pass "$label model" "$model"
+    else
+      if [ "$STRICT" = true ]; then
+        strict_miss "$label model" "已启用 openai-compatible，但未配置模型名"
+      else
+        warn "$label model" "已启用 openai-compatible，但未配置模型名"
+      fi
+    fi
+    if [ "$openai_key_ready" = true ]; then
+      pass "$label key" "已配置 $key_var 或 OPENAI_API_KEY"
+    else
+      if [ "$STRICT" = true ]; then
+        strict_miss "$label key" "已启用 openai-compatible，但未配置 $key_var / OPENAI_API_KEY"
+      else
+        warn "$label key" "已启用 openai-compatible，但未配置 $key_var / OPENAI_API_KEY"
+      fi
+    fi
+    if [ "$openai_key_ready" = true ] && [ -n "$model" ]; then
+      pass "$label 真实模型" "配置就绪；真实调用仍会经过审计、结构化解析和后置安全门"
+    fi
+    return
+  fi
+
+  if is_fixture_mode "$mode"; then
+    if [ "$fixture_ready" = true ]; then
+      pass "$label fixture" "已配置 $fixture_var，可做本地固定响应验证"
+    else
+      if [ "$STRICT" = true ]; then
+        strict_miss "$label fixture" "已启用 fixture，但未配置 $fixture_var"
+      else
+        warn "$label fixture" "已启用 fixture，但未配置 $fixture_var"
+      fi
+    fi
+    return
+  fi
+
+  if [ "$(printf '%s' "${mode:-}" | tr '[:upper:]' '[:lower:]')" = "disabled" ] || [ -z "$mode" ]; then
+    warn "$label 真实模型" "默认关闭；可用本地 stub smoke 验证链路，真实模型需 mode=openai-compatible、key 和 model"
+    return
+  fi
+
+  if [ "$STRICT" = true ]; then
+    strict_miss "$label mode" "不支持的模式：$mode"
+  else
+    warn "$label mode" "不支持的模式：$mode"
+  fi
+}
+
 check_command() {
   local command_name="$1"
   if command -v "$command_name" >/dev/null 2>&1; then
@@ -268,6 +346,28 @@ else
   fi
 fi
 
+section "Worker 模型"
+pass "Worker Planner stub" "./scripts/agent-worker-planner-smoke.sh 可验证本地 OpenAI-compatible stub 链路"
+pass "Worker Coder stub" "./scripts/agent-worker-coder-model-smoke.sh 可验证本地 OpenAI-compatible stub 链路"
+
+worker_model_status \
+  "Worker Planner" \
+  "${REPOPILOT_WORKER_MODEL_MODE:-disabled}" \
+  "${REPOPILOT_WORKER_MODEL_API_BASE_URL:-https://api.openai.com/v1}" \
+  "${REPOPILOT_WORKER_MODEL_NAME:-}" \
+  "REPOPILOT_WORKER_MODEL_API_KEY" \
+  "REPOPILOT_WORKER_MODEL_FIXTURE_RESPONSE" \
+  "${REPOPILOT_WORKER_MODEL_MAX_COMPLETION_TOKENS:-1200}"
+
+worker_model_status \
+  "Worker Coder" \
+  "${REPOPILOT_WORKER_CODER_MODEL_MODE:-disabled}" \
+  "${REPOPILOT_WORKER_CODER_MODEL_API_BASE_URL:-https://api.openai.com/v1}" \
+  "${REPOPILOT_WORKER_CODER_MODEL_NAME:-}" \
+  "REPOPILOT_WORKER_CODER_MODEL_API_KEY" \
+  "REPOPILOT_WORKER_CODER_MODEL_FIXTURE_RESPONSE" \
+  "${REPOPILOT_WORKER_CODER_MODEL_MAX_COMPLETION_TOKENS:-4096}"
+
 section "远端 GitHub PR"
 github_enabled="${REPOPILOT_GITHUB_ENABLED:-false}"
 github_base_url="${REPOPILOT_GITHUB_API_BASE_URL:-https://api.github.com}"
@@ -321,6 +421,14 @@ cat <<'EOF'
   export REPOPILOT_GITHUB_ENABLED=true
   export REPOPILOT_GITHUB_TOKEN=...
   ./scripts/real-token-demo-check.sh --strict
+
+可选 Worker 模型演示:
+  export REPOPILOT_WORKER_MODEL_MODE=openai-compatible
+  export REPOPILOT_WORKER_MODEL_API_KEY=...
+  export REPOPILOT_WORKER_MODEL_NAME=...
+  export REPOPILOT_WORKER_CODER_MODEL_MODE=openai-compatible
+  export REPOPILOT_WORKER_CODER_MODEL_API_KEY=...
+  export REPOPILOT_WORKER_CODER_MODEL_NAME=...
 EOF
 
 section "结果"
