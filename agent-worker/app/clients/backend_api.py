@@ -8,6 +8,7 @@ from urllib.request import Request, urlopen
 from app.config import settings
 from app.schemas import (
     AgentModelCallRecordRequest,
+    AgentPatchRecordRequest,
     AgentStatusUpdateRequest,
     AgentStepRecordRequest,
     AgentToolCallRecordRequest,
@@ -45,6 +46,12 @@ class BackendApiClient:
         return self._post_callback(
             f"/api/internal/agent-worker/runs/{run_id}/model-calls",
             model_call.model_dump(exclude_none=True),
+        )
+
+    def record_patch(self, run_id: int, patch: AgentPatchRecordRequest) -> dict[str, Any]:
+        return self._post_callback(
+            f"/api/internal/agent-worker/runs/{run_id}/patches",
+            patch.model_dump(exclude_none=True),
         )
 
     def update_status(self, run_id: int, status: AgentStatusUpdateRequest) -> dict[str, Any]:

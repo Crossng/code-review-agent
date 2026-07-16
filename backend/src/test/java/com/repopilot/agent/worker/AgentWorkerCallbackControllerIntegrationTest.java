@@ -25,6 +25,9 @@ import com.repopilot.agent.repository.AgentTaskRepository;
 import com.repopilot.modelcall.domain.ModelCallLog;
 import com.repopilot.modelcall.domain.ModelCallStatus;
 import com.repopilot.modelcall.repository.ModelCallLogRepository;
+import com.repopilot.patch.domain.PatchRecord;
+import com.repopilot.patch.domain.PatchStatus;
+import com.repopilot.patch.repository.PatchRecordRepository;
 import com.repopilot.project.domain.Project;
 import com.repopilot.project.repository.ProjectRepository;
 import com.repopilot.toolcall.domain.ToolCallLog;
@@ -73,6 +76,9 @@ class AgentWorkerCallbackControllerIntegrationTest {
     @Autowired
     private ModelCallLogRepository modelCallLogRepository;
 
+    @Autowired
+    private PatchRecordRepository patchRecordRepository;
+
     private String email;
     private Project project;
     private AgentTask task;
@@ -103,6 +109,9 @@ class AgentWorkerCallbackControllerIntegrationTest {
             toolCallLogRepository.deleteAll(toolCallLogRepository.findByAgentRunIdOrderByStartedAtAsc(run.getId()));
             modelCallLogRepository.deleteAll(modelCallLogRepository.findByAgentRunIdOrderByStartedAtAsc(run.getId()));
             agentStepRepository.deleteAll(agentStepRepository.findByAgentRunIdOrderByStartedAtAsc(run.getId()));
+        }
+        if (task != null && task.getId() != null) {
+            patchRecordRepository.deleteAll(patchRecordRepository.findByAgentTaskIdOrderByCreatedAtDesc(task.getId()));
         }
         if (task != null && task.getId() != null) {
             agentTaskRepository.findById(task.getId()).ifPresent(savedTask -> {
@@ -299,6 +308,75 @@ class AgentWorkerCallbackControllerIntegrationTest {
         assertThat(savedRun.getStatus()).isEqualTo(AgentRunStatus.SUCCESS);
         assertThat(savedRun.getFinishedAt()).isNotNull();
         assertThat(savedRun.getErrorMessage()).isNull();
+    }
+
+    @Test
+    void recordPatchRequiresCallbackTokenAndPersistsWorkerPatchDraft() throws Exception {
+        String diff = """
+                diff --git a/.repopilot/worker-plan.md b/.repopilot/worker-plan.md
+                new file mode 100644
+                index 0000000..1111111
+                --- /dev/null
+                +++ b/.repopilot/worker-plan.md
+                @@ -0,0 +1,2 @@
+                +# Worker patch draft
+                +来自 Python Worker 的补丁草稿。
+                """;
+        Map<String, Object> request = Map.of(
+                "diff_content", diff,
+                "summary", "Worker 生成的补丁草稿",
+                "generation_mode", "WORKER_SAFE_PLANNING_DRAFT",
+                "generation_provider", "AGENT_WORKER",
+                "generation_model", "worker-retrieval-plan-v1"
+        );
+
+        mockMvc.perform(post("/api/internal/agent-worker/runs/{runId}/patches", run.getId())
+                        .header(AgentWorkerCallbackController.CALLBACK_TOKEN_HEADER, "test-worker-callback-token")
+                        .contentType(APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.agentTaskId").value(task.getId()))
+                .andExpect(jsonPath("$.data.agentRunId").value(run.getId()))
+                .andExpect(jsonPath("$.data.baseBranch").value("main"))
+                .andExpect(jsonPath("$.data.targetBranch").value("repopilot/task-" + task.getId()))
+                .andExpect(jsonPath("$.data.generationMode").value("WORKER_SAFE_PLANNING_DRAFT"))
+                .andExpect(jsonPath("$.data.generationProvider").value("AGENT_WORKER"))
+                .andExpect(jsonPath("$.data.generationModel").value("worker-retrieval-plan-v1"))
+                .andExpect(jsonPath("$.data.status").value("GENERATED"));
+
+        List<PatchRecord> patches = patchRecordRepository.findByAgentTaskIdOrderByCreatedAtDesc(task.getId());
+        assertThat(patches).hasSize(1);
+        PatchRecord patch = patches.get(0);
+        assertThat(patch.getAgentRun().getId()).isEqualTo(run.getId());
+        assertThat(patch.getBaseBranch()).isEqualTo("main");
+        assertThat(patch.getTargetBranch()).isEqualTo("repopilot/task-" + task.getId());
+        assertThat(patch.getDiffContent()).contains("Worker patch draft");
+        assertThat(patch.getSummary()).isEqualTo("Worker 生成的补丁草稿");
+        assertThat(patch.getGenerationMode()).isEqualTo("WORKER_SAFE_PLANNING_DRAFT");
+        assertThat(patch.getGenerationProvider()).isEqualTo("AGENT_WORKER");
+        assertThat(patch.getGenerationModel()).isEqualTo("worker-retrieval-plan-v1");
+        assertThat(patch.getStatus()).isEqualTo(PatchStatus.GENERATED);
+    }
+
+    @Test
+    void recordPatchRejectsInvalidCallbackTokenBeforeJwtAuthentication() throws Exception {
+        Map<String, Object> request = Map.of(
+                "diff_content", "diff --git a/a.txt b/a.txt\n",
+                "summary", "Worker patch",
+                "generation_mode", "WORKER_SAFE_PLANNING_DRAFT",
+                "generation_provider", "AGENT_WORKER"
+        );
+
+        mockMvc.perform(post("/api/internal/agent-worker/runs/{runId}/patches", run.getId())
+                        .header(AgentWorkerCallbackController.CALLBACK_TOKEN_HEADER, "wrong-token")
+                        .contentType(APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value("AGENT_WORKER_CALLBACK_FORBIDDEN"));
+
+        assertThat(patchRecordRepository.findByAgentTaskIdOrderByCreatedAtDesc(task.getId())).isEmpty();
     }
 
     @Test

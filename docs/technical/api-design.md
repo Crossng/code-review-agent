@@ -50,6 +50,7 @@ X-RepoPilot-Worker-Token: <worker-callback-token>
 | `POST` | `/internal/agent-worker/runs/{runId}/steps` | Agent Worker 回写 run step 证据 |
 | `POST` | `/internal/agent-worker/runs/{runId}/tool-calls` | Agent Worker 回写工具调用审计 |
 | `POST` | `/internal/agent-worker/runs/{runId}/model-calls` | Agent Worker 回写模型调用审计 |
+| `POST` | `/internal/agent-worker/runs/{runId}/patches` | Agent Worker 回写生成的 patch 草稿 |
 | `POST` | `/internal/agent-worker/runs/{runId}/status` | Agent Worker 回写 task/run 状态 |
 | `GET` | `/internal/agent-worker/runs/{runId}/context` | Agent Worker 读取 run/task/project 上下文 |
 | `GET` | `/internal/agent-worker/runs/{runId}/project/files?maxDepth=6` | Agent Worker 按 run 读取项目文件树 |
@@ -118,6 +119,22 @@ Model call 请求：
 ```
 
 响应返回标准 `ModelCallLogResponse`。后端会写入既有 `model_call_log` 表；未传 token 数时按 JSON 长度估算，传入 token 数时保留 Worker/模型网关上报的统计。
+
+Patch 请求：
+
+```json
+{
+  "base_branch": "main",
+  "target_branch": "repopilot/task-1001",
+  "diff_content": "diff --git a/.repopilot/worker-plan.md b/.repopilot/worker-plan.md\n...",
+  "summary": "Worker generated a patch draft",
+  "generation_mode": "WORKER_SAFE_PLANNING_DRAFT",
+  "generation_provider": "AGENT_WORKER",
+  "generation_model": "worker-retrieval-plan-v1"
+}
+```
+
+响应返回标准 `PatchRecordResponse`。后端按 `runId` 绑定到已有 `agent_run` 和 `agent_task`，未传 `base_branch` 时使用项目默认分支，未传 `target_branch` 时使用 `repopilot/task-{taskId}`。该接口只负责持久化 Worker 生成的 patch draft，不会绕过后续 diff 安全预检、沙箱测试、风险审查和人工审批。
 
 Status 请求：
 

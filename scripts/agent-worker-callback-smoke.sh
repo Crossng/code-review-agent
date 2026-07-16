@@ -17,6 +17,7 @@ RepoPilot Agent Worker 回写 smoke
   - 校验 /api/internal/agent-worker/runs/{run_id}/steps 路径、callback token header 和 step JSON。
   - 校验 /api/internal/agent-worker/runs/{run_id}/tool-calls 路径、callback token header 和 tool call JSON。
   - 校验 /api/internal/agent-worker/runs/{run_id}/model-calls 路径、callback token header 和 model call JSON。
+  - 校验 /api/internal/agent-worker/runs/{run_id}/patches 路径、callback token header 和 patch JSON。
   - 校验 /api/internal/agent-worker/runs/{run_id}/status 路径、callback token header 和 status JSON。
   - 运行证据写入 output/agent-worker-callback-smoke/last-run.json。
 EOF
@@ -42,13 +43,14 @@ from pathlib import Path
 from app.clients.backend_api import BackendApiClient
 from app.schemas import (
     AgentModelCallRecordRequest,
+    AgentPatchRecordRequest,
     AgentStatusUpdateRequest,
     AgentStepRecordRequest,
     AgentToolCallRecordRequest,
 )
 
 summary_path = Path(sys.argv[1])
-captured = {"steps": [], "statuses": [], "toolCalls": [], "modelCalls": []}
+captured = {"steps": [], "statuses": [], "toolCalls": [], "modelCalls": [], "patches": []}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -106,6 +108,23 @@ class Handler(BaseHTTPRequestHandler):
                 "errorMessage": event["body"].get("error_message"),
                 "startedAt": "2026-07-16T00:00:00Z",
                 "finishedAt": "2026-07-16T00:00:01Z",
+            }
+        elif self.path.endswith("/patches"):
+            captured["patches"].append(event)
+            response_data = {
+                "id": 912,
+                "agentTaskId": 101,
+                "agentRunId": 404,
+                "baseBranch": event["body"].get("base_branch") or "main",
+                "targetBranch": event["body"].get("target_branch") or "repopilot/task-101",
+                "diffContent": event["body"]["diff_content"],
+                "summary": event["body"].get("summary"),
+                "generationMode": event["body"]["generation_mode"],
+                "generationProvider": event["body"]["generation_provider"],
+                "generationModel": event["body"].get("generation_model"),
+                "changedFiles": [{"path": ".repopilot/worker-plan.md", "changeType": "ADDED"}],
+                "status": "GENERATED",
+                "createdAt": "2026-07-16T00:00:01Z",
             }
         elif self.path.endswith("/status"):
             captured["statuses"].append(event)
@@ -181,6 +200,25 @@ try:
             duration_ms=33,
         ),
     )
+    patch_response = client.record_patch(
+        404,
+        AgentPatchRecordRequest(
+            diff_content=(
+                "diff --git a/.repopilot/worker-plan.md b/.repopilot/worker-plan.md\n"
+                "new file mode 100644\n"
+                "index 0000000..1111111\n"
+                "--- /dev/null\n"
+                "+++ b/.repopilot/worker-plan.md\n"
+                "@@ -0,0 +1,2 @@\n"
+                "+# Worker patch draft\n"
+                "+来自 Python Worker 的补丁草稿。\n"
+            ),
+            summary="Worker callback patch smoke",
+            generation_mode="WORKER_SAFE_PLANNING_DRAFT",
+            generation_provider="AGENT_WORKER",
+            generation_model="worker-retrieval-plan-v1",
+        ),
+    )
     status_response = client.update_status(
         404,
         AgentStatusUpdateRequest(
@@ -198,14 +236,17 @@ if (
     len(captured["steps"]) != 1
     or len(captured["toolCalls"]) != 1
     or len(captured["modelCalls"]) != 1
+    or len(captured["patches"]) != 1
     or len(captured["statuses"]) != 1
 ):
     raise SystemExit(f"callback count mismatch: {captured}")
 step_event = captured["steps"][0]
 tool_event = captured["toolCalls"][0]
 model_event = captured["modelCalls"][0]
+patch_event = captured["patches"][0]
 status_event = captured["statuses"][0]
-if any(event.get("method") != "POST" for event in [step_event, tool_event, model_event, status_event]):
+callback_events = [step_event, tool_event, model_event, patch_event, status_event]
+if any(event.get("method") != "POST" for event in callback_events):
     raise SystemExit(f"method mismatch: {captured}")
 if step_event.get("path") != "/api/internal/agent-worker/runs/404/steps":
     raise SystemExit(f"step path mismatch: {step_event}")
@@ -213,15 +254,18 @@ if tool_event.get("path") != "/api/internal/agent-worker/runs/404/tool-calls":
     raise SystemExit(f"tool call path mismatch: {tool_event}")
 if model_event.get("path") != "/api/internal/agent-worker/runs/404/model-calls":
     raise SystemExit(f"model call path mismatch: {model_event}")
+if patch_event.get("path") != "/api/internal/agent-worker/runs/404/patches":
+    raise SystemExit(f"patch path mismatch: {patch_event}")
 if status_event.get("path") != "/api/internal/agent-worker/runs/404/status":
     raise SystemExit(f"status path mismatch: {status_event}")
-if any(event.get("token") != "callback-smoke-token" for event in [step_event, tool_event, model_event, status_event]):
+if any(event.get("token") != "callback-smoke-token" for event in callback_events):
     raise SystemExit("callback token header mismatch")
-if any(event.get("contentType") != "application/json" for event in [step_event, tool_event, model_event, status_event]):
+if any(event.get("contentType") != "application/json" for event in callback_events):
     raise SystemExit("content-type mismatch")
 step_body = step_event.get("body", {})
 tool_body = tool_event.get("body", {})
 model_body = model_event.get("body", {})
+patch_body = patch_event.get("body", {})
 status_body = status_event.get("body", {})
 if step_body.get("step_name") != "worker_callback_smoke" or step_body.get("status") != "SUCCESS":
     raise SystemExit(f"step body contract mismatch: {step_body}")
@@ -237,6 +281,14 @@ if model_body.get("model_provider") != "OPENAI_COMPATIBLE" or model_body.get("mo
     raise SystemExit(f"model call metadata mismatch: {model_body}")
 if model_body.get("prompt_tokens") != 12 or model_body.get("completion_tokens") != 8 or model_body.get("total_tokens") != 20:
     raise SystemExit(f"model call token mismatch: {model_body}")
+if patch_body.get("generation_mode") != "WORKER_SAFE_PLANNING_DRAFT":
+    raise SystemExit(f"patch generation mode mismatch: {patch_body}")
+if patch_body.get("generation_provider") != "AGENT_WORKER":
+    raise SystemExit(f"patch generation provider mismatch: {patch_body}")
+if patch_body.get("generation_model") != "worker-retrieval-plan-v1":
+    raise SystemExit(f"patch generation model mismatch: {patch_body}")
+if not patch_body.get("diff_content", "").startswith("diff --git"):
+    raise SystemExit(f"patch diff contract mismatch: {patch_body}")
 if status_body.get("task_status") != "WAITING_HUMAN_APPROVAL" or status_body.get("run_status") != "SUCCESS":
     raise SystemExit(f"status body contract mismatch: {status_body}")
 if status_body.get("complete_stream") is not True:
@@ -247,6 +299,8 @@ if tool_call_response.get("data", {}).get("toolName") != "read_project_file":
     raise SystemExit(f"tool call response parse mismatch: {tool_call_response}")
 if model_call_response.get("data", {}).get("stepName") != "generate_patch":
     raise SystemExit(f"model call response parse mismatch: {model_call_response}")
+if patch_response.get("data", {}).get("generationMode") != "WORKER_SAFE_PLANNING_DRAFT":
+    raise SystemExit(f"patch response parse mismatch: {patch_response}")
 if status_response.get("data", {}).get("taskStatus") != "WAITING_HUMAN_APPROVAL":
     raise SystemExit(f"status response parse mismatch: {status_response}")
 
@@ -277,6 +331,15 @@ summary = {
         "status": model_body["status"],
         "totalTokens": model_body["total_tokens"],
     },
+    "patchRequest": {
+        "method": patch_event["method"],
+        "path": patch_event["path"],
+        "tokenHeaderPresent": patch_event["token"] == "callback-smoke-token",
+        "generationMode": patch_body["generation_mode"],
+        "generationProvider": patch_body["generation_provider"],
+        "generationModel": patch_body.get("generation_model"),
+        "diffStartsWithGit": patch_body["diff_content"].startswith("diff --git"),
+    },
     "statusRequest": {
         "method": status_event["method"],
         "path": status_event["path"],
@@ -288,6 +351,7 @@ summary = {
     "stepResponse": step_response["data"],
     "toolCallResponse": tool_call_response["data"],
     "modelCallResponse": model_call_response["data"],
+    "patchResponse": patch_response["data"],
     "statusResponse": status_response["data"],
 }
 summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -295,6 +359,7 @@ print("Agent Worker 回写 client 验证通过。")
 print(f"Step: {step_body['step_name']} -> {step_response['data']['status']}")
 print(f"Tool call: {tool_body['tool_name']} -> {tool_call_response['data']['status']}")
 print(f"Model call: {model_body['step_name']} / {model_body['model_name']} -> {model_call_response['data']['status']}")
+print(f"Patch: {patch_body['generation_mode']} -> {patch_response['data']['status']}")
 print(f"Status: {status_body['task_status']} / {status_body['run_status']}")
 print(f"证据文件: {summary_path}")
 PY

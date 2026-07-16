@@ -3,6 +3,7 @@ package com.repopilot.agent.worker;
 import com.repopilot.agent.dto.AgentStepResponse;
 import com.repopilot.common.ApiResponse;
 import com.repopilot.modelcall.dto.ModelCallLogResponse;
+import com.repopilot.patch.dto.PatchRecordResponse;
 import com.repopilot.toolcall.dto.ToolCallLogResponse;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -47,6 +48,15 @@ public class AgentWorkerCallbackController {
             @Valid @RequestBody AgentWorkerModelCallRecordRequest request
     ) {
         return ApiResponse.ok(callbackService.recordModelCall(runId, callbackToken, request));
+    }
+
+    @PostMapping("/api/internal/agent-worker/runs/{runId}/patches")
+    public ApiResponse<PatchRecordResponse> recordPatch(
+            @PathVariable Long runId,
+            @RequestHeader(name = CALLBACK_TOKEN_HEADER, required = false) String callbackToken,
+            @Valid @RequestBody AgentWorkerPatchRecordRequest request
+    ) {
+        return ApiResponse.ok(callbackService.recordPatch(runId, callbackToken, request));
     }
 
     @PostMapping("/api/internal/agent-worker/runs/{runId}/status")

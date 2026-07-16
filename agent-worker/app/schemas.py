@@ -59,6 +59,16 @@ class AgentModelCallRecordRequest(BaseModel):
     finished_at: Optional[str] = None
 
 
+class AgentPatchRecordRequest(BaseModel):
+    base_branch: Optional[str] = Field(default=None, max_length=200)
+    target_branch: Optional[str] = Field(default=None, max_length=200)
+    diff_content: str = Field(min_length=1)
+    summary: Optional[str] = Field(default=None, max_length=4000)
+    generation_mode: str = Field(min_length=1, max_length=120)
+    generation_provider: str = Field(min_length=1, max_length=120)
+    generation_model: Optional[str] = Field(default=None, max_length=200)
+
+
 class AgentStatusUpdateRequest(BaseModel):
     task_status: Optional[
         Literal[

@@ -29,9 +29,10 @@ The callback smoke script checks:
 - `BackendApiClient` posts to `/api/internal/agent-worker/runs/{run_id}/steps`.
 - `BackendApiClient` posts to `/api/internal/agent-worker/runs/{run_id}/tool-calls`.
 - `BackendApiClient` posts to `/api/internal/agent-worker/runs/{run_id}/model-calls`.
+- `BackendApiClient` posts to `/api/internal/agent-worker/runs/{run_id}/patches`.
 - `BackendApiClient` posts to `/api/internal/agent-worker/runs/{run_id}/status`.
 - `X-RepoPilot-Worker-Token` is attached.
-- Step, tool call, model call and status payloads use the backend callback contract.
+- Step, tool call, model call, patch and status payloads use the backend callback contract.
 - Evidence is written to `output/agent-worker-callback-smoke/last-run.json`.
 
 The tool smoke script checks:
@@ -98,7 +99,7 @@ Worker nodes can also write tool call and model call audit records through `Back
 
 ```python
 from app.clients.backend_api import BackendApiClient
-from app.schemas import AgentModelCallRecordRequest, AgentToolCallRecordRequest
+from app.schemas import AgentModelCallRecordRequest, AgentPatchRecordRequest, AgentToolCallRecordRequest
 
 client = BackendApiClient()
 
@@ -130,6 +131,25 @@ client.record_model_call(
 ```
 
 The Spring Boot backend stores these records in the existing tool/model call audit tables and applies the same sensitive-field redaction used by the local executor.
+
+## Backend Patch Callback
+
+Worker nodes can persist generated patch drafts before the backend applies the usual safety, sandbox and approval gates:
+
+```python
+client.record_patch(
+    run_id=303,
+    patch=AgentPatchRecordRequest(
+        diff_content="diff --git a/.repopilot/worker-plan.md b/.repopilot/worker-plan.md\n...",
+        summary="Worker generated a patch draft",
+        generation_mode="WORKER_SAFE_PLANNING_DRAFT",
+        generation_provider="AGENT_WORKER",
+        generation_model="worker-retrieval-plan-v1",
+    ),
+)
+```
+
+The backend binds the patch to the existing run/task, fills default branches when omitted and returns the standard `PatchRecordResponse`.
 
 ## Backend Tool Bridge
 

@@ -15,6 +15,9 @@ import com.repopilot.common.ApiException;
 import com.repopilot.modelcall.dto.ModelCallLogResponse;
 import com.repopilot.modelcall.service.ModelCallLogService;
 import com.repopilot.notification.service.TaskStreamService;
+import com.repopilot.patch.domain.PatchRecord;
+import com.repopilot.patch.dto.PatchRecordResponse;
+import com.repopilot.patch.repository.PatchRecordRepository;
 import com.repopilot.toolcall.dto.ToolCallLogResponse;
 import com.repopilot.toolcall.service.ToolCallLogService;
 import org.springframework.http.HttpStatus;
@@ -28,6 +31,7 @@ public class AgentWorkerCallbackService {
     private final AgentRunRepository agentRunRepository;
     private final AgentTaskRepository agentTaskRepository;
     private final AgentStepRepository agentStepRepository;
+    private final PatchRecordRepository patchRecordRepository;
     private final ToolCallLogService toolCallLogService;
     private final ModelCallLogService modelCallLogService;
     private final TaskStreamService taskStreamService;
@@ -38,6 +42,7 @@ public class AgentWorkerCallbackService {
             AgentRunRepository agentRunRepository,
             AgentTaskRepository agentTaskRepository,
             AgentStepRepository agentStepRepository,
+            PatchRecordRepository patchRecordRepository,
             ToolCallLogService toolCallLogService,
             ModelCallLogService modelCallLogService,
             TaskStreamService taskStreamService,
@@ -47,6 +52,7 @@ public class AgentWorkerCallbackService {
         this.agentRunRepository = agentRunRepository;
         this.agentTaskRepository = agentTaskRepository;
         this.agentStepRepository = agentStepRepository;
+        this.patchRecordRepository = patchRecordRepository;
         this.toolCallLogService = toolCallLogService;
         this.modelCallLogService = modelCallLogService;
         this.taskStreamService = taskStreamService;
@@ -115,6 +121,29 @@ public class AgentWorkerCallbackService {
                 request.startedAt(),
                 request.finishedAt()
         ));
+    }
+
+    @Transactional
+    public PatchRecordResponse recordPatch(
+            Long runId,
+            String callbackToken,
+            AgentWorkerPatchRecordRequest request
+    ) {
+        tokenGuard.requireValidToken(callbackToken);
+        AgentRun run = requireRun(runId);
+        AgentTask task = run.getAgentTask();
+        PatchRecord patch = patchRecordRepository.save(new PatchRecord(
+                task,
+                run,
+                blankToDefault(request.baseBranch(), task.getProject().getDefaultBranch()),
+                blankToDefault(request.targetBranch(), "repopilot/task-" + task.getId()),
+                request.diffContent(),
+                request.summary(),
+                request.generationMode(),
+                request.generationProvider(),
+                request.generationModel()
+        ));
+        return PatchRecordResponse.from(patch);
     }
 
     @Transactional
