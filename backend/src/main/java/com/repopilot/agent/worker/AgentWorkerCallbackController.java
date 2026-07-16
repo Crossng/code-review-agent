@@ -77,6 +77,15 @@ public class AgentWorkerCallbackController {
         return ApiResponse.ok(callbackService.runPatchSandboxTests(runId, patchId, callbackToken));
     }
 
+    @PostMapping("/api/internal/agent-worker/runs/{runId}/patches/{patchId}/review")
+    public ApiResponse<AgentWorkerPatchReviewResponse> reviewPatch(
+            @PathVariable Long runId,
+            @PathVariable Long patchId,
+            @RequestHeader(name = CALLBACK_TOKEN_HEADER, required = false) String callbackToken
+    ) {
+        return ApiResponse.ok(callbackService.reviewPatch(runId, patchId, callbackToken));
+    }
+
     @PostMapping("/api/internal/agent-worker/runs/{runId}/status")
     public ApiResponse<AgentWorkerRunStatusUpdateResponse> updateStatus(
             @PathVariable Long runId,

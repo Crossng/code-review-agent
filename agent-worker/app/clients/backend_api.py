@@ -66,6 +66,12 @@ class BackendApiClient:
             {},
         )
 
+    def review_patch(self, run_id: int, patch_id: int) -> dict[str, Any]:
+        return self._post_callback(
+            f"/api/internal/agent-worker/runs/{run_id}/patches/{patch_id}/review",
+            {},
+        )
+
     def update_status(self, run_id: int, status: AgentStatusUpdateRequest) -> dict[str, Any]:
         return self._post_callback(
             f"/api/internal/agent-worker/runs/{run_id}/status",

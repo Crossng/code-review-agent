@@ -13,15 +13,18 @@ import com.repopilot.agent.repository.AgentRunRepository;
 import com.repopilot.agent.repository.AgentStepRepository;
 import com.repopilot.agent.repository.AgentTaskRepository;
 import com.repopilot.agent.service.PatchDiffSafetyService;
+import com.repopilot.agent.service.PatchRiskReviewService;
 import com.repopilot.common.ApiException;
 import com.repopilot.modelcall.dto.ModelCallLogResponse;
 import com.repopilot.modelcall.service.ModelCallLogService;
 import com.repopilot.notification.service.TaskStreamService;
 import com.repopilot.patch.domain.PatchRecord;
+import com.repopilot.patch.domain.PatchStatus;
 import com.repopilot.patch.dto.PatchRecordResponse;
 import com.repopilot.patch.repository.PatchRecordRepository;
 import com.repopilot.sandbox.domain.TestRun;
 import com.repopilot.sandbox.domain.TestRunStatus;
+import com.repopilot.sandbox.repository.TestRunRepository;
 import com.repopilot.sandbox.service.SandboxTestService;
 import com.repopilot.toolcall.dto.ToolCallLogResponse;
 import com.repopilot.toolcall.service.ToolCallLogService;
@@ -39,6 +42,8 @@ public class AgentWorkerCallbackService {
     private final PatchRecordRepository patchRecordRepository;
     private final PatchDiffSafetyService patchDiffSafetyService;
     private final SandboxTestService sandboxTestService;
+    private final TestRunRepository testRunRepository;
+    private final PatchRiskReviewService patchRiskReviewService;
     private final ToolCallLogService toolCallLogService;
     private final ModelCallLogService modelCallLogService;
     private final TaskStreamService taskStreamService;
@@ -52,6 +57,8 @@ public class AgentWorkerCallbackService {
             PatchRecordRepository patchRecordRepository,
             PatchDiffSafetyService patchDiffSafetyService,
             SandboxTestService sandboxTestService,
+            TestRunRepository testRunRepository,
+            PatchRiskReviewService patchRiskReviewService,
             ToolCallLogService toolCallLogService,
             ModelCallLogService modelCallLogService,
             TaskStreamService taskStreamService,
@@ -64,6 +71,8 @@ public class AgentWorkerCallbackService {
         this.patchRecordRepository = patchRecordRepository;
         this.patchDiffSafetyService = patchDiffSafetyService;
         this.sandboxTestService = sandboxTestService;
+        this.testRunRepository = testRunRepository;
+        this.patchRiskReviewService = patchRiskReviewService;
         this.toolCallLogService = toolCallLogService;
         this.modelCallLogService = modelCallLogService;
         this.taskStreamService = taskStreamService;
@@ -260,6 +269,45 @@ public class AgentWorkerCallbackService {
     }
 
     @Transactional
+    public AgentWorkerPatchReviewResponse reviewPatch(Long runId, Long patchId, String callbackToken) {
+        tokenGuard.requireValidToken(callbackToken);
+        AgentRun run = requireRun(runId);
+        PatchRecord patch = requirePatchForRun(run, patchId);
+        TestRun testRun = requirePassedTestRun(patch);
+        PatchRiskReviewService.PatchRiskReview review = modelCallLogService.record(
+                run,
+                "review_patch",
+                java.util.Map.of(
+                        "patchId", patch.getId(),
+                        "testRunId", testRun.getId(),
+                        "source", "agent-worker"
+                ),
+                () -> patchRiskReviewService.review(patch, testRun)
+        );
+        AgentStep step = saveWorkerStep(
+                run,
+                "review_patch",
+                AgentStepStatus.SUCCESS,
+                java.util.Map.of(
+                        "patchId", patch.getId(),
+                        "testRunId", testRun.getId(),
+                        "source", "agent-worker"
+                ),
+                review,
+                null
+        );
+        return AgentWorkerPatchReviewResponse.from(
+                patch.getId(),
+                patch.getAgentTask().getId(),
+                run.getId(),
+                testRun.getId(),
+                review,
+                step.getId(),
+                step.getStatus()
+        );
+    }
+
+    @Transactional
     public AgentWorkerRunStatusUpdateResponse updateStatus(
             Long runId,
             String callbackToken,
@@ -302,6 +350,30 @@ public class AgentWorkerCallbackService {
             throw new ApiException(HttpStatus.NOT_FOUND, "PATCH_NOT_FOUND", "Patch not found for current run");
         }
         return patch;
+    }
+
+    private TestRun requirePassedTestRun(PatchRecord patch) {
+        if (patch.getStatus() != PatchStatus.APPLIED && patch.getStatus() != PatchStatus.APPROVED) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "PATCH_TEST_NOT_PASSED",
+                    "Worker patch must be applied and tested before review"
+            );
+        }
+        TestRun testRun = testRunRepository.findFirstByPatchIdOrderByCreatedAtDesc(patch.getId())
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.CONFLICT,
+                        "PATCH_TEST_NOT_PASSED",
+                        "Worker patch must pass sandbox tests before review"
+                ));
+        if (testRun.getStatus() != TestRunStatus.PASSED) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "PATCH_TEST_NOT_PASSED",
+                    "Worker patch must pass sandbox tests before review"
+            );
+        }
+        return testRun;
     }
 
     private void requireSafetyStepPassed(Long runId, Long patchId) {

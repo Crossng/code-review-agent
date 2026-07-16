@@ -545,6 +545,103 @@ class AgentWorkerCallbackControllerIntegrationTest {
     }
 
     @Test
+    void reviewPatchRequiresPassedSandboxTestAndRecordsReviewEvidence() throws Exception {
+        PatchRecord patch = saveWorkerSafePatch();
+        patch.markApplied();
+        patch = patchRecordRepository.save(patch);
+        TestRun testRun = saveWorkerTestRun(patch, TestRunStatus.PASSED, 0, "BUILD SUCCESS");
+
+        mockMvc.perform(post("/api/internal/agent-worker/runs/{runId}/patches/{patchId}/review", run.getId(), patch.getId())
+                        .header(AgentWorkerCallbackController.CALLBACK_TOKEN_HEADER, "test-worker-callback-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.patchId").value(patch.getId()))
+                .andExpect(jsonPath("$.data.agentTaskId").value(task.getId()))
+                .andExpect(jsonPath("$.data.agentRunId").value(run.getId()))
+                .andExpect(jsonPath("$.data.testRunId").value(testRun.getId()))
+                .andExpect(jsonPath("$.data.riskLevel").value("NONE"))
+                .andExpect(jsonPath("$.data.summary").value("没有自动审查发现。"))
+                .andExpect(jsonPath("$.data.findings").isArray())
+                .andExpect(jsonPath("$.data.findings.length()").value(0))
+                .andExpect(jsonPath("$.data.stepId").exists())
+                .andExpect(jsonPath("$.data.stepStatus").value("SUCCESS"));
+
+        List<AgentStep> steps = agentStepRepository.findByAgentRunIdOrderByStartedAtAsc(run.getId());
+        assertThat(steps).hasSize(1);
+        AgentStep step = steps.get(0);
+        assertThat(step.getStepName()).isEqualTo("review_patch");
+        assertThat(step.getStatus()).isEqualTo(AgentStepStatus.SUCCESS);
+        assertThat(jsonNode(step.getInputJson()).path("patchId").asLong()).isEqualTo(patch.getId());
+        assertThat(jsonNode(step.getInputJson()).path("testRunId").asLong()).isEqualTo(testRun.getId());
+        assertThat(jsonNode(step.getInputJson()).path("source").asText()).isEqualTo("agent-worker");
+        assertThat(jsonNode(step.getOutputJson()).path("riskLevel").asText()).isEqualTo("NONE");
+        assertThat(jsonNode(step.getOutputJson()).path("summary").asText()).isEqualTo("没有自动审查发现。");
+        assertThat(step.getErrorMessage()).isNull();
+
+        List<ModelCallLog> modelCalls = modelCallLogRepository.findByAgentRunIdOrderByStartedAtAsc(run.getId());
+        assertThat(modelCalls).hasSize(1);
+        ModelCallLog modelCall = modelCalls.get(0);
+        assertThat(modelCall.getStepName()).isEqualTo("review_patch");
+        assertThat(modelCall.getModelProvider()).isEqualTo("LOCAL_PLACEHOLDER");
+        assertThat(modelCall.getModelName()).isEqualTo("deterministic-mvp");
+        assertThat(modelCall.getStatus()).isEqualTo(ModelCallStatus.SUCCESS);
+        assertThat(jsonNode(modelCall.getPromptJson()).path("patchId").asLong()).isEqualTo(patch.getId());
+        assertThat(jsonNode(modelCall.getPromptJson()).path("testRunId").asLong()).isEqualTo(testRun.getId());
+        assertThat(jsonNode(modelCall.getResponseJson()).path("riskLevel").asText()).isEqualTo("NONE");
+        assertThat(jsonNode(modelCall.getResponseJson()).path("summary").asText()).isEqualTo("没有自动审查发现。");
+
+        assertThat(agentTaskRepository.findById(task.getId()).orElseThrow().getStatus())
+                .isEqualTo(AgentTaskStatus.CREATED);
+        assertThat(agentRunRepository.findById(run.getId()).orElseThrow().getStatus())
+                .isEqualTo(AgentRunStatus.RUNNING);
+    }
+
+    @Test
+    void reviewPatchRejectsPatchWithoutPassedSandboxTest() throws Exception {
+        PatchRecord patch = saveWorkerSafePatch();
+
+        mockMvc.perform(post("/api/internal/agent-worker/runs/{runId}/patches/{patchId}/review", run.getId(), patch.getId())
+                        .header(AgentWorkerCallbackController.CALLBACK_TOKEN_HEADER, "test-worker-callback-token"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value("PATCH_TEST_NOT_PASSED"));
+
+        assertThat(agentStepRepository.findByAgentRunIdOrderByStartedAtAsc(run.getId())).isEmpty();
+        assertThat(modelCallLogRepository.findByAgentRunIdOrderByStartedAtAsc(run.getId())).isEmpty();
+    }
+
+    @Test
+    void reviewPatchRejectsFailedSandboxTest() throws Exception {
+        PatchRecord patch = saveWorkerSafePatch();
+        patch.markApplied();
+        patch = patchRecordRepository.save(patch);
+        saveWorkerTestRun(patch, TestRunStatus.FAILED, 1, "BUILD FAILURE");
+
+        mockMvc.perform(post("/api/internal/agent-worker/runs/{runId}/patches/{patchId}/review", run.getId(), patch.getId())
+                        .header(AgentWorkerCallbackController.CALLBACK_TOKEN_HEADER, "test-worker-callback-token"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value("PATCH_TEST_NOT_PASSED"));
+
+        assertThat(agentStepRepository.findByAgentRunIdOrderByStartedAtAsc(run.getId())).isEmpty();
+        assertThat(modelCallLogRepository.findByAgentRunIdOrderByStartedAtAsc(run.getId())).isEmpty();
+    }
+
+    @Test
+    void reviewPatchRejectsInvalidCallbackTokenBeforeJwtAuthentication() throws Exception {
+        PatchRecord patch = saveWorkerSafePatch();
+
+        mockMvc.perform(post("/api/internal/agent-worker/runs/{runId}/patches/{patchId}/review", run.getId(), patch.getId())
+                        .header(AgentWorkerCallbackController.CALLBACK_TOKEN_HEADER, "wrong-token"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value("AGENT_WORKER_CALLBACK_FORBIDDEN"));
+
+        assertThat(agentStepRepository.findByAgentRunIdOrderByStartedAtAsc(run.getId())).isEmpty();
+        assertThat(modelCallLogRepository.findByAgentRunIdOrderByStartedAtAsc(run.getId())).isEmpty();
+    }
+
+    @Test
     void updateStatusRejectsEmptyStatusPayload() throws Exception {
         mockMvc.perform(post("/api/internal/agent-worker/runs/{runId}/status", run.getId())
                         .header(AgentWorkerCallbackController.CALLBACK_TOKEN_HEADER, "test-worker-callback-token")
@@ -616,6 +713,23 @@ class AgentWorkerCallbackControllerIntegrationTest {
                 AgentStepStatus.SUCCESS,
                 jsonString(Map.of("patchId", patch.getId(), "source", "agent-worker")),
                 jsonString(Map.of("safe", true, "changedPaths", List.of(".repopilot/worker-plan.md"), "findings", List.of()))
+        ));
+    }
+
+    private TestRun saveWorkerTestRun(
+            PatchRecord patch,
+            TestRunStatus status,
+            Integer exitCode,
+            String logExcerpt
+    ) {
+        return testRunRepository.save(new TestRun(
+                run,
+                patch,
+                "mvn -q test",
+                exitCode,
+                45,
+                logExcerpt,
+                status
         ));
     }
 
