@@ -86,7 +86,8 @@ agent-worker/
 Agent Worker 约定：
 
 - `graph/state.py` 定义 `AgentRunState`。
-- `graph/nodes/` 每个 LangGraph 节点一个文件。
+- `graph/initial_nodes.py` 只负责装配初始 LangGraph 节点链和后台安全入口。
+- `graph/nodes/` 按职责拆分节点实现：`context.py` 管上下文/索引确认，`planning.py` 管计划与检索，`patch.py` 管补丁草稿和后置门，`common.py` 放共享小工具。
 - `clients/` 只封装 Backend API、MCP、LLM 调用。
 - `prompts/` 保存 Planner、Coder、Repair、Review 模板。
 - 所有节点输出必须可 JSON 序列化，方便回写后端。
@@ -161,4 +162,3 @@ frontend/.env.example
 - 示例配置提交，真实密钥不提交。
 - 所有 token 和 key 支持环境变量注入。
 - 本地开发默认指向 Docker Compose 服务名。
-

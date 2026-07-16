@@ -192,8 +192,19 @@ If no callback token is configured, `/start` remains a pure contract endpoint an
 
 The initial node chain is now executed through LangGraph `StateGraph` when the `langgraph` dependency is installed. Local development environments that have not installed optional worker dependencies fall back to the same sequential node order and expose that through `/health.graph_engine=SEQUENTIAL_FALLBACK`; real graph environments expose `/health.graph_engine=LANGGRAPH`.
 
+## Worker Node Layout
+
+The initial graph assembly stays in `app/graph/initial_nodes.py`, while node implementations live under `app/graph/nodes/`:
+
+- `context.py`: `load_task_context` and `ensure_index`.
+- `planning.py`: deterministic `plan_task` and `retrieve_context`.
+- `patch.py`: deterministic `generate_patch` draft generation and post-patch gates.
+- `common.py`: shared small helpers for previews, query handling and deduped values.
+
+This keeps LangGraph wiring small and makes future model-backed nodes easier to replace one at a time.
+
 Next implementation steps:
 
 1. Attach future Worker model calls to `record_model_call(...)` automatically.
-2. Split larger node implementations into dedicated files as the LangGraph graph grows.
+2. Replace deterministic planning/patch draft logic with model-backed nodes one node at a time.
 3. Exercise Worker-approved patches against real remote GitHub PR publishing once a token-backed demo repository is available.
