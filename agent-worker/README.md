@@ -1,11 +1,12 @@
 # RepoPilot Agent Worker
 
-This module will host the LangGraph workflow for long-running RepoPilot agent runs.
+该模块承载 RepoPilot 长任务的 Python Agent Worker 和 LangGraph 图执行入口。
 
 Current slice:
 
 - `GET /health` returns worker health and the active graph execution engine.
 - `POST /runs/{run_id}/start` accepts a run contract and returns the planned MVP graph nodes.
+- `plan_task` supports an optional auditable Worker model client while keeping the deterministic plan as the safe default.
 - `../scripts/agent-worker-smoke.sh` starts or reuses the worker and verifies both contracts.
 
 ## Local Contract Smoke
@@ -48,7 +49,8 @@ The node smoke script checks:
 - `POST /runs/{run_id}/start` schedules initial worker nodes when `REPOPILOT_AGENT_WORKER_CALLBACK_TOKEN` is configured.
 - The worker reads run context/files/symbols/search/file through the backend tool bridge.
 - Every run-scoped tool read is automatically recorded through `/tool-calls` with a bounded output summary.
-- The worker records `load_task_context`, `ensure_index`, deterministic `plan_task`, `retrieve_context` and `generate_patch` SUCCESS steps.
+- The worker records `load_task_context`, `ensure_index`, `plan_task`, `retrieve_context` and `generate_patch` SUCCESS steps.
+- `plan_task` can attach a fixture-backed model planning note and record a `plan_task` model call audit when `REPOPILOT_WORKER_MODEL_MODE=fixture`.
 - The worker records a deterministic `generate_patch` model call and a `WORKER_SAFE_PLANNING_DRAFT` patch draft.
 - The worker calls `/api/internal/agent-worker/runs/{run_id}/patches/{patch_id}/safety` after the draft is persisted.
 - The worker calls `/api/internal/agent-worker/runs/{run_id}/patches/{patch_id}/sandbox-tests` when safety passes.
@@ -137,6 +139,26 @@ client.record_model_call(
 
 The Spring Boot backend stores these records in the existing tool/model call audit tables and applies the same sensitive-field redaction used by the local executor.
 
+## Worker 模型计划入口
+
+`plan_task` 已接入 `WorkerModelClient`。默认配置保持保守：只生成确定性计划，不调用模型，也不会多写 model call audit。需要验证模型路径时，可以使用 fixture 模式：
+
+```bash
+export REPOPILOT_WORKER_MODEL_MODE=fixture
+export REPOPILOT_WORKER_MODEL_PROVIDER=WORKER_FIXTURE
+export REPOPILOT_WORKER_MODEL_NAME=worker-fixture-plan-v1
+export REPOPILOT_WORKER_MODEL_FIXTURE_RESPONSE="优先定位 Controller、Service 和测试，再生成最小 diff。"
+```
+
+| 配置 | 默认值 | 说明 |
+| --- | --- | --- |
+| `REPOPILOT_WORKER_MODEL_MODE` | `disabled` | `disabled` 不调用模型；`fixture` 使用固定响应，便于 smoke/test 留证 |
+| `REPOPILOT_WORKER_MODEL_PROVIDER` | `WORKER_FIXTURE` | 写入 model call audit 的 provider |
+| `REPOPILOT_WORKER_MODEL_NAME` | `worker-fixture-plan-v1` | 写入 model call audit 的模型名 |
+| `REPOPILOT_WORKER_MODEL_FIXTURE_RESPONSE` | 空 | fixture 模式下作为 `modelPlanText` 写入 `plan_task` step output |
+
+fixture 模式只增强 `plan_task` 的计划摘要，不直接生成代码、不绕过 `generate_patch`、安全预检、沙箱测试、风险审查或人工审批。后续真实模型入口会复用同一个客户端契约。
+
 ## Backend Patch Callback
 
 Worker nodes can persist generated patch drafts before the backend applies the usual safety, sandbox, review and approval gates:
@@ -184,7 +206,7 @@ When `REPOPILOT_AGENT_WORKER_CALLBACK_TOKEN` is configured, `/runs/{run_id}/star
 
 1. `load_task_context` reads run/task/project context, file samples and symbol samples, then records a SUCCESS step.
 2. `ensure_index` checks that the run has file and Java symbol signals, then records index readiness evidence.
-3. `plan_task` builds a deterministic Spring implementation plan, runs a few code searches for evidence, then records a SUCCESS step.
+3. `plan_task` builds a deterministic Spring implementation plan, runs a few code searches for evidence, optionally records a fixture-backed model planning note, then records a SUCCESS step.
 4. `retrieve_context` reuses plan search queries, deduplicates code chunks, reads key file previews and records a SUCCESS step.
 5. `generate_patch` creates a safe planning draft diff under `.repopilot/`, records a deterministic model-call audit entry, persists the draft through `record_patch(...)`, records a SUCCESS step, calls `validate_patch_safety(...)`, then `run_patch_sandbox_tests(...)` when safety passes, `review_patch(...)` when sandbox tests pass, and `mark_patch_ready_for_approval(...)` when review passes.
 
@@ -197,7 +219,7 @@ The initial node chain is now executed through LangGraph `StateGraph` when the `
 The initial graph assembly stays in `app/graph/initial_nodes.py`, while node implementations live under `app/graph/nodes/`:
 
 - `context.py`: `load_task_context` and `ensure_index`.
-- `planning.py`: deterministic `plan_task` and `retrieve_context`.
+- `planning.py`: deterministic `plan_task`, optional Worker model planning note and `retrieve_context`.
 - `patch.py`: deterministic `generate_patch` draft generation and post-patch gates.
 - `common.py`: shared small helpers for previews, query handling and deduped values.
 
@@ -205,6 +227,6 @@ This keeps LangGraph wiring small and makes future model-backed nodes easier to 
 
 Next implementation steps:
 
-1. Attach future Worker model calls to `record_model_call(...)` automatically.
+1. Extend `WorkerModelClient` from fixture mode to a real OpenAI-compatible Planner provider.
 2. Replace deterministic planning/patch draft logic with model-backed nodes one node at a time.
 3. Exercise Worker-approved patches against real remote GitHub PR publishing once a token-backed demo repository is available.

@@ -104,7 +104,18 @@ PlannerAgent 输出必须是结构化 JSON：
 }
 ```
 
-## 6.1 Coder 输出契约
+## 6.1 Worker Planner 模型客户端模式
+
+Python Worker 的 `plan_task` 现在先保留确定性计划作为安全默认值，同时通过 `WorkerModelClient` 支持可审计的模型计划摘要。该入口由环境变量控制：
+
+| 模式 | 行为 |
+| --- | --- |
+| `disabled` | 默认模式，不调用模型，`plan_task` 只输出确定性 `summary`、`steps`、`searchQueries`、`searchResults` 和 `testStrategy` |
+| `fixture` | 使用 `REPOPILOT_WORKER_MODEL_FIXTURE_RESPONSE` 作为模型计划摘要，写入 `plan_task.modelPlanText`、`modelProvider`、`modelName`，并通过 `record_model_call(...)` 写入 `plan_task` model call audit |
+
+相关配置为 `REPOPILOT_WORKER_MODEL_MODE`、`REPOPILOT_WORKER_MODEL_PROVIDER`、`REPOPILOT_WORKER_MODEL_NAME` 和 `REPOPILOT_WORKER_MODEL_FIXTURE_RESPONSE`。fixture 模式只增强计划说明，不生成代码、不绕过 `generate_patch`、diff 安全预检、沙箱测试、风险审查或人工审批。后续真实 Planner 模型会复用同一个客户端契约扩展。
+
+## 6.2 Coder 输出契约
 
 LLM CoderAgent 的 raw response 必须满足以下契约，才能进入 `patch_record`、`validate_patch_safety` 和沙箱执行：
 
@@ -114,7 +125,7 @@ LLM CoderAgent 的 raw response 必须满足以下契约，才能进入 `patch_r
 - 解析后持久化为 `generationMode=LLM_CODER_DRAFT`。
 - 解析后的 diff 仍必须通过 `validate_patch_safety`，再进入 Docker `git apply`。
 
-## 6.2 Coder 模型客户端模式
+## 6.3 Coder 模型客户端模式
 
 `repopilot.coder.mode` 控制 recipe 未命中后的 Coder 模型入口：
 

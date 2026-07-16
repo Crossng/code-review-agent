@@ -2,8 +2,9 @@ import re
 from typing import Any, Optional
 
 from app.clients.backend_api import BackendApiClient
+from app.clients.model_client import WorkerModelClient
 from app.graph.nodes.common import add_query, text_preview, unique_values
-from app.schemas import AgentRunStartRequest, AgentStepRecordRequest
+from app.schemas import AgentModelCallRecordRequest, AgentRunStartRequest, AgentStepRecordRequest
 
 QUERY_TOKEN_PATTERN = re.compile(r"[A-Za-z][A-Za-z0-9_]{2,}|[\u4e00-\u9fff]{2,}")
 SEARCH_LIMIT_PER_QUERY = 4
@@ -11,6 +12,7 @@ MAX_RETRIEVED_RESULTS = 12
 MAX_READ_FILES = 3
 CONTENT_PREVIEW_CHARS = 1200
 SEARCH_PREVIEW_CHARS = 500
+MODEL_PLAN_PREVIEW_CHARS = 2000
 
 
 def plan_task(
@@ -18,6 +20,7 @@ def plan_task(
     loaded_context: dict[str, Any],
     request: AgentRunStartRequest,
     client: Optional[BackendApiClient] = None,
+    model_client: Optional[WorkerModelClient] = None,
 ) -> dict[str, Any]:
     backend = client or BackendApiClient()
     context = loaded_context["context"]
@@ -39,6 +42,24 @@ def plan_task(
             }
         )
     output = deterministic_plan(context, loaded_context, queries, search_summaries)
+    model_prompt = build_plan_model_prompt(context, loaded_context, request, queries, search_summaries, output)
+    model_result = (model_client or WorkerModelClient()).generate_text("plan_task", model_prompt)
+    if model_result is not None:
+        output["modelPlanText"] = text_preview(model_result.text, MODEL_PLAN_PREVIEW_CHARS)
+        output["modelProvider"] = model_result.provider
+        output["modelName"] = model_result.model
+        backend.record_model_call(
+            run_id,
+            AgentModelCallRecordRequest(
+                step_name="plan_task",
+                model_provider=model_result.provider,
+                model_name=model_result.model,
+                status="SUCCESS",
+                prompt=model_result.prompt,
+                response=model_result.response,
+                duration_ms=model_result.duration_ms,
+            ),
+        )
     backend.record_step(
         run_id,
         AgentStepRecordRequest(
@@ -54,6 +75,51 @@ def plan_task(
         ),
     )
     return output
+
+
+def build_plan_model_prompt(
+    context: dict[str, Any],
+    loaded_context: dict[str, Any],
+    request: AgentRunStartRequest,
+    queries: list[str],
+    search_summaries: list[dict[str, Any]],
+    deterministic_output: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "role": "PlannerAgent",
+        "language": "zh-CN",
+        "instruction": "基于任务、项目索引线索和确定性计划，输出一段中文工程实施计划摘要。",
+        "task": {
+            "taskId": context.get("taskId"),
+            "projectId": context.get("projectId"),
+            "taskType": context.get("taskType"),
+            "title": context.get("title"),
+            "description": context.get("description"),
+            "userRequest": request.user_request,
+            "repoFullName": context.get("repoFullName"),
+        },
+        "index": {
+            "fileCount": loaded_context.get("indexStatus", {}).get("fileCount"),
+            "symbolCount": loaded_context.get("indexStatus", {}).get("symbolCount"),
+            "sampleFiles": loaded_context.get("loadOutput", {}).get("sampleFiles", [])[:10],
+        },
+        "searchQueries": queries,
+        "searchResults": search_summaries,
+        "deterministicPlan": {
+            "summary": deterministic_output.get("summary"),
+            "steps": deterministic_output.get("steps"),
+            "testStrategy": deterministic_output.get("testStrategy"),
+        },
+        "outputContract": {
+            "format": "plain_text",
+            "requirements": [
+                "使用中文",
+                "指出最可能修改的模块",
+                "说明测试与审批前置条件",
+                "不要输出代码块或 diff",
+            ],
+        },
+    }
 
 
 def retrieve_context(
