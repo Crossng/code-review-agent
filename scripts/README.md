@@ -11,6 +11,7 @@
 ./scripts/agent-worker-node-smoke.sh
 ./scripts/agent-worker-planner-smoke.sh
 ./scripts/agent-worker-coder-smoke.sh
+./scripts/agent-worker-coder-model-smoke.sh
 ```
 
 `agent-worker-smoke.sh` 用于验证 Python Agent Worker 的最小服务契约。它会：
@@ -71,6 +72,17 @@
 - 验证 Worker diff parser 接受该输出并持久化为 `generationMode=LLM_CODER_DRAFT`。
 - 验证 patch 持久化后仍调用 safety、sandbox、review 和 approval-ready 后置门。
 - 将证据写入 `output/agent-worker-coder-smoke/last-run.json`。
+
+`agent-worker-coder-model-smoke.sh` 用于验证 Python Agent Worker 的 OpenAI-compatible Coder 模型节点链路。它会：
+
+- 启动本地后端 HTTP stub、本地 Chat Completions 兼容 Coder 模型 stub 和真实 FastAPI worker。
+- 配置 `REPOPILOT_WORKER_CODER_MODEL_MODE=openai-compatible`、模型名、API base URL、API key、`max_completion_tokens` 和可选 organization/project header。
+- 调用 `POST /runs/{run_id}/start`，让 Worker 后台执行 `load_task_context`、`ensure_index`、`plan_task`、`retrieve_context` 和 `generate_patch`。
+- 验证 `generate_patch` 真实请求 `/v1/chat/completions`，请求体包含 diff-only Coder prompt、计划/检索上下文和模型名。
+- 验证模型 raw diff 被解析并持久化为 `generationMode=LLM_CODER_DRAFT`、`generationProvider=OPENAI_COMPATIBLE`。
+- 验证模型 diff 仍进入 safety、sandbox、review 和 approval-ready 后置门。
+- 验证 Coder API key 只进入 Authorization header，不写入 prompt/response 审计。
+- 将证据写入 `output/agent-worker-coder-model-smoke/last-run.json`。
 
 ## Real Token Demo Check
 

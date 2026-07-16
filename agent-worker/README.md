@@ -19,6 +19,7 @@ Current slice:
 ../scripts/agent-worker-node-smoke.sh
 ../scripts/agent-worker-planner-smoke.sh
 ../scripts/agent-worker-coder-smoke.sh
+../scripts/agent-worker-coder-model-smoke.sh
 ```
 
 The contract smoke script checks:
@@ -78,6 +79,15 @@ The planner smoke script checks:
 - A fixture Coder model returns one raw unified diff.
 - The worker parses the diff, records `generationMode=LLM_CODER_DRAFT`, persists the patch draft and still calls safety, sandbox, review and approval-ready gates.
 - Evidence is written to `output/agent-worker-coder-smoke/last-run.json`.
+
+`agent-worker-coder-model-smoke.sh` verifies the full Worker Coder OpenAI-compatible path:
+
+- A real FastAPI worker starts with a local backend stub and a local Chat Completions-compatible Coder stub.
+- `REPOPILOT_WORKER_CODER_MODEL_MODE=openai-compatible` makes `generate_patch` call `/v1/chat/completions`.
+- The Coder request carries Authorization, model, optional OpenAI organization/project headers, diff-only Coder prompt, plan/retrieval context and `max_completion_tokens`.
+- The worker parses the assistant raw diff into `LLM_CODER_DRAFT`, records `generate_patch / OPENAI_COMPATIBLE` model call audit and continues through safety, sandbox, review and approval-ready gates.
+- The Coder API key is not written into model call prompt/response audit payloads.
+- Evidence is written to `output/agent-worker-coder-model-smoke/last-run.json`.
 
 ## Backend Start Bridge
 
