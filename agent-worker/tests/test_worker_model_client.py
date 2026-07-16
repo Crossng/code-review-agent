@@ -13,14 +13,18 @@ from app.clients.model_client import WorkerCoderModelClient, WorkerModelClient, 
 
 
 class ChatCompletionStub:
-    def __init__(self, status_code, response_body):
-        self.status_code = status_code
-        self.response_body = response_body.encode("utf-8")
+    def __init__(self, status_code, response_body=None):
+        if isinstance(status_code, list):
+            self.responses = [(status, body.encode("utf-8")) for status, body in status_code]
+        else:
+            assert response_body is not None
+            self.responses = [(status_code, response_body.encode("utf-8"))]
         self.authorization = None
         self.organization = None
         self.project = None
         self.path = None
         self.request_body = None
+        self.request_count = 0
         self.server = None
         self.thread = None
 
@@ -30,16 +34,19 @@ class ChatCompletionStub:
         class Handler(BaseHTTPRequestHandler):
             def do_POST(self):  # noqa: N802 - stdlib callback name
                 length = int(self.headers.get("Content-Length") or "0")
+                index = min(stub.request_count, len(stub.responses) - 1)
+                status_code, response_body = stub.responses[index]
+                stub.request_count += 1
                 stub.path = self.path
                 stub.authorization = self.headers.get("Authorization")
                 stub.organization = self.headers.get("OpenAI-Organization")
                 stub.project = self.headers.get("OpenAI-Project")
                 stub.request_body = self.rfile.read(length).decode("utf-8")
-                self.send_response(stub.status_code)
+                self.send_response(status_code)
                 self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(stub.response_body)))
+                self.send_header("Content-Length", str(len(response_body)))
                 self.end_headers()
-                self.wfile.write(stub.response_body)
+                self.wfile.write(response_body)
 
             def log_message(self, format, *args):  # noqa: A002 - stdlib signature
                 return
@@ -156,6 +163,71 @@ class WorkerModelClientTest(unittest.TestCase):
             self.assertIn("新增 User 分页接口", stub.request_body)
             self.assertNotIn("test-worker-key", str(result.prompt))
             self.assertNotIn("Authorization", str(result.prompt))
+        finally:
+            stub.stop()
+
+    def test_openai_compatible_mode_retries_retryable_http_failure_then_succeeds(self):
+        stub = ChatCompletionStub(
+            [
+                (429, '{"error":{"message":"rate limited"}}'),
+                (
+                    200,
+                    """
+                    {
+                      "model": "gpt-worker-planner-test",
+                      "choices": [
+                        {
+                          "message": {
+                            "content": "已恢复，继续执行结构化计划。"
+                          }
+                        }
+                      ]
+                    }
+                    """,
+                ),
+            ]
+        ).start()
+        try:
+            client = WorkerModelClient(
+                WorkerModelClientSettings(
+                    mode="openai-compatible",
+                    model="gpt-worker-planner-test",
+                    api_base_url=stub.base_url,
+                    api_key="test-worker-key",
+                    timeout_seconds=5,
+                    retry_max_attempts=2,
+                    retry_backoff_seconds=0,
+                )
+            )
+
+            result = client.generate_text("plan_task", {"task": {"title": "新增 User 分页接口"}})
+
+            self.assertIsNotNone(result)
+            assert result is not None
+            self.assertEqual(result.text, "已恢复，继续执行结构化计划。")
+            self.assertEqual(stub.request_count, 2)
+        finally:
+            stub.stop()
+
+    def test_openai_compatible_mode_does_not_retry_non_retryable_http_failure(self):
+        stub = ChatCompletionStub(400, '{"error":{"message":"bad request"}}').start()
+        try:
+            client = WorkerModelClient(
+                WorkerModelClientSettings(
+                    mode="openai-compatible",
+                    model="gpt-worker-planner-test",
+                    api_base_url=stub.base_url,
+                    api_key="test-worker-key",
+                    timeout_seconds=5,
+                    retry_max_attempts=3,
+                    retry_backoff_seconds=0,
+                )
+            )
+
+            with self.assertRaisesRegex(ValueError, "HTTP 400"):
+                client.generate_text("plan_task", {"task": {"title": "新增 User 分页接口"}})
+
+            self.assertEqual(stub.request_count, 1)
         finally:
             stub.stop()
 

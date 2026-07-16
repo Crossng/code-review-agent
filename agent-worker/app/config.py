@@ -132,6 +132,14 @@ class Settings(BaseSettings):
         default="",
         validation_alias=AliasChoices("REPOPILOT_WORKER_CODER_MODEL_PROJECT", "OPENAI_PROJECT"),
     )
+    worker_retry_max_attempts: int = Field(
+        default=3,
+        validation_alias=AliasChoices("REPOPILOT_WORKER_RETRY_MAX_ATTEMPTS", "WORKER_RETRY_MAX_ATTEMPTS"),
+    )
+    worker_retry_backoff_seconds: float = Field(
+        default=0.25,
+        validation_alias=AliasChoices("REPOPILOT_WORKER_RETRY_BACKOFF_SECONDS", "WORKER_RETRY_BACKOFF_SECONDS"),
+    )
     mcp_server_url: str = "http://localhost:8080"
     agent_worker_port: int = 8090
 

@@ -6,6 +6,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from app.config import settings
+from app.retry import RetryPolicy, call_with_retry, is_retryable_http_status
 
 
 @dataclass(frozen=True)
@@ -21,6 +22,8 @@ class WorkerModelClientSettings:
     instruction_role: str = "developer"
     organization: str = ""
     project: str = ""
+    retry_max_attempts: int = 3
+    retry_backoff_seconds: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -34,6 +37,12 @@ class WorkerModelResult:
     prompt_tokens: Optional[int] = None
     completion_tokens: Optional[int] = None
     total_tokens: Optional[int] = None
+
+
+class WorkerModelError(ValueError):
+    def __init__(self, message: str, retryable: bool = False) -> None:
+        super().__init__(message)
+        self.retryable = retryable
 
 
 class WorkerModelClient:
@@ -63,6 +72,8 @@ class WorkerModelClient:
             instruction_role=settings.worker_model_instruction_role,
             organization=settings.worker_model_organization,
             project=settings.worker_model_project,
+            retry_max_attempts=settings.worker_retry_max_attempts,
+            retry_backoff_seconds=settings.worker_retry_backoff_seconds,
         )
         self.system_prompt_factory = system_prompt_factory or planner_system_prompt
         self.fixture_required_message = fixture_required_message
@@ -76,7 +87,13 @@ class WorkerModelClient:
         if mode == "fixture":
             return self._fixture_response(step_name, prompt)
         if mode in {"openai", "openai-compatible"}:
-            return self._openai_compatible_response(step_name, prompt)
+            return call_with_retry(
+                lambda: self._openai_compatible_response(step_name, prompt),
+                RetryPolicy(
+                    max_attempts=self.settings.retry_max_attempts,
+                    backoff_seconds=self.settings.retry_backoff_seconds,
+                ),
+            )
         raise ValueError(f"Unsupported worker model mode: {self.settings.mode}")
 
     def _fixture_response(self, step_name: str, prompt: dict[str, Any]) -> WorkerModelResult:
@@ -170,17 +187,23 @@ class WorkerModelClient:
                 response_text = response.read().decode("utf-8")
         except HTTPError as error:
             detail = error.read().decode("utf-8", errors="replace")
-            raise ValueError(f"Worker model returned HTTP {error.code}: {excerpt(detail)}") from error
+            raise WorkerModelError(
+                f"Worker model returned HTTP {error.code}: {excerpt(detail)}",
+                retryable=is_retryable_http_status(error.code),
+            ) from error
         except URLError as error:
-            raise ValueError(f"Worker model request failed: {error.reason}") from error
+            raise WorkerModelError(
+                f"Worker model request failed: {error.reason}",
+                retryable=True,
+            ) from error
         except TimeoutError as error:
-            raise ValueError("Worker model request timed out") from error
+            raise WorkerModelError("Worker model request timed out", retryable=True) from error
         try:
             decoded = json.loads(response_text)
         except json.JSONDecodeError as error:
-            raise ValueError("Worker model returned invalid JSON") from error
+            raise WorkerModelError("Worker model returned invalid JSON") from error
         if not isinstance(decoded, dict):
-            raise ValueError("Worker model returned a non-object JSON response")
+            raise WorkerModelError("Worker model returned a non-object JSON response")
         return decoded
 
     def _provider(self, default: str) -> str:
@@ -206,6 +229,8 @@ class WorkerCoderModelClient(WorkerModelClient):
                 instruction_role=settings.worker_coder_model_instruction_role,
                 organization=settings.worker_coder_model_organization,
                 project=settings.worker_coder_model_project,
+                retry_max_attempts=settings.worker_retry_max_attempts,
+                retry_backoff_seconds=settings.worker_retry_backoff_seconds,
             ),
             system_prompt_factory=coder_system_prompt,
             fixture_required_message=(

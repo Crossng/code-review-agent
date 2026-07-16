@@ -248,6 +248,17 @@ export REPOPILOT_WORKER_CODER_MODEL_NAME=gpt-worker-coder
 
 Worker Coder 输出必须是一个 raw unified diff，或一个没有额外说明文字的 `diff`/`patch` 代码块。解析通过后会持久化为 `generationMode=LLM_CODER_DRAFT`，并继续进入 `validate_patch_safety(...)`、`run_patch_sandbox_tests(...)`、`review_patch(...)` 和 `mark_patch_ready_for_approval(...)`。解析失败时不会写入 patch。
 
+## Worker 可恢复重试
+
+Worker primary 的自动重试只覆盖可恢复、低副作用的路径：OpenAI-compatible Planner/Coder 模型调用，以及 `load_run_context`、`list_project_files`、`search_code`、`read_project_file`、`list_symbols` 这类后端只读工具 GET 请求。HTTP `408`、`425`、`429`、`5xx`、网络错误和超时会按配置重试；HTTP `400/401/403/404/409`、模型输出契约错误、diff parser 错误、安全预检失败、沙箱应用失败、Maven 测试失败和风险审查失败不会自动重试，而是进入明确的失败或人工处理路径。
+
+| 配置 | 默认值 | 说明 |
+| --- | --- | --- |
+| `REPOPILOT_WORKER_RETRY_MAX_ATTEMPTS` | `3` | 可恢复 Worker 读工具/模型请求的最大尝试次数，含第一次请求 |
+| `REPOPILOT_WORKER_RETRY_BACKOFF_SECONDS` | `0.25` | 每次重试前的线性退避基数；第 N 次失败后等待 `backoff * N` 秒 |
+
+Worker 写型 callback 不做透明重试，包括 `record_step`、`record_model_call`、`record_patch`、`update_status`、`approval-ready` 等会落库或推进状态的请求，避免 HTTP 超时后重复写 patch、重复推进审批或污染审计记录。
+
 ## Backend Patch Callback
 
 Worker nodes can persist generated patch drafts before the backend applies the usual safety, sandbox, review and approval gates:
@@ -317,5 +328,5 @@ This keeps LangGraph wiring small and makes future model-backed nodes easier to 
 Next implementation steps:
 
 1. Expand model-backed Worker Coder business scenarios while preserving parser, safety, sandbox, review and approval gates.
-2. Keep hardening Worker primary retry semantics and recoverable failure classification.
+2. Add end-to-end smoke evidence for transient Worker model/tool retry recovery.
 3. Exercise Worker-approved patches against real remote GitHub PR publishing once a token-backed demo repository is available.

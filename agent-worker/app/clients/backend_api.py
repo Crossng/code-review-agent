@@ -6,6 +6,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from app.config import settings
+from app.retry import RetryPolicy, call_with_retry, is_retryable_http_status
 from app.schemas import (
     AgentModelCallRecordRequest,
     AgentPatchRecordRequest,
@@ -18,6 +19,10 @@ from app.schemas import (
 class BackendApiError(RuntimeError):
     """Raised when the Agent Worker cannot call an internal backend API."""
 
+    def __init__(self, message: str, retryable: bool = False) -> None:
+        super().__init__(message)
+        self.retryable = retryable
+
 
 class BackendApiClient:
     def __init__(
@@ -25,10 +30,20 @@ class BackendApiClient:
         base_url: Optional[str] = None,
         callback_token: Optional[str] = None,
         timeout_seconds: Optional[int] = None,
+        retry_max_attempts: Optional[int] = None,
+        retry_backoff_seconds: Optional[float] = None,
     ) -> None:
         self.base_url = (base_url or settings.backend_base_url).rstrip("/")
         self.callback_token = callback_token if callback_token is not None else settings.backend_callback_token
         self.timeout_seconds = timeout_seconds if timeout_seconds is not None else settings.backend_timeout_seconds
+        self.retry_policy = RetryPolicy(
+            max_attempts=retry_max_attempts
+            if retry_max_attempts is not None
+            else settings.worker_retry_max_attempts,
+            backoff_seconds=retry_backoff_seconds
+            if retry_backoff_seconds is not None
+            else settings.worker_retry_backoff_seconds,
+        )
 
     def record_step(self, run_id: int, step: AgentStepRecordRequest) -> dict[str, Any]:
         return self._post_callback(
@@ -135,7 +150,10 @@ class BackendApiClient:
     def _get_internal(self, path: str, params: Optional[dict[str, Any]] = None) -> Any:
         query = urlencode({key: value for key, value in (params or {}).items() if value is not None})
         request_path = f"{path}?{query}" if query else path
-        return self._request("GET", request_path).get("data")
+        return call_with_retry(
+            lambda: self._request("GET", request_path, allow_retryable_errors=True),
+            self.retry_policy,
+        ).get("data")
 
     def _get_tool(
         self,
@@ -184,7 +202,13 @@ class BackendApiClient:
     def _post_callback(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
         return self._request("POST", path, payload)
 
-    def _request(self, method: str, path: str, payload: Optional[dict[str, Any]] = None) -> Any:
+    def _request(
+        self,
+        method: str,
+        path: str,
+        payload: Optional[dict[str, Any]] = None,
+        allow_retryable_errors: bool = False,
+    ) -> Any:
         if not self.callback_token:
             raise BackendApiError("Backend callback token is not configured")
         body = None if payload is None else json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -202,11 +226,20 @@ class BackendApiClient:
                 response_body = response.read().decode("utf-8")
         except HTTPError as error:
             detail = error.read().decode("utf-8", errors="replace")
-            raise BackendApiError(f"Backend internal API failed with HTTP {error.code}: {detail}") from error
+            raise BackendApiError(
+                f"Backend internal API failed with HTTP {error.code}: {detail}",
+                retryable=allow_retryable_errors and is_retryable_http_status(error.code),
+            ) from error
         except URLError as error:
-            raise BackendApiError(f"Backend internal API failed: {error.reason}") from error
+            raise BackendApiError(
+                f"Backend internal API failed: {error.reason}",
+                retryable=allow_retryable_errors,
+            ) from error
         except TimeoutError as error:
-            raise BackendApiError("Backend internal API timed out") from error
+            raise BackendApiError(
+                "Backend internal API timed out",
+                retryable=allow_retryable_errors,
+            ) from error
         try:
             decoded = json.loads(response_body)
         except json.JSONDecodeError as error:
