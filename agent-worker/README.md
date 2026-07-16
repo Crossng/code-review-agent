@@ -113,6 +113,8 @@ When enabled, backend run execution records an `agent_worker_start` step with th
 
 When both `REPOPILOT_AGENT_WORKER_ENABLED=true` and `REPOPILOT_AGENT_WORKER_CALLBACK_TOKEN` are configured, a successful worker start is treated as `WORKER_PRIMARY`: the backend stops its local executor for that run and waits for Worker callbacks to write steps, patch, sandbox results, review and approval-ready state. If the callback token is missing, the start bridge remains a shadow signal and the Spring Boot executor continues locally.
 
+Worker primary failures are closed explicitly. If a graph node raises, the worker records the failed step, calls `/status` with `FAILED_PATCH_GENERATION / FAILED`, and completes the stream. If safety, sandbox, test or review gates do not pass, the patch node also calls `/status` with the matching failed task status. The backend rejects late patch/safety/sandbox/review/approval/status mutations once the run or task has already reached a terminal state such as `CANCELLED`, preventing a cancelled Worker run from being revived by a late callback.
+
 ## Backend Step Callback
 
 Worker nodes can write step evidence and task/run status back to the backend through `BackendApiClient`:
@@ -315,5 +317,5 @@ This keeps LangGraph wiring small and makes future model-backed nodes easier to 
 Next implementation steps:
 
 1. Expand model-backed Worker Coder business scenarios while preserving parser, safety, sandbox, review and approval gates.
-2. Keep hardening Worker primary execution for cancellation, retries and failure recovery.
+2. Keep hardening Worker primary retry semantics and recoverable failure classification.
 3. Exercise Worker-approved patches against real remote GitHub PR publishing once a token-backed demo repository is available.

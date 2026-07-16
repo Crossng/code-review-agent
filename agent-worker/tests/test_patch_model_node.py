@@ -26,6 +26,8 @@ class FakeBackend:
         self.sandbox_runs = []
         self.reviews = []
         self.approval_ready = []
+        self.status_updates = []
+        self.safety_is_safe = True
 
     def record_model_call(self, run_id, model_call):
         self.model_calls.append({"runId": run_id, "modelCall": model_call})
@@ -50,11 +52,11 @@ class FakeBackend:
 
     def validate_patch_safety(self, run_id, patch_id):
         self.safety_checks.append({"runId": run_id, "patchId": patch_id})
-        return {"success": True, "data": {"safe": True, "stepStatus": "SUCCESS"}}
+        return {"success": True, "data": {"safe": self.safety_is_safe, "stepStatus": "SUCCESS"}}
 
     def run_patch_sandbox_tests(self, run_id, patch_id):
         self.sandbox_runs.append({"runId": run_id, "patchId": patch_id})
-        return {"success": True, "data": {"testsPassed": True, "testStatus": "PASSED"}}
+        return {"success": True, "data": {"applied": True, "testsPassed": True, "testStatus": "PASSED"}}
 
     def review_patch(self, run_id, patch_id):
         self.reviews.append({"runId": run_id, "patchId": patch_id})
@@ -63,6 +65,10 @@ class FakeBackend:
     def mark_patch_ready_for_approval(self, run_id, patch_id):
         self.approval_ready.append({"runId": run_id, "patchId": patch_id})
         return {"success": True, "data": {"taskStatus": "WAITING_HUMAN_APPROVAL", "runStatus": "SUCCESS"}}
+
+    def update_status(self, run_id, status):
+        self.status_updates.append({"runId": run_id, "status": status})
+        return {"success": True, "data": {"runStatus": status.run_status, "taskStatus": status.task_status}}
 
 
 class DisabledModelClient:
@@ -122,6 +128,31 @@ class PatchModelNodeTest(unittest.TestCase):
         self.assertEqual(backend.patches[0]["patch"].generation_mode, PATCH_GENERATION_MODE)
         self.assertTrue(backend.safety_checks)
         self.assertTrue(backend.approval_ready)
+        self.assertFalse(backend.status_updates)
+
+    def test_generate_patch_marks_run_failed_when_safety_gate_fails(self):
+        backend = FakeBackend()
+        backend.safety_is_safe = False
+
+        output = generate_patch(
+            606,
+            loaded_context(),
+            index_status(),
+            plan_output(),
+            retrieval_output(),
+            request(),
+            client=backend,
+            model_client=DisabledModelClient(),
+        )
+
+        self.assertEqual(output["safety"]["safe"], False)
+        self.assertFalse(backend.sandbox_runs)
+        self.assertFalse(backend.approval_ready)
+        self.assertEqual(len(backend.status_updates), 1)
+        status = backend.status_updates[0]["status"]
+        self.assertEqual(status.task_status, "FAILED_PATCH_GENERATION")
+        self.assertEqual(status.run_status, "FAILED")
+        self.assertEqual(status.complete_stream, True)
 
     def test_generate_patch_records_llm_coder_draft_from_fixture_diff(self):
         backend = FakeBackend()

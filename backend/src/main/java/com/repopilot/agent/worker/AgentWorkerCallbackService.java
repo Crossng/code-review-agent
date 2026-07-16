@@ -152,6 +152,7 @@ public class AgentWorkerCallbackService {
     ) {
         tokenGuard.requireValidToken(callbackToken);
         AgentRun run = requireRun(runId);
+        requireWorkerRunMutable(run, "record patch");
         AgentTask task = run.getAgentTask();
         PatchRecord patch = patchRecordRepository.save(new PatchRecord(
                 task,
@@ -171,6 +172,7 @@ public class AgentWorkerCallbackService {
     public AgentWorkerPatchSafetyResponse validatePatchSafety(Long runId, Long patchId, String callbackToken) {
         tokenGuard.requireValidToken(callbackToken);
         AgentRun run = requireRun(runId);
+        requireWorkerRunMutable(run, "validate patch safety");
         PatchRecord patch = requirePatchForRun(run, patchId);
         PatchDiffSafetyService.PatchDiffSafetyReport report = patchDiffSafetyService.review(patch);
         AgentStepStatus stepStatus = report.safe() ? AgentStepStatus.SUCCESS : AgentStepStatus.FAILED;
@@ -197,6 +199,7 @@ public class AgentWorkerCallbackService {
     public AgentWorkerPatchSandboxResponse runPatchSandboxTests(Long runId, Long patchId, String callbackToken) {
         tokenGuard.requireValidToken(callbackToken);
         AgentRun run = requireRun(runId);
+        requireWorkerRunMutable(run, "run sandbox tests");
         PatchRecord patch = requirePatchForRun(run, patchId);
         requireSafetyStepPassed(run.getId(), patch.getId());
 
@@ -273,6 +276,7 @@ public class AgentWorkerCallbackService {
     public AgentWorkerPatchReviewResponse reviewPatch(Long runId, Long patchId, String callbackToken) {
         tokenGuard.requireValidToken(callbackToken);
         AgentRun run = requireRun(runId);
+        requireWorkerRunMutable(run, "review patch");
         PatchRecord patch = requirePatchForRun(run, patchId);
         TestRun testRun = requirePassedTestRun(patch);
         PatchRiskReviewService.PatchRiskReview review = modelCallLogService.record(
@@ -316,6 +320,7 @@ public class AgentWorkerCallbackService {
     ) {
         tokenGuard.requireValidToken(callbackToken);
         AgentRun run = requireRun(runId);
+        requireWorkerRunMutable(run, "mark patch ready for approval");
         PatchRecord patch = requirePatchForRun(run, patchId);
         TestRun testRun = requirePassedTestRun(patch);
         AgentStep reviewStep = requireReviewStepPassed(run.getId(), patch.getId());
@@ -369,6 +374,7 @@ public class AgentWorkerCallbackService {
             );
         }
         AgentRun run = requireRun(runId);
+        requireWorkerStatusUpdateAllowed(run, request);
         AgentTask task = run.getAgentTask();
         if (request.taskStatus() != null) {
             task.setStatus(request.taskStatus());
@@ -397,6 +403,46 @@ public class AgentWorkerCallbackService {
             throw new ApiException(HttpStatus.NOT_FOUND, "PATCH_NOT_FOUND", "Patch not found for current run");
         }
         return patch;
+    }
+
+    private void requireWorkerRunMutable(AgentRun run, String action) {
+        if (run.getStatus() == AgentRunStatus.RUNNING && !isTerminalTaskStatus(run.getAgentTask().getStatus())) {
+            return;
+        }
+        throw new ApiException(
+                HttpStatus.CONFLICT,
+                "AGENT_WORKER_RUN_TERMINATED",
+                "Agent Worker cannot " + action + " because the run is no longer active"
+        );
+    }
+
+    private void requireWorkerStatusUpdateAllowed(AgentRun run, AgentWorkerRunStatusUpdateRequest request) {
+        if (run.getStatus() == AgentRunStatus.RUNNING && !isTerminalTaskStatus(run.getAgentTask().getStatus())) {
+            return;
+        }
+        boolean sameTaskStatus = request.taskStatus() == null
+                || request.taskStatus() == run.getAgentTask().getStatus();
+        boolean sameRunStatus = request.runStatus() == null
+                || request.runStatus() == run.getStatus();
+        if (sameTaskStatus && sameRunStatus) {
+            return;
+        }
+        throw new ApiException(
+                HttpStatus.CONFLICT,
+                "AGENT_WORKER_RUN_TERMINATED",
+                "Agent Worker cannot update status because the run is no longer active"
+        );
+    }
+
+    private boolean isTerminalTaskStatus(AgentTaskStatus status) {
+        return status == AgentTaskStatus.DONE
+                || status == AgentTaskStatus.CANCELLED
+                || status == AgentTaskStatus.FAILED_REPO_CLONE
+                || status == AgentTaskStatus.FAILED_INDEXING
+                || status == AgentTaskStatus.FAILED_CONTEXT_RETRIEVAL
+                || status == AgentTaskStatus.FAILED_PATCH_GENERATION
+                || status == AgentTaskStatus.FAILED_TEST
+                || status == AgentTaskStatus.FAILED_PR_CREATION;
     }
 
     private TestRun requirePassedTestRun(PatchRecord patch) {

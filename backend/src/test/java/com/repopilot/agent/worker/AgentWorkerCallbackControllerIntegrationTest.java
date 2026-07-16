@@ -327,6 +327,30 @@ class AgentWorkerCallbackControllerIntegrationTest {
     }
 
     @Test
+    void updateStatusRejectsTerminatedRunOverride() throws Exception {
+        markCurrentRunCancelled();
+        Map<String, Object> request = Map.of(
+                "task_status", "WAITING_HUMAN_APPROVAL",
+                "run_status", "SUCCESS",
+                "stream_message", "late worker success",
+                "complete_stream", true
+        );
+
+        mockMvc.perform(post("/api/internal/agent-worker/runs/{runId}/status", run.getId())
+                        .header(AgentWorkerCallbackController.CALLBACK_TOKEN_HEADER, "test-worker-callback-token")
+                        .contentType(APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value("AGENT_WORKER_RUN_TERMINATED"));
+
+        AgentTask savedTask = agentTaskRepository.findById(task.getId()).orElseThrow();
+        AgentRun savedRun = agentRunRepository.findById(run.getId()).orElseThrow();
+        assertThat(savedTask.getStatus()).isEqualTo(AgentTaskStatus.CANCELLED);
+        assertThat(savedRun.getStatus()).isEqualTo(AgentRunStatus.CANCELLED);
+    }
+
+    @Test
     void recordPatchRequiresCallbackTokenAndPersistsWorkerPatchDraft() throws Exception {
         String diff = """
                 diff --git a/.repopilot/worker-plan.md b/.repopilot/worker-plan.md
@@ -373,6 +397,41 @@ class AgentWorkerCallbackControllerIntegrationTest {
         assertThat(patch.getGenerationProvider()).isEqualTo("AGENT_WORKER");
         assertThat(patch.getGenerationModel()).isEqualTo("worker-retrieval-plan-v1");
         assertThat(patch.getStatus()).isEqualTo(PatchStatus.GENERATED);
+    }
+
+    @Test
+    void recordPatchRejectsTerminatedRun() throws Exception {
+        markCurrentRunCancelled();
+        String diff = """
+                diff --git a/.repopilot/worker-plan.md b/.repopilot/worker-plan.md
+                new file mode 100644
+                index 0000000..1111111
+                --- /dev/null
+                +++ b/.repopilot/worker-plan.md
+                @@ -0,0 +1,1 @@
+                +late worker patch
+                """;
+        Map<String, Object> request = Map.of(
+                "diff_content", diff,
+                "summary", "Late Worker patch",
+                "generation_mode", "WORKER_SAFE_PLANNING_DRAFT",
+                "generation_provider", "AGENT_WORKER",
+                "generation_model", "worker-retrieval-plan-v1"
+        );
+
+        mockMvc.perform(post("/api/internal/agent-worker/runs/{runId}/patches", run.getId())
+                        .header(AgentWorkerCallbackController.CALLBACK_TOKEN_HEADER, "test-worker-callback-token")
+                        .contentType(APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value("AGENT_WORKER_RUN_TERMINATED"));
+
+        assertThat(patchRecordRepository.findByAgentTaskIdOrderByCreatedAtDesc(task.getId())).isEmpty();
+        assertThat(agentTaskRepository.findById(task.getId()).orElseThrow().getStatus())
+                .isEqualTo(AgentTaskStatus.CANCELLED);
+        assertThat(agentRunRepository.findById(run.getId()).orElseThrow().getStatus())
+                .isEqualTo(AgentRunStatus.CANCELLED);
     }
 
     @Test
@@ -822,6 +881,13 @@ class AgentWorkerCallbackControllerIntegrationTest {
                 logExcerpt,
                 status
         ));
+    }
+
+    private void markCurrentRunCancelled() {
+        task.setStatus(AgentTaskStatus.CANCELLED);
+        task = agentTaskRepository.save(task);
+        run.markCancelled("用户已取消任务");
+        run = agentRunRepository.save(run);
     }
 
     private String jsonString(Object value) throws Exception {

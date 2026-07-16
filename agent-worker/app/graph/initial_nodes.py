@@ -3,7 +3,7 @@ from app.graph.nodes.context import ensure_index, load_task_context
 from app.graph.nodes.patch import generate_patch
 from app.graph.nodes.planning import plan_task, retrieve_context
 from app.graph.runner import WorkerGraphNode, WorkerGraphRunner
-from app.schemas import AgentRunStartRequest, AgentStepRecordRequest
+from app.schemas import AgentRunStartRequest, AgentStatusUpdateRequest, AgentStepRecordRequest
 
 
 def run_initial_nodes_safely(run_id: int, request: AgentRunStartRequest) -> None:
@@ -17,6 +17,7 @@ def run_initial_nodes_safely(run_id: int, request: AgentRunStartRequest) -> None
     try:
         build_initial_graph(run_id, request, client).run(on_node_start=update_current_step)
     except Exception as error:  # noqa: BLE001 - background task must not crash the worker process
+        message = str(error)[:4000]
         try:
             client.record_step(
                 run_id,
@@ -24,7 +25,20 @@ def run_initial_nodes_safely(run_id: int, request: AgentRunStartRequest) -> None
                     step_name=current_step,
                     status="FAILED",
                     input={"runId": run_id, "source": "agent-worker"},
-                    error_message=str(error)[:4000],
+                    error_message=message,
+                ),
+            )
+        except Exception:
+            pass
+        try:
+            client.update_status(
+                run_id,
+                AgentStatusUpdateRequest(
+                    task_status="FAILED_PATCH_GENERATION",
+                    run_status="FAILED",
+                    error_message=message,
+                    stream_message="Agent Worker 执行失败",
+                    complete_stream=True,
                 ),
             )
         except Exception:

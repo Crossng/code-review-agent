@@ -9,6 +9,7 @@ from app.schemas import (
     AgentModelCallRecordRequest,
     AgentPatchRecordRequest,
     AgentRunStartRequest,
+    AgentStatusUpdateRequest,
     AgentStepRecordRequest,
 )
 
@@ -116,20 +117,84 @@ def generate_patch(
             safety_response = backend.validate_patch_safety(run_id, int(patch_id))
             safety_data = safety_response.get("data")
             output["safety"] = safety_data
-            if isinstance(safety_data, dict) and safety_data.get("safe") is True:
-                sandbox_response = backend.run_patch_sandbox_tests(run_id, int(patch_id))
-                sandbox_data = sandbox_response.get("data")
-                output["sandbox"] = sandbox_data
-                if isinstance(sandbox_data, dict) and sandbox_data.get("testsPassed") is True:
-                    review_response = backend.review_patch(run_id, int(patch_id))
-                    review_data = review_response.get("data")
-                    output["review"] = review_data
-                    if isinstance(review_data, dict) and review_data.get("stepStatus") == "SUCCESS":
-                        approval_response = backend.mark_patch_ready_for_approval(run_id, int(patch_id))
-                        output["approval"] = approval_response.get("data")
+            if not isinstance(safety_data, dict) or safety_data.get("safe") is not True:
+                mark_worker_run_failed(
+                    backend,
+                    run_id,
+                    "FAILED_PATCH_GENERATION",
+                    "Worker patch 未通过 diff 安全预检",
+                )
+                return output
+            sandbox_response = backend.run_patch_sandbox_tests(run_id, int(patch_id))
+            sandbox_data = sandbox_response.get("data")
+            output["sandbox"] = sandbox_data
+            if not isinstance(sandbox_data, dict) or sandbox_data.get("applied") is not True:
+                mark_worker_run_failed(
+                    backend,
+                    run_id,
+                    "FAILED_PATCH_GENERATION",
+                    "Worker patch 在沙箱中应用失败",
+                )
+                return output
+            if sandbox_data.get("testsPassed") is not True:
+                mark_worker_run_failed(
+                    backend,
+                    run_id,
+                    "FAILED_TEST",
+                    "Worker patch 沙箱 Maven 测试失败",
+                )
+                return output
+            review_response = backend.review_patch(run_id, int(patch_id))
+            review_data = review_response.get("data")
+            output["review"] = review_data
+            if not isinstance(review_data, dict) or review_data.get("stepStatus") != "SUCCESS":
+                mark_worker_run_failed(
+                    backend,
+                    run_id,
+                    "FAILED_PATCH_GENERATION",
+                    "Worker patch 风险审查未通过",
+                )
+                return output
+            approval_response = backend.mark_patch_ready_for_approval(run_id, int(patch_id))
+            output["approval"] = approval_response.get("data")
         except Exception as error:  # noqa: BLE001 - post-patch gates are reported without duplicating generate_patch failure
-            output["postPatchGateError"] = str(error)[:1000]
+            message = str(error)[:1000]
+            output["postPatchGateError"] = message
+            mark_worker_run_failed(
+                backend,
+                run_id,
+                "FAILED_PATCH_GENERATION",
+                f"Worker patch 后置门执行失败：{message}",
+            )
+    else:
+        mark_worker_run_failed(
+            backend,
+            run_id,
+            "FAILED_PATCH_GENERATION",
+            "Worker patch 持久化后未返回 patchId",
+        )
     return output
+
+
+def mark_worker_run_failed(
+    backend: BackendApiClient,
+    run_id: int,
+    task_status: str,
+    message: str,
+) -> None:
+    try:
+        backend.update_status(
+            run_id,
+            AgentStatusUpdateRequest(
+                task_status=task_status,
+                run_status="FAILED",
+                error_message=message[:4000],
+                stream_message="Agent Worker 执行失败",
+                complete_stream=True,
+            ),
+        )
+    except Exception:
+        return
 
 
 def generate_model_patch_draft(
