@@ -10,6 +10,7 @@
 ./scripts/agent-worker-tool-smoke.sh
 ./scripts/agent-worker-node-smoke.sh
 ./scripts/agent-worker-planner-smoke.sh
+./scripts/agent-worker-coder-smoke.sh
 ```
 
 `agent-worker-smoke.sh` 用于验证 Python Agent Worker 的最小服务契约。它会：
@@ -62,6 +63,14 @@
 - 验证本次 run 有两条 model call audit：`plan_task / OPENAI_COMPATIBLE` 和 `generate_patch / AGENT_WORKER`。
 - 验证 Planner API key 只进入 Authorization header，不写入 prompt/response 审计。
 - 将证据写入 `output/agent-worker-planner-smoke/last-run.json`。
+
+`agent-worker-coder-smoke.sh` 用于验证 Python Agent Worker 的 Coder 模型补丁节点。它会：
+
+- 直接执行 `generate_patch` 节点，不需要真实模型 token。
+- 使用 fixture Coder 模型返回一个 raw unified diff。
+- 验证 Worker diff parser 接受该输出并持久化为 `generationMode=LLM_CODER_DRAFT`。
+- 验证 patch 持久化后仍调用 safety、sandbox、review 和 approval-ready 后置门。
+- 将证据写入 `output/agent-worker-coder-smoke/last-run.json`。
 
 ## Real Token Demo Check
 

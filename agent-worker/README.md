@@ -7,6 +7,7 @@ Current slice:
 - `GET /health` returns worker health and the active graph execution engine.
 - `POST /runs/{run_id}/start` accepts a run contract and returns the planned MVP graph nodes.
 - `plan_task` supports optional auditable structured Worker Planner advice while keeping the deterministic plan as the safe default.
+- `generate_patch` supports optional Worker Coder raw diff parsing while keeping the safe planning draft as the default.
 - `../scripts/agent-worker-smoke.sh` starts or reuses the worker and verifies both contracts.
 
 ## Local Contract Smoke
@@ -17,6 +18,7 @@ Current slice:
 ../scripts/agent-worker-tool-smoke.sh
 ../scripts/agent-worker-node-smoke.sh
 ../scripts/agent-worker-planner-smoke.sh
+../scripts/agent-worker-coder-smoke.sh
 ```
 
 The contract smoke script checks:
@@ -69,6 +71,13 @@ The planner smoke script checks:
 - The worker records two model call audits in the run: `plan_task / OPENAI_COMPATIBLE` and `generate_patch / AGENT_WORKER`.
 - The Planner API key is not written into model call prompt/response audit payloads.
 - Evidence is written to `output/agent-worker-planner-smoke/last-run.json`.
+
+`agent-worker-coder-smoke.sh` verifies the Worker Coder patch node without a real model token:
+
+- `generate_patch` consumes loaded context, index signals, plan output and retrieved context.
+- A fixture Coder model returns one raw unified diff.
+- The worker parses the diff, records `generationMode=LLM_CODER_DRAFT`, persists the patch draft and still calls safety, sandbox, review and approval-ready gates.
+- Evidence is written to `output/agent-worker-coder-smoke/last-run.json`.
 
 ## Backend Start Bridge
 
@@ -181,6 +190,41 @@ export REPOPILOT_WORKER_MODEL_NAME=gpt-worker-planner
 
 模型模式会增强 `plan_task` 的结构化计划建议。JSON 响应会被解析为 `modelPlan.summary`、`steps`、`searchQueries`、`risks` 和 `testStrategy`；纯文本响应仍会作为 `modelPlanText` 兼容处理。`retrieve_context` 会在保留确定性 query 的前提下吸收最多两条 `modelPlan.searchQueries`，但模型建议不直接生成代码、不绕过 `generate_patch`、安全预检、沙箱测试、风险审查或人工审批。
 
+## Worker Coder 模型补丁入口
+
+`generate_patch` 默认仍生成 `.repopilot/` 下的 `WORKER_SAFE_PLANNING_DRAFT` 规划草稿。需要验证 Worker 侧模型生成 diff 时，可以单独开启 Worker Coder 模式；它不会复用 Planner 的 `REPOPILOT_WORKER_MODEL_*` 配置，避免计划模型和代码模型互相影响：
+
+```bash
+export REPOPILOT_WORKER_CODER_MODEL_MODE=fixture
+export REPOPILOT_WORKER_CODER_MODEL_PROVIDER=WORKER_CODER_FIXTURE
+export REPOPILOT_WORKER_CODER_MODEL_NAME=worker-fixture-coder-v1
+export REPOPILOT_WORKER_CODER_MODEL_FIXTURE_RESPONSE='diff --git a/.repopilot/demo.md b/.repopilot/demo.md
+new file mode 100644
+--- /dev/null
++++ b/.repopilot/demo.md
+@@ -0,0 +1 @@
++Worker Coder fixture'
+
+export REPOPILOT_WORKER_CODER_MODEL_MODE=openai-compatible
+export REPOPILOT_WORKER_CODER_MODEL_API_BASE_URL=https://api.openai.com/v1
+export REPOPILOT_WORKER_CODER_MODEL_API_KEY=...
+export REPOPILOT_WORKER_CODER_MODEL_NAME=gpt-worker-coder
+```
+
+| 配置 | 默认值 | 说明 |
+| --- | --- | --- |
+| `REPOPILOT_WORKER_CODER_MODEL_MODE` | `disabled` | `disabled` 保持安全规划草稿；`fixture` 使用固定 raw diff；`openai`/`openai-compatible` 调用 Chat Completions 兼容接口 |
+| `REPOPILOT_WORKER_CODER_MODEL_PROVIDER` | `WORKER_CODER_FIXTURE` | 写入 `generate_patch` model call audit 的 provider |
+| `REPOPILOT_WORKER_CODER_MODEL_NAME` | `worker-fixture-coder-v1` | 写入 `generate_patch` model call audit 的模型名 |
+| `REPOPILOT_WORKER_CODER_MODEL_FIXTURE_RESPONSE` | 空 | fixture 模式下作为 raw Coder output 进入 diff parser |
+| `REPOPILOT_WORKER_CODER_MODEL_API_BASE_URL` | `https://api.openai.com/v1` | OpenAI-compatible API base URL |
+| `REPOPILOT_WORKER_CODER_MODEL_API_KEY` / `OPENAI_API_KEY` | 空 | OpenAI-compatible 模式的 API key；不会写入 prompt/response 审计 |
+| `REPOPILOT_WORKER_CODER_MODEL_TIMEOUT_SECONDS` | `120` | 模型 HTTP 请求超时 |
+| `REPOPILOT_WORKER_CODER_MODEL_MAX_COMPLETION_TOKENS` | `4096` | 写入 Chat Completions 请求的 `max_completion_tokens` |
+| `REPOPILOT_WORKER_CODER_MODEL_INSTRUCTION_ROLE` | `developer` | Coder 指令消息角色，只支持 `developer` 或 `system` |
+
+Worker Coder 输出必须是一个 raw unified diff，或一个没有额外说明文字的 `diff`/`patch` 代码块。解析通过后会持久化为 `generationMode=LLM_CODER_DRAFT`，并继续进入 `validate_patch_safety(...)`、`run_patch_sandbox_tests(...)`、`review_patch(...)` 和 `mark_patch_ready_for_approval(...)`。解析失败时不会写入 patch。
+
 ## Backend Patch Callback
 
 Worker nodes can persist generated patch drafts before the backend applies the usual safety, sandbox, review and approval gates:
@@ -230,7 +274,7 @@ When `REPOPILOT_AGENT_WORKER_CALLBACK_TOKEN` is configured, `/runs/{run_id}/star
 2. `ensure_index` checks that the run has file and Java symbol signals, then records index readiness evidence.
 3. `plan_task` builds a deterministic Spring implementation plan, runs a few code searches for evidence, optionally records structured model-backed planning advice, then records a SUCCESS step.
 4. `retrieve_context` reuses deterministic plan search queries, safely adds selected model-proposed queries, deduplicates code chunks, reads key file previews and records a SUCCESS step.
-5. `generate_patch` creates a safe planning draft diff under `.repopilot/`, records a deterministic model-call audit entry, persists the draft through `record_patch(...)`, records a SUCCESS step, calls `validate_patch_safety(...)`, then `run_patch_sandbox_tests(...)` when safety passes, `review_patch(...)` when sandbox tests pass, and `mark_patch_ready_for_approval(...)` when review passes.
+5. `generate_patch` creates a safe planning draft diff under `.repopilot/` by default; when Worker Coder is enabled, it parses the model raw unified diff into `LLM_CODER_DRAFT`. Both paths record model-call audit, persist the patch through `record_patch(...)`, record a SUCCESS step, call `validate_patch_safety(...)`, then `run_patch_sandbox_tests(...)` when safety passes, `review_patch(...)` when sandbox tests pass, and `mark_patch_ready_for_approval(...)` when review passes.
 
 If no callback token is configured, `/start` remains a pure contract endpoint and does not run background nodes. This keeps local smoke tests and bridge-disabled development quiet.
 
@@ -242,7 +286,7 @@ The initial graph assembly stays in `app/graph/initial_nodes.py`, while node imp
 
 - `context.py`: `load_task_context` and `ensure_index`.
 - `planning.py`: deterministic `plan_task`, optional Worker model planning note and `retrieve_context`.
-- `patch.py`: deterministic `generate_patch` draft generation and post-patch gates.
+- `patch.py`: deterministic `generate_patch` draft generation, optional Worker Coder diff parsing and post-patch gates.
 - `common.py`: shared small helpers for previews, query handling and deduped values.
 
 This keeps LangGraph wiring small and makes future model-backed nodes easier to replace one at a time.

@@ -1,7 +1,9 @@
+import re
 import time
 from typing import Any, Optional
 
 from app.clients.backend_api import BackendApiClient
+from app.clients.model_client import WorkerCoderModelClient
 from app.graph.nodes.common import text_preview
 from app.schemas import (
     AgentModelCallRecordRequest,
@@ -13,6 +15,9 @@ from app.schemas import (
 PATCH_GENERATION_MODE = "WORKER_SAFE_PLANNING_DRAFT"
 PATCH_GENERATION_PROVIDER = "AGENT_WORKER"
 PATCH_GENERATION_MODEL = "worker-retrieval-plan-v1"
+CODER_PATCH_GENERATION_MODE = "LLM_CODER_DRAFT"
+FENCED_DIFF_PATTERN = re.compile(r"(?s)```(?:diff|patch)\s*\n(.*?)\n```")
+DIFF_HEADER_PATTERN = re.compile(r"^diff --git a/(.*?) b/(.*?)$", re.MULTILINE)
 
 
 def generate_patch(
@@ -23,36 +28,48 @@ def generate_patch(
     retrieval_output: dict[str, Any],
     request: AgentRunStartRequest,
     client: Optional[BackendApiClient] = None,
+    model_client: Optional[WorkerCoderModelClient] = None,
 ) -> dict[str, Any]:
     backend = client or BackendApiClient()
     context = loaded_context["context"]
-    started_at = time.monotonic()
-    draft = deterministic_patch_draft(run_id, context, index_status, plan_output, retrieval_output, request)
-    duration_ms = elapsed_ms(started_at)
-    backend.record_model_call(
+    draft = generate_model_patch_draft(
         run_id,
-        AgentModelCallRecordRequest(
-            step_name="generate_patch",
-            model_provider=PATCH_GENERATION_PROVIDER,
-            model_name=PATCH_GENERATION_MODEL,
-            status="SUCCESS",
-            prompt={
-                "runId": run_id,
-                "taskId": request.task_id,
-                "title": context.get("title"),
-                "planStepCount": len(plan_output.get("steps", [])),
-                "retrievalResultCount": retrieval_output.get("uniqueResultCount", 0),
-                "source": "agent-worker",
-            },
-            response={
-                "summary": draft["summary"],
-                "path": draft["path"],
-                "generationMode": PATCH_GENERATION_MODE,
-                "diffLineCount": len(str(draft["diffContent"]).splitlines()),
-            },
-            duration_ms=duration_ms,
-        ),
+        context,
+        index_status,
+        plan_output,
+        retrieval_output,
+        request,
+        backend,
+        model_client,
     )
+    if draft is None:
+        started_at = time.monotonic()
+        draft = deterministic_patch_draft(run_id, context, index_status, plan_output, retrieval_output, request)
+        duration_ms = elapsed_ms(started_at)
+        backend.record_model_call(
+            run_id,
+            AgentModelCallRecordRequest(
+                step_name="generate_patch",
+                model_provider=draft["generationProvider"],
+                model_name=draft["generationModel"],
+                status="SUCCESS",
+                prompt={
+                    "runId": run_id,
+                    "taskId": request.task_id,
+                    "title": context.get("title"),
+                    "planStepCount": len(plan_output.get("steps", [])),
+                    "retrievalResultCount": retrieval_output.get("uniqueResultCount", 0),
+                    "source": "agent-worker",
+                },
+                response={
+                    "summary": draft["summary"],
+                    "path": draft["path"],
+                    "generationMode": draft["generationMode"],
+                    "diffLineCount": len(str(draft["diffContent"]).splitlines()),
+                },
+                duration_ms=duration_ms,
+            ),
+        )
     patch_response = backend.record_patch(
         run_id,
         AgentPatchRecordRequest(
@@ -60,9 +77,9 @@ def generate_patch(
             target_branch=f"repopilot/task-{request.task_id}",
             diff_content=draft["diffContent"],
             summary=draft["summary"],
-            generation_mode=PATCH_GENERATION_MODE,
-            generation_provider=PATCH_GENERATION_PROVIDER,
-            generation_model=PATCH_GENERATION_MODEL,
+            generation_mode=draft["generationMode"],
+            generation_provider=draft["generationProvider"],
+            generation_model=draft["generationModel"],
         ),
     )
     output = {
@@ -71,9 +88,9 @@ def generate_patch(
         "patchStatus": patch_response.get("data", {}).get("status"),
         "baseBranch": patch_response.get("data", {}).get("baseBranch"),
         "targetBranch": patch_response.get("data", {}).get("targetBranch"),
-        "generationMode": PATCH_GENERATION_MODE,
-        "generationProvider": PATCH_GENERATION_PROVIDER,
-        "generationModel": PATCH_GENERATION_MODEL,
+        "generationMode": draft["generationMode"],
+        "generationProvider": draft["generationProvider"],
+        "generationModel": draft["generationModel"],
         "diffPath": draft["path"],
         "diffLineCount": len(str(draft["diffContent"]).splitlines()),
         "changedFiles": patch_response.get("data", {}).get("changedFiles", []),
@@ -87,7 +104,7 @@ def generate_patch(
             input={
                 "runId": run_id,
                 "taskId": request.task_id,
-                "generationMode": PATCH_GENERATION_MODE,
+                "generationMode": draft["generationMode"],
                 "source": "agent-worker",
             },
             output=output,
@@ -115,6 +132,179 @@ def generate_patch(
     return output
 
 
+def generate_model_patch_draft(
+    run_id: int,
+    context: dict[str, Any],
+    index_status: dict[str, Any],
+    plan_output: dict[str, Any],
+    retrieval_output: dict[str, Any],
+    request: AgentRunStartRequest,
+    backend: BackendApiClient,
+    model_client: Optional[WorkerCoderModelClient],
+) -> Optional[dict[str, Any]]:
+    coder = model_client or WorkerCoderModelClient()
+    prompt = build_coder_model_prompt(context, index_status, plan_output, retrieval_output, request)
+    model_result = coder.generate_text("generate_patch", prompt)
+    if model_result is None:
+        return None
+    parsed = parse_coder_patch_output(model_result.text)
+    changed_paths = parsed["changedPaths"]
+    task_id = context.get("taskId") or request.task_id
+    draft = {
+        "path": changed_paths[0] if changed_paths else None,
+        "summary": f"Worker Coder 草稿：已解析任务 #{task_id} 的 unified diff。",
+        "diffContent": parsed["diffContent"],
+        "generationMode": CODER_PATCH_GENERATION_MODE,
+        "generationProvider": model_result.provider,
+        "generationModel": model_result.model,
+        "evidence": {
+            "planStepCount": len(plan_output.get("steps", [])),
+            "retrievalQueryCount": len(retrieval_output.get("queries", [])),
+            "retrievalResultCount": retrieval_output.get("uniqueResultCount", 0),
+            "readFileCount": len(retrieval_output.get("readFiles", [])),
+            "indexReady": index_status.get("indexReady", False),
+            "modelOutputFormat": parsed["format"],
+            "changedPaths": changed_paths,
+        },
+    }
+    backend.record_model_call(
+        run_id,
+        AgentModelCallRecordRequest(
+            step_name="generate_patch",
+            model_provider=model_result.provider,
+            model_name=model_result.model,
+            status="SUCCESS",
+            prompt=model_result.prompt,
+            response={
+                "modelResponse": model_result.response,
+                "parsedDiff": {
+                    "format": parsed["format"],
+                    "changedPaths": changed_paths,
+                    "diffLineCount": len(str(parsed["diffContent"]).splitlines()),
+                },
+            },
+            prompt_tokens=model_result.prompt_tokens,
+            completion_tokens=model_result.completion_tokens,
+            total_tokens=model_result.total_tokens,
+            duration_ms=model_result.duration_ms,
+        ),
+    )
+    return draft
+
+
+def build_coder_model_prompt(
+    context: dict[str, Any],
+    index_status: dict[str, Any],
+    plan_output: dict[str, Any],
+    retrieval_output: dict[str, Any],
+    request: AgentRunStartRequest,
+) -> dict[str, Any]:
+    return {
+        "role": "CoderAgent",
+        "language": "zh-CN",
+        "instruction": "基于计划和检索上下文生成一个最小、安全、可审查的 unified diff。",
+        "task": {
+            "taskId": context.get("taskId") or request.task_id,
+            "projectId": context.get("projectId") or request.project_id,
+            "taskType": context.get("taskType"),
+            "title": context.get("title") or request.user_request,
+            "description": context.get("description") or request.user_request,
+            "repoFullName": context.get("repoFullName"),
+            "baseBranch": context.get("defaultBranch") or request.base_branch,
+        },
+        "index": {
+            "indexReady": index_status.get("indexReady", False),
+            "javaFileCount": index_status.get("javaFileCount", 0),
+            "symbolCount": index_status.get("symbolCount", 0),
+            "controllerCount": index_status.get("controllerCount", 0),
+            "serviceCount": index_status.get("serviceCount", 0),
+        },
+        "plan": {
+            "summary": plan_output.get("summary"),
+            "steps": plan_output.get("steps", [])[:8],
+            "modelPlan": plan_output.get("modelPlan"),
+            "testStrategy": plan_output.get("testStrategy"),
+        },
+        "retrievedContext": [
+            {
+                "chunkId": result.get("chunkId"),
+                "filePath": result.get("filePath"),
+                "chunkType": result.get("chunkType"),
+                "symbolType": result.get("symbolType"),
+                "qualifiedName": result.get("qualifiedName"),
+                "symbolName": result.get("symbolName"),
+                "startLine": result.get("startLine"),
+                "endLine": result.get("endLine"),
+                "summary": text_preview(result.get("summary"), 300),
+                "preview": text_preview(result.get("preview"), 1200),
+            }
+            for result in retrieval_output.get("results", [])[:8]
+        ],
+        "readFiles": [
+            {
+                "path": file.get("path"),
+                "size": file.get("size"),
+                "contentPreview": text_preview(file.get("content"), 2000),
+            }
+            for file in retrieval_output.get("readFiles", [])[:4]
+        ],
+        "outputContract": {
+            "format": "raw_unified_diff",
+            "requirements": [
+                "只输出一个 unified diff",
+                "第一行必须以 diff --git 开始",
+                "不要输出 Markdown fence、解释、总结或多个备选方案",
+                "只能使用仓库相对路径",
+                "不要修改 .git、密钥文件、绝对路径、父级目录或二进制文件",
+                "上下文不足时，只能新增 .repopilot/ 下的中文规划文件",
+            ],
+        },
+    }
+
+
+def parse_coder_patch_output(raw_output: str) -> dict[str, Any]:
+    if raw_output is None or not str(raw_output).strip():
+        raise ValueError("Coder output is empty")
+    normalized = str(raw_output).replace("\r\n", "\n").strip()
+    matches = list(FENCED_DIFF_PATTERN.finditer(normalized))
+    if len(matches) > 1:
+        raise ValueError("Coder output must contain at most one diff code block")
+    if len(matches) == 1:
+        diff = matches[0].group(1).strip()
+        without_block = FENCED_DIFF_PATTERN.sub("", normalized).strip()
+        if without_block:
+            raise ValueError("Coder output must not include prose outside the diff block")
+        output_format = "fenced_diff"
+    else:
+        if not normalized.startswith("diff --git "):
+            raise ValueError("Coder output must be a raw diff or one diff code block")
+        diff = normalized
+        output_format = "raw_diff"
+    if not diff.startswith("diff --git "):
+        raise ValueError("Coder output must start with a unified diff header")
+    if "```" in diff:
+        raise ValueError("Coder diff must not contain Markdown fences")
+    diff_content = ensure_trailing_newline(diff)
+    return {
+        "diffContent": diff_content,
+        "format": output_format,
+        "changedPaths": changed_paths_from_diff(diff_content),
+    }
+
+
+def ensure_trailing_newline(value: str) -> str:
+    return value if value.endswith("\n") else value + "\n"
+
+
+def changed_paths_from_diff(diff_content: str) -> list[str]:
+    paths: list[str] = []
+    for match in DIFF_HEADER_PATTERN.finditer(diff_content):
+        path = (match.group(2) or match.group(1) or "").strip()
+        if path and path not in paths:
+            paths.append(path)
+    return paths
+
+
 def deterministic_patch_draft(
     run_id: int,
     context: dict[str, Any],
@@ -131,6 +321,9 @@ def deterministic_patch_draft(
         "path": path,
         "summary": f"Worker 安全规划草稿：为任务 #{task_id} 生成基于检索证据的实施计划 diff。",
         "diffContent": diff,
+        "generationMode": PATCH_GENERATION_MODE,
+        "generationProvider": PATCH_GENERATION_PROVIDER,
+        "generationModel": PATCH_GENERATION_MODEL,
         "evidence": {
             "planStepCount": len(plan_output.get("steps", [])),
             "retrievalQueryCount": len(retrieval_output.get("queries", [])),

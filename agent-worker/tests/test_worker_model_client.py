@@ -9,7 +9,7 @@ AGENT_WORKER_ROOT = Path(__file__).resolve().parents[1]
 if str(AGENT_WORKER_ROOT) not in sys.path:
     sys.path.insert(0, str(AGENT_WORKER_ROOT))
 
-from app.clients.model_client import WorkerModelClient, WorkerModelClientSettings  # noqa: E402
+from app.clients.model_client import WorkerCoderModelClient, WorkerModelClient, WorkerModelClientSettings  # noqa: E402
 
 
 class ChatCompletionStub:
@@ -155,6 +155,61 @@ class WorkerModelClientTest(unittest.TestCase):
             self.assertIn("RepoPilot PlannerAgent", stub.request_body)
             self.assertIn("新增 User 分页接口", stub.request_body)
             self.assertNotIn("test-worker-key", str(result.prompt))
+            self.assertNotIn("Authorization", str(result.prompt))
+        finally:
+            stub.stop()
+
+    def test_worker_coder_client_uses_diff_only_coder_prompt(self):
+        stub = ChatCompletionStub(
+            200,
+            """
+            {
+              "model": "gpt-worker-coder-test",
+              "usage": {
+                "prompt_tokens": 51,
+                "completion_tokens": 29,
+                "total_tokens": 80
+              },
+              "choices": [
+                {
+                  "message": {
+                    "content": "diff --git a/.repopilot/coder.md b/.repopilot/coder.md\\nnew file mode 100644\\n--- /dev/null\\n+++ b/.repopilot/coder.md\\n@@ -0,0 +1 @@\\n+ok"
+                  }
+                }
+              ]
+            }
+            """,
+        ).start()
+        try:
+            client = WorkerCoderModelClient(
+                WorkerModelClientSettings(
+                    mode="openai-compatible",
+                    model="gpt-worker-coder-test",
+                    api_base_url=stub.base_url,
+                    api_key="test-worker-coder-key",
+                    timeout_seconds=5,
+                    max_completion_tokens=2048,
+                    instruction_role="system",
+                )
+            )
+
+            result = client.generate_text("generate_patch", {"role": "CoderAgent", "task": {"title": "补接口"}})
+
+            self.assertIsNotNone(result)
+            assert result is not None
+            self.assertEqual(result.provider, "OPENAI_COMPATIBLE")
+            self.assertEqual(result.model, "gpt-worker-coder-test")
+            self.assertEqual(result.prompt_tokens, 51)
+            self.assertEqual(result.completion_tokens, 29)
+            self.assertEqual(result.total_tokens, 80)
+            self.assertIsNotNone(stub.request_body)
+            assert stub.request_body is not None
+            self.assertIn("RepoPilot CoderAgent", stub.request_body)
+            self.assertIn("Return only one raw unified diff", stub.request_body)
+            self.assertIn('"role": "system"', stub.request_body)
+            self.assertIn('"max_completion_tokens": 2048', stub.request_body)
+            self.assertNotIn("RepoPilot PlannerAgent", stub.request_body)
+            self.assertNotIn("test-worker-coder-key", str(result.prompt))
             self.assertNotIn("Authorization", str(result.prompt))
         finally:
             stub.stop()

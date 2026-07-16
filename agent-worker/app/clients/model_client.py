@@ -37,7 +37,20 @@ class WorkerModelResult:
 
 
 class WorkerModelClient:
-    def __init__(self, model_settings: Optional[WorkerModelClientSettings] = None) -> None:
+    def __init__(
+        self,
+        model_settings: Optional[WorkerModelClientSettings] = None,
+        system_prompt_factory=None,
+        fixture_required_message: str = (
+            "REPOPILOT_WORKER_MODEL_FIXTURE_RESPONSE is required when worker model mode is fixture."
+        ),
+        api_key_required_message: str = (
+            "REPOPILOT_WORKER_MODEL_API_KEY is required when worker model mode is openai-compatible."
+        ),
+        model_required_message: str = (
+            "REPOPILOT_WORKER_MODEL_NAME is required when worker model mode is openai-compatible."
+        ),
+    ) -> None:
         self.settings = model_settings or WorkerModelClientSettings(
             mode=settings.worker_model_mode,
             provider=settings.worker_model_provider,
@@ -51,6 +64,10 @@ class WorkerModelClient:
             organization=settings.worker_model_organization,
             project=settings.worker_model_project,
         )
+        self.system_prompt_factory = system_prompt_factory or planner_system_prompt
+        self.fixture_required_message = fixture_required_message
+        self.api_key_required_message = api_key_required_message
+        self.model_required_message = model_required_message
 
     def generate_text(self, step_name: str, prompt: dict[str, Any]) -> Optional[WorkerModelResult]:
         mode = (self.settings.mode or "disabled").strip().lower()
@@ -65,9 +82,7 @@ class WorkerModelClient:
     def _fixture_response(self, step_name: str, prompt: dict[str, Any]) -> WorkerModelResult:
         text = (self.settings.fixture_response or "").strip()
         if not text:
-            raise ValueError(
-                "REPOPILOT_WORKER_MODEL_FIXTURE_RESPONSE is required when worker model mode is fixture."
-            )
+            raise ValueError(self.fixture_required_message)
 
         started_at = time.monotonic()
         response = {
@@ -87,11 +102,11 @@ class WorkerModelClient:
     def _openai_compatible_response(self, step_name: str, prompt: dict[str, Any]) -> WorkerModelResult:
         api_key = required(
             self.settings.api_key,
-            "REPOPILOT_WORKER_MODEL_API_KEY is required when worker model mode is openai-compatible.",
+            self.api_key_required_message,
         )
         model = required(
             self.settings.model,
-            "REPOPILOT_WORKER_MODEL_NAME is required when worker model mode is openai-compatible.",
+            self.model_required_message,
         )
         started_at = time.monotonic()
         request_body = self._chat_completion_request(step_name, prompt, model)
@@ -124,7 +139,7 @@ class WorkerModelClient:
             "messages": [
                 {
                     "role": instruction_role(self.settings.instruction_role),
-                    "content": planner_system_prompt(step_name),
+                    "content": self.system_prompt_factory(step_name),
                 },
                 {
                     "role": "user",
@@ -170,9 +185,39 @@ class WorkerModelClient:
 
     def _provider(self, default: str) -> str:
         provider = (self.settings.provider or "").strip()
-        if not provider or (default == "OPENAI_COMPATIBLE" and provider == "WORKER_FIXTURE"):
+        if not provider or (default == "OPENAI_COMPATIBLE" and provider.endswith("_FIXTURE")):
             return default
         return provider
+
+
+class WorkerCoderModelClient(WorkerModelClient):
+    def __init__(self, model_settings: Optional[WorkerModelClientSettings] = None) -> None:
+        super().__init__(
+            model_settings
+            or WorkerModelClientSettings(
+                mode=settings.worker_coder_model_mode,
+                provider=settings.worker_coder_model_provider,
+                model=settings.worker_coder_model_name,
+                fixture_response=settings.worker_coder_model_fixture_response,
+                api_base_url=settings.worker_coder_model_api_base_url,
+                api_key=settings.worker_coder_model_api_key,
+                timeout_seconds=settings.worker_coder_model_timeout_seconds,
+                max_completion_tokens=settings.worker_coder_model_max_completion_tokens,
+                instruction_role=settings.worker_coder_model_instruction_role,
+                organization=settings.worker_coder_model_organization,
+                project=settings.worker_coder_model_project,
+            ),
+            system_prompt_factory=coder_system_prompt,
+            fixture_required_message=(
+                "REPOPILOT_WORKER_CODER_MODEL_FIXTURE_RESPONSE is required when worker coder model mode is fixture."
+            ),
+            api_key_required_message=(
+                "REPOPILOT_WORKER_CODER_MODEL_API_KEY is required when worker coder model mode is openai-compatible."
+            ),
+            model_required_message=(
+                "REPOPILOT_WORKER_CODER_MODEL_NAME is required when worker coder model mode is openai-compatible."
+            ),
+        )
 
 
 def planner_system_prompt(step_name: str) -> str:
@@ -185,6 +230,20 @@ def planner_system_prompt(step_name: str) -> str:
         "searchQueries must be short repository search strings grounded in the task and indexed code signals.\n"
         "Do not return code, unified diffs, secrets, or multiple alternatives.\n"
         "Keep the output grounded in the provided task, index signals, search results, and deterministic plan."
+    )
+
+
+def coder_system_prompt(step_name: str) -> str:
+    return (
+        "You are RepoPilot CoderAgent for Java and Spring Boot repositories.\n"
+        f"Current step: {step_name}.\n"
+        "Return only one raw unified diff.\n"
+        "The first non-whitespace characters must be: diff --git\n"
+        "Do not include Markdown fences, explanations, summaries, or multiple alternatives.\n"
+        "Keep changes small, compile-safe, and limited to repository-relative paths.\n"
+        "Do not edit .git, secret files, absolute paths, parent directories, or binary files.\n"
+        "If the retrieved context is insufficient for a safe source-code change, create only a repository-local "
+        "planning file under .repopilot/ explaining the missing context and validation needed."
     )
 
 
