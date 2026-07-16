@@ -387,6 +387,10 @@ def generate_patch(
             output=output,
         ),
     )
+    patch_id = output.get("patchId")
+    if patch_id is not None:
+        safety_response = backend.validate_patch_safety(run_id, int(patch_id))
+        output["safety"] = safety_response.get("data")
     return output
 
 

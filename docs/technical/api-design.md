@@ -51,6 +51,7 @@ X-RepoPilot-Worker-Token: <worker-callback-token>
 | `POST` | `/internal/agent-worker/runs/{runId}/tool-calls` | Agent Worker 回写工具调用审计 |
 | `POST` | `/internal/agent-worker/runs/{runId}/model-calls` | Agent Worker 回写模型调用审计 |
 | `POST` | `/internal/agent-worker/runs/{runId}/patches` | Agent Worker 回写生成的 patch 草稿 |
+| `POST` | `/internal/agent-worker/runs/{runId}/patches/{patchId}/safety` | Agent Worker 触发 patch diff 安全预检 |
 | `POST` | `/internal/agent-worker/runs/{runId}/status` | Agent Worker 回写 task/run 状态 |
 | `GET` | `/internal/agent-worker/runs/{runId}/context` | Agent Worker 读取 run/task/project 上下文 |
 | `GET` | `/internal/agent-worker/runs/{runId}/project/files?maxDepth=6` | Agent Worker 按 run 读取项目文件树 |

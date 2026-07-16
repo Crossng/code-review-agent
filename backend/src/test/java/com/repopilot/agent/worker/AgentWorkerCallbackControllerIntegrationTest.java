@@ -380,6 +380,54 @@ class AgentWorkerCallbackControllerIntegrationTest {
     }
 
     @Test
+    void validatePatchSafetyRequiresCallbackTokenAndRecordsSafetyStep() throws Exception {
+        PatchRecord patch = saveWorkerSafePatch();
+
+        mockMvc.perform(post("/api/internal/agent-worker/runs/{runId}/patches/{patchId}/safety", run.getId(), patch.getId())
+                        .header(AgentWorkerCallbackController.CALLBACK_TOKEN_HEADER, "test-worker-callback-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.patchId").value(patch.getId()))
+                .andExpect(jsonPath("$.data.agentTaskId").value(task.getId()))
+                .andExpect(jsonPath("$.data.agentRunId").value(run.getId()))
+                .andExpect(jsonPath("$.data.safe").value(true))
+                .andExpect(jsonPath("$.data.changedPaths[0]").value(".repopilot/worker-plan.md"))
+                .andExpect(jsonPath("$.data.findings").isArray())
+                .andExpect(jsonPath("$.data.stepId").exists())
+                .andExpect(jsonPath("$.data.stepStatus").value("SUCCESS"));
+
+        List<AgentStep> steps = agentStepRepository.findByAgentRunIdOrderByStartedAtAsc(run.getId());
+        assertThat(steps).hasSize(1);
+        AgentStep step = steps.get(0);
+        assertThat(step.getStepName()).isEqualTo("validate_patch_safety");
+        assertThat(step.getStatus()).isEqualTo(AgentStepStatus.SUCCESS);
+        assertThat(jsonNode(step.getInputJson()).path("patchId").asLong()).isEqualTo(patch.getId());
+        assertThat(jsonNode(step.getInputJson()).path("source").asText()).isEqualTo("agent-worker");
+        assertThat(jsonNode(step.getOutputJson()).path("safe").asBoolean()).isTrue();
+        assertThat(jsonNode(step.getOutputJson()).path("changedPaths").get(0).asText())
+                .isEqualTo(".repopilot/worker-plan.md");
+        assertThat(step.getErrorMessage()).isNull();
+
+        assertThat(agentTaskRepository.findById(task.getId()).orElseThrow().getStatus())
+                .isEqualTo(AgentTaskStatus.CREATED);
+        assertThat(agentRunRepository.findById(run.getId()).orElseThrow().getStatus())
+                .isEqualTo(AgentRunStatus.RUNNING);
+    }
+
+    @Test
+    void validatePatchSafetyRejectsInvalidCallbackTokenBeforeJwtAuthentication() throws Exception {
+        PatchRecord patch = saveWorkerSafePatch();
+
+        mockMvc.perform(post("/api/internal/agent-worker/runs/{runId}/patches/{patchId}/safety", run.getId(), patch.getId())
+                        .header(AgentWorkerCallbackController.CALLBACK_TOKEN_HEADER, "wrong-token"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value("AGENT_WORKER_CALLBACK_FORBIDDEN"));
+
+        assertThat(agentStepRepository.findByAgentRunIdOrderByStartedAtAsc(run.getId())).isEmpty();
+    }
+
+    @Test
     void updateStatusRejectsEmptyStatusPayload() throws Exception {
         mockMvc.perform(post("/api/internal/agent-worker/runs/{runId}/status", run.getId())
                         .header(AgentWorkerCallbackController.CALLBACK_TOKEN_HEADER, "test-worker-callback-token")
@@ -418,5 +466,29 @@ class AgentWorkerCallbackControllerIntegrationTest {
         } catch (Exception exception) {
             throw new AssertionError(exception);
         }
+    }
+
+    private PatchRecord saveWorkerSafePatch() {
+        String diff = """
+                diff --git a/.repopilot/worker-plan.md b/.repopilot/worker-plan.md
+                new file mode 100644
+                index 0000000..1111111
+                --- /dev/null
+                +++ b/.repopilot/worker-plan.md
+                @@ -0,0 +1,2 @@
+                +# Worker safe patch
+                +安全预检样例。
+                """;
+        return patchRecordRepository.save(new PatchRecord(
+                task,
+                run,
+                "main",
+                "repopilot/task-" + task.getId(),
+                diff,
+                "Worker 安全预检样例",
+                "WORKER_SAFE_PLANNING_DRAFT",
+                "AGENT_WORKER",
+                "worker-retrieval-plan-v1"
+        ));
     }
 }

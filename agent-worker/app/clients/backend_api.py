@@ -54,6 +54,12 @@ class BackendApiClient:
             patch.model_dump(exclude_none=True),
         )
 
+    def validate_patch_safety(self, run_id: int, patch_id: int) -> dict[str, Any]:
+        return self._post_callback(
+            f"/api/internal/agent-worker/runs/{run_id}/patches/{patch_id}/safety",
+            {},
+        )
+
     def update_status(self, run_id: int, status: AgentStatusUpdateRequest) -> dict[str, Any]:
         return self._post_callback(
             f"/api/internal/agent-worker/runs/{run_id}/status",

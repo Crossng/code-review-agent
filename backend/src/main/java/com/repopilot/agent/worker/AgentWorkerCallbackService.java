@@ -6,11 +6,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repopilot.agent.domain.AgentRun;
 import com.repopilot.agent.domain.AgentRunStatus;
 import com.repopilot.agent.domain.AgentStep;
+import com.repopilot.agent.domain.AgentStepStatus;
 import com.repopilot.agent.domain.AgentTask;
 import com.repopilot.agent.dto.AgentStepResponse;
 import com.repopilot.agent.repository.AgentRunRepository;
 import com.repopilot.agent.repository.AgentStepRepository;
 import com.repopilot.agent.repository.AgentTaskRepository;
+import com.repopilot.agent.service.PatchDiffSafetyService;
 import com.repopilot.common.ApiException;
 import com.repopilot.modelcall.dto.ModelCallLogResponse;
 import com.repopilot.modelcall.service.ModelCallLogService;
@@ -32,6 +34,7 @@ public class AgentWorkerCallbackService {
     private final AgentTaskRepository agentTaskRepository;
     private final AgentStepRepository agentStepRepository;
     private final PatchRecordRepository patchRecordRepository;
+    private final PatchDiffSafetyService patchDiffSafetyService;
     private final ToolCallLogService toolCallLogService;
     private final ModelCallLogService modelCallLogService;
     private final TaskStreamService taskStreamService;
@@ -43,6 +46,7 @@ public class AgentWorkerCallbackService {
             AgentTaskRepository agentTaskRepository,
             AgentStepRepository agentStepRepository,
             PatchRecordRepository patchRecordRepository,
+            PatchDiffSafetyService patchDiffSafetyService,
             ToolCallLogService toolCallLogService,
             ModelCallLogService modelCallLogService,
             TaskStreamService taskStreamService,
@@ -53,6 +57,7 @@ public class AgentWorkerCallbackService {
         this.agentTaskRepository = agentTaskRepository;
         this.agentStepRepository = agentStepRepository;
         this.patchRecordRepository = patchRecordRepository;
+        this.patchDiffSafetyService = patchDiffSafetyService;
         this.toolCallLogService = toolCallLogService;
         this.modelCallLogService = modelCallLogService;
         this.taskStreamService = taskStreamService;
@@ -147,6 +152,36 @@ public class AgentWorkerCallbackService {
     }
 
     @Transactional
+    public AgentWorkerPatchSafetyResponse validatePatchSafety(Long runId, Long patchId, String callbackToken) {
+        tokenGuard.requireValidToken(callbackToken);
+        AgentRun run = requireRun(runId);
+        PatchRecord patch = patchRecordRepository.findById(patchId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "PATCH_NOT_FOUND", "Patch not found"));
+        if (!patch.getAgentRun().getId().equals(run.getId())) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "PATCH_NOT_FOUND", "Patch not found for current run");
+        }
+        PatchDiffSafetyService.PatchDiffSafetyReport report = patchDiffSafetyService.review(patch);
+        AgentStepStatus stepStatus = report.safe() ? AgentStepStatus.SUCCESS : AgentStepStatus.FAILED;
+        AgentStep step = agentStepRepository.save(new AgentStep(
+                run,
+                "validate_patch_safety",
+                stepStatus,
+                jsonValue(workerPatchSafetyInput(patch), "{}"),
+                jsonValue(report, null),
+                report.safe() ? null : "补丁 diff 未通过安全预检"
+        ));
+        taskStreamService.publishStepRecorded(run.getAgentTask(), run, step);
+        return AgentWorkerPatchSafetyResponse.from(
+                patch.getId(),
+                patch.getAgentTask().getId(),
+                run.getId(),
+                report,
+                step.getId(),
+                stepStatus
+        );
+    }
+
+    @Transactional
     public AgentWorkerRunStatusUpdateResponse updateStatus(
             Long runId,
             String callbackToken,
@@ -209,5 +244,23 @@ public class AgentWorkerCallbackService {
         } catch (JsonProcessingException exception) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "AGENT_WORKER_STEP_JSON_FAILED", exception.getOriginalMessage());
         }
+    }
+
+    private String jsonValue(Object value, String fallback) {
+        if (value == null) {
+            return fallback;
+        }
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (JsonProcessingException exception) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "AGENT_WORKER_CALLBACK_JSON_FAILED", exception.getOriginalMessage());
+        }
+    }
+
+    private Object workerPatchSafetyInput(PatchRecord patch) {
+        return java.util.Map.of(
+                "patchId", patch.getId(),
+                "source", "agent-worker"
+        );
     }
 }

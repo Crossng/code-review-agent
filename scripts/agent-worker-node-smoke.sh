@@ -8,7 +8,7 @@ LOG_DIR="$ROOT_DIR/target/agent-worker-node-smoke/logs"
 
 usage() {
   cat <<'EOF'
-RepoPilot Agent Worker 初始、检索与补丁草稿节点 smoke
+RepoPilot Agent Worker 初始、检索、补丁草稿与安全预检节点 smoke
 
 用法:
   ./scripts/agent-worker-node-smoke.sh
@@ -18,6 +18,7 @@ RepoPilot Agent Worker 初始、检索与补丁草稿节点 smoke
   - 调用 /runs/{run_id}/start。
   - 验证 Worker 后台执行 load_task_context、ensure_index、plan_task、retrieve_context 和 generate_patch。
   - 校验 Worker 拉取 context/files/symbols/search/file，自动回写 tool call audit，回写 model call audit 和 patch draft，并回写五个 SUCCESS step。
+  - 校验 Worker 生成 patch draft 后调用后端 diff 安全预检接口。
   - 运行证据写入 output/agent-worker-node-smoke/last-run.json。
 EOF
 }
@@ -29,7 +30,7 @@ fi
 
 mkdir -p "$ARTIFACT_DIR" "$LOG_DIR"
 
-echo "RepoPilot Agent Worker 初始、检索与补丁草稿节点 smoke"
+echo "RepoPilot Agent Worker 初始、检索、补丁草稿与安全预检节点 smoke"
 
 PYTHONPATH="$ROOT_DIR/agent-worker" python3 - "$ROOT_DIR" "$SUMMARY_JSON" "$LOG_DIR" <<'PY'
 import json
@@ -49,7 +50,7 @@ from urllib.request import Request, urlopen
 root_dir = Path(sys.argv[1])
 summary_path = Path(sys.argv[2])
 log_dir = Path(sys.argv[3])
-captured = {"gets": [], "steps": [], "toolCalls": [], "modelCalls": [], "patches": []}
+captured = {"gets": [], "steps": [], "toolCalls": [], "modelCalls": [], "patches": [], "safetyChecks": []}
 
 
 def free_port() -> int:
@@ -262,6 +263,20 @@ class UserService {
             }
             self.respond({"success": True, "data": data, "code": None, "message": None, "traceId": "node-smoke"})
             return
+        if parsed.path.endswith("/safety"):
+            captured["safetyChecks"].append(event)
+            data = {
+                "patchId": 881,
+                "agentTaskId": 303,
+                "agentRunId": 606,
+                "safe": True,
+                "changedPaths": [".repopilot/task-303-worker-plan.md"],
+                "findings": [],
+                "stepId": 990,
+                "stepStatus": "SUCCESS",
+            }
+            self.respond({"success": True, "data": data, "code": None, "message": None, "traceId": "node-smoke"})
+            return
         if not parsed.path.endswith("/steps"):
             self.send_response(404)
             self.end_headers()
@@ -349,7 +364,7 @@ try:
     )
 
     deadline = time.time() + 10
-    while len(captured["steps"]) < 5 and time.time() < deadline:
+    while (len(captured["steps"]) < 5 or len(captured["safetyChecks"]) < 1) and time.time() < deadline:
         time.sleep(0.1)
 finally:
     worker.terminate()
@@ -368,7 +383,15 @@ if start.get("run_id") != 606 or start.get("accepted") is not True or start.get(
     raise SystemExit(f"worker start mismatch: {start}")
 if len(captured["steps"]) < 5:
     raise SystemExit(f"expected five worker step callbacks, got {captured['steps']}")
-callback_events = captured["steps"] + captured["toolCalls"] + captured["modelCalls"] + captured["patches"]
+if len(captured["safetyChecks"]) != 1:
+    raise SystemExit(f"expected one worker safety check callback, got {captured['safetyChecks']}")
+callback_events = (
+    captured["steps"]
+    + captured["toolCalls"]
+    + captured["modelCalls"]
+    + captured["patches"]
+    + captured["safetyChecks"]
+)
 if any(event["token"] != "node-smoke-token" for event in captured["gets"] + callback_events):
     raise SystemExit("worker internal token header mismatch")
 
@@ -472,6 +495,15 @@ if not patch_body.get("diff_content", "").startswith("diff --git"):
 if ".repopilot/task-303-worker-plan.md" not in patch_body.get("diff_content", ""):
     raise SystemExit(f"patch diff path mismatch: {patch_body}")
 
+safety_checks = captured["safetyChecks"]
+safety_event = safety_checks[0]
+if safety_event.get("contentType") != "application/json":
+    raise SystemExit(f"safety check content type mismatch: {safety_checks}")
+if safety_event.get("body") != {}:
+    raise SystemExit(f"safety check body mismatch: {safety_event}")
+if safety_event.get("path") != "/api/internal/agent-worker/runs/606/patches/881/safety":
+    raise SystemExit(f"safety check path mismatch: {safety_event}")
+
 summary = {
     "generatedAt": datetime.now(timezone.utc).isoformat(),
     "worker": {
@@ -529,6 +561,14 @@ summary = {
         }
         for event in patches
     ],
+    "safetyChecks": [
+        {
+            "path": event["path"],
+            "requestBody": event["body"],
+            "tokenHeaderPresent": event["token"] == "node-smoke-token",
+        }
+        for event in safety_checks
+    ],
     "loadTaskContext": {
         "repoFullName": load_output["repoFullName"],
         "fileCount": load_output["fileCount"],
@@ -564,9 +604,9 @@ summary = {
     },
 }
 summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-print("Agent Worker 初始、检索与补丁草稿节点验证通过。")
+print("Agent Worker 初始、检索、补丁草稿与安全预检节点验证通过。")
 print(f"Steps: {', '.join(step['stepName'] for step in summary['steps'])}")
 print(f"Tool calls: {len(summary['toolCalls'])}")
-print(f"Model calls: {len(summary['modelCalls'])}; Patches: {len(summary['patches'])}")
+print(f"Model calls: {len(summary['modelCalls'])}; Patches: {len(summary['patches'])}; Safety checks: {len(summary['safetyChecks'])}")
 print(f"证据文件: {summary_path}")
 PY
