@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import { execFileSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { mkdir, readFile } from "node:fs/promises";
@@ -534,8 +535,20 @@ try {
   ) {
     throw new Error("Downloaded Agent run report snapshot did not include the expected Markdown content.");
   }
+  injectRetryAuditEvidence(email);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await taskDetail.getByRole("heading", { name: /#\d+ Add User pagination API/ }).waitFor();
+  await taskDetail.getByText("Worker 重试恢复证据").waitFor();
   await taskDetail.getByText("工具调用审计").waitFor();
   await taskDetail.getByText("模型调用审计").waitFor();
+  const toolCallPanel = taskDetail.locator("#tool-calls");
+  await toolCallPanel.getByText("重试恢复 1 条").waitFor();
+  await toolCallPanel.getByText("已重试恢复 · 1 次").waitFor();
+  await toolCallPanel.getByText("首次失败：Backend internal API failed with HTTP 503").waitFor();
+  const modelCallPanel = taskDetail.locator("#model-calls");
+  await modelCallPanel.getByText("重试恢复 1 条").waitFor();
+  await modelCallPanel.getByText("已重试恢复 · 1 次").waitFor();
+  await modelCallPanel.getByText("首次失败：Worker model returned HTTP 429").waitFor();
   await taskDetail.getByText("新增 GET /api/users/page").first().waitFor();
   await taskDetail.getByText("SPRING_USER_PAGINATION_RECIPE").first().waitFor();
   await taskDetail.getByText("Maven 测试运行").waitFor();
@@ -740,6 +753,122 @@ async function waitForMetaValueChange(page, scope, label, previousValue) {
     await page.waitForTimeout(500);
   }
   throw new Error(`${label} did not change from ${previousValue}`);
+}
+
+function injectRetryAuditEvidence(smokeEmail) {
+  const sql = `
+create temp table smoke_latest_run as
+  select run.id
+  from agent_run run
+  join agent_task task on task.id = run.agent_task_id
+  join app_user app on app.id = task.user_id
+  where app.email = :'smoke_email'
+  order by run.id desc
+  limit 1;
+
+do $$
+begin
+  if not exists (select 1 from smoke_latest_run) then
+    raise exception 'No browser smoke run found for retry audit evidence';
+  end if;
+end $$;
+
+insert into tool_call_log (
+  agent_run_id,
+  tool_name,
+  input_json,
+  output_json,
+  status,
+  duration_ms,
+  error_message,
+  started_at,
+  finished_at
+)
+select
+  id,
+  'load_run_context',
+  '{}'::jsonb,
+  jsonb_build_object(
+    'runId', id,
+    'retryAttemptCount', 1,
+    'retryAttempts', jsonb_build_array(jsonb_build_object(
+      'attempt', 1,
+      'errorType', 'BackendApiError',
+      'message', 'Backend internal API failed with HTTP 503: browser smoke injected retry evidence',
+      'retryable', true
+    ))
+  ),
+  'SUCCESS',
+  64,
+  null,
+  now(),
+  now()
+from smoke_latest_run;
+
+insert into model_call_log (
+  agent_run_id,
+  step_name,
+  model_provider,
+  model_name,
+  prompt_json,
+  response_json,
+  status,
+  prompt_tokens,
+  completion_tokens,
+  total_tokens,
+  duration_ms,
+  error_message,
+  started_at,
+  finished_at
+)
+select
+  id,
+  'plan_task',
+  'OPENAI_COMPATIBLE',
+  'gpt-browser-smoke-retry',
+  '{}'::jsonb,
+  jsonb_build_object(
+    'retryAttemptCount', 1,
+    'retryAttempts', jsonb_build_array(jsonb_build_object(
+      'attempt', 1,
+      'errorType', 'WorkerModelError',
+      'message', 'Worker model returned HTTP 429: browser smoke injected retry evidence',
+      'retryable', true
+    ))
+  ),
+  'SUCCESS',
+  10,
+  5,
+  15,
+  91,
+  null,
+  now(),
+  now()
+from smoke_latest_run;
+`;
+  execFileSync(
+    "docker",
+    [
+      "compose",
+      "exec",
+      "-T",
+      "postgres",
+      "psql",
+      "-U",
+      process.env.POSTGRES_USER ?? "repopilot",
+      "-d",
+      process.env.POSTGRES_DB ?? "repopilot",
+      "-v",
+      `smoke_email=${smokeEmail}`,
+      "-v",
+      "ON_ERROR_STOP=1"
+    ],
+    {
+      cwd: repoRoot,
+      input: sql,
+      stdio: ["pipe", "pipe", "pipe"]
+    }
+  );
 }
 
 async function assertLatestPaginationPatchChangedFiles(page) {

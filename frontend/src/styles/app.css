@@ -500,6 +500,32 @@ h2 {
   background: white;
 }
 
+.panelPills,
+.auditStatusGroup {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.retryAuditBadge {
+  border: 1px solid rgba(47, 125, 85, 0.34);
+  border-radius: 999px;
+  background: #edf4eb;
+  color: var(--accent-strong);
+  font-size: 0.72rem;
+  font-weight: 900;
+  padding: 6px 9px;
+  overflow-wrap: anywhere;
+}
+
+.retryAuditBadge.failed {
+  border-color: rgba(180, 51, 51, 0.28);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
 .fieldLabel {
   display: block;
   margin: 16px 0 7px;
@@ -1066,6 +1092,36 @@ textarea {
   border-top: 1px solid var(--line);
   padding-top: 14px;
   min-width: 0;
+}
+
+.retryAuditNote {
+  border: 1px solid rgba(47, 125, 85, 0.22);
+  border-radius: 8px;
+  background: #f4faf3;
+  color: var(--accent-strong);
+  display: grid;
+  gap: 4px;
+  margin: 10px 0 12px;
+  padding: 9px 10px;
+  overflow-wrap: anywhere;
+}
+
+.retryAuditNote.failed {
+  border-color: rgba(180, 51, 51, 0.2);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.retryAuditNote strong,
+.retryAuditNote span {
+  display: block;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.retryAuditNote span {
+  color: var(--muted);
+  font-weight: 750;
 }
 
 .toolJsonGrid {

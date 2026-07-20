@@ -92,7 +92,8 @@ Agent 执行页必须特别处理长任务状态：
 | `AgentStepTimeline` | 以中文标题展示 Agent 状态机步骤和运行中状态 |
 | `AgentEvidencePanel` | 当前任务存在后端 run report 时优先渲染 report sections，用中文证据卡展示规划、检索、补丁、安全门、测试、审查、人工审批检查点以及 `Worker 重试恢复证据` 等后端诊断段落；没有 run report 时从 step JSON 中提取 planner、retriever、Coder、sandbox、review 和 approval checkpoint 证据；补丁证据展示 `generationMode`、`generationProvider` 和模型名；并支持复制、下载或保存后端生成的 Markdown run report；最近运行报告快照支持复制和下载 |
 | `TaskFilterForm` | 用中文标签按项目、状态、类型和关键词筛选 `GET /api/agent/tasks` 结果，支持一键重置、显示任务数量和复制当前任务视图链接 |
-| `ToolCallTable` | 展示工具调用审计 |
+| `ToolCallTable` | 展示工具调用审计；当 `output.retryAttemptCount` 大于 0 时，在列表头和单条记录中标记 `已重试恢复`，展示失败尝试次数和首次失败摘要 |
+| `ModelCallTable` | 展示模型调用审计；当 `response.retryAttemptCount` 大于 0 时，在列表头和单条记录中标记 `已重试恢复`，展示失败尝试次数和首次失败摘要 |
 | `DiffViewer` | 展示 unified diff、文件级摘要、patch generation mode、生成来源和模型名 |
 | `TestLogPanel` | 展示 Maven 测试日志 |
 | `ApprovalActions` | 提供通过审批、拒绝和重新生成操作 |
