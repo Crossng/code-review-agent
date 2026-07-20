@@ -1024,6 +1024,7 @@ GET /api/agent/tasks?projectId=1&status=WAITING_HUMAN_APPROVAL&taskType=FEATURE&
     "toolName": "search_code",
     "inputJson": "{\"projectId\":1,\"queries\":[\"UserService\"],\"limitPerQuery\":8}",
     "outputJson": "{\"uniqueResultCount\":4,\"chunkIds\":[101,102]}",
+    "retryAudit": null,
     "status": "SUCCESS",
     "durationMs": 42,
     "errorMessage": null,
@@ -1038,6 +1039,7 @@ GET /api/agent/tasks?projectId=1&status=WAITING_HUMAN_APPROVAL&taskType=FEATURE&
 - 只能查询当前用户所属 task 的 run。
 - `inputJson` 中的 token、secret、password、authorization 等敏感字段必须脱敏。
 - `outputJson` 保存摘要；超大 JSON 会被截断为带 `truncated=true` 的预览对象。
+- 如果 `outputJson.retryAttemptCount > 0`，响应会同步返回结构化 `retryAudit`：`attemptCount`、`recovered`、`firstFailureType` 和 `firstFailureMessage`；没有 retry 证据时为 `null`。
 
 ### GET `/agent/runs/{runId}/model-calls`
 
@@ -1053,6 +1055,7 @@ GET /api/agent/tasks?projectId=1&status=WAITING_HUMAN_APPROVAL&taskType=FEATURE&
     "modelName": "deterministic-mvp",
     "promptJson": "{\"title\":\"新增 User 分页查询接口\"}",
     "responseJson": "{\"summary\":\"为任务准备实现上下文\"}",
+    "retryAudit": null,
     "status": "SUCCESS",
     "promptTokens": 12,
     "completionTokens": 20,
@@ -1070,6 +1073,7 @@ GET /api/agent/tasks?projectId=1&status=WAITING_HUMAN_APPROVAL&taskType=FEATURE&
 - 只能查询当前用户所属 task 的 run。
 - `promptJson` 中的 token、secret、password、authorization、api key 等敏感字段必须脱敏。
 - 规则化 planner、repair 和 review 等本地步骤可继续使用 `LOCAL_PLACEHOLDER / deterministic-mvp`；`generate_patch` 成功后会按实际 patch 来源记录 provider/model，例如 `LOCAL_RECIPE_CATALOG / SPRING_USER_PAGINATION_RECIPE`、`LOCAL_FIXTURE / fixture-coder` 或 `OPENAI_COMPATIBLE / gpt-*`。
+- 如果 `responseJson.retryAttemptCount > 0`，响应会同步返回结构化 `retryAudit`：`attemptCount`、`recovered`、`firstFailureType` 和 `firstFailureMessage`；没有 retry 证据时为 `null`。
 - Token 计数在本地占位模式下为估算值，接入真实模型后应替换为供应商返回值。
 
 ## 10. 错误码

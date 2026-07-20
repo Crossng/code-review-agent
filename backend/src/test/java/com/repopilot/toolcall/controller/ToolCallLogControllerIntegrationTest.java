@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -110,6 +111,21 @@ class ToolCallLogControllerIntegrationTest {
                 Map.of("query", "UserService", "accessToken", "secret-value"),
                 () -> Map.of("resultCount", 2)
         );
+        toolCallLogService.record(
+                run,
+                "load_run_context",
+                Map.of(),
+                () -> Map.of(
+                        "runId", run.getId(),
+                        "retryAttemptCount", 1,
+                        "retryAttempts", List.of(Map.of(
+                                "attempt", 1,
+                                "errorType", "BackendApiError",
+                                "message", "Backend internal API failed with HTTP 503: temporary outage",
+                                "retryable", true
+                        ))
+                )
+        );
         assertThatThrownBy(() -> toolCallLogService.record(
                 run,
                 "run_maven_test",
@@ -126,13 +142,21 @@ class ToolCallLogControllerIntegrationTest {
                 .andReturn();
 
         JsonNode calls = data(result);
-        assertThat(calls).hasSize(2);
+        assertThat(calls).hasSize(3);
         assertThat(calls).anySatisfy(call -> {
             assertThat(call.path("toolName").asText()).isEqualTo("search_code");
             assertThat(call.path("status").asText()).isEqualTo("SUCCESS");
             assertThat(call.path("inputJson").asText()).contains("[REDACTED]").doesNotContain("secret-value");
             assertThat(call.path("outputJson").asText()).contains("resultCount");
+            assertThat(call.path("retryAudit").isNull()).isTrue();
             assertThat(call.path("durationMs").asInt()).isGreaterThanOrEqualTo(0);
+        });
+        assertThat(calls).anySatisfy(call -> {
+            assertThat(call.path("toolName").asText()).isEqualTo("load_run_context");
+            assertThat(call.path("retryAudit").path("attemptCount").asInt()).isEqualTo(1);
+            assertThat(call.path("retryAudit").path("recovered").asBoolean()).isTrue();
+            assertThat(call.path("retryAudit").path("firstFailureType").asText()).isEqualTo("BackendApiError");
+            assertThat(call.path("retryAudit").path("firstFailureMessage").asText()).contains("HTTP 503");
         });
         assertThat(calls).anySatisfy(call -> {
             assertThat(call.path("toolName").asText()).isEqualTo("run_maven_test");

@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -110,6 +111,24 @@ class ModelCallLogControllerIntegrationTest {
                 Map.of("prompt", "Plan work", "modelApiKey", "secret-value"),
                 () -> Map.of("summary", "Plan created")
         );
+        modelCallLogService.record(
+                run,
+                "generate_patch",
+                "OPENAI_COMPATIBLE",
+                "gpt-retry-test",
+                Map.of("prompt", "Generate patch"),
+                () -> Map.of(
+                        "retryAttemptCount", 1,
+                        "retryAttempts", List.of(Map.of(
+                                "attempt", 1,
+                                "errorType", "WorkerModelError",
+                                "message", "Worker model returned HTTP 429: rate limited",
+                                "retryable", true
+                        )),
+                        "summary", "Recovered after retry"
+                ),
+                output -> output
+        );
         assertThatThrownBy(() -> modelCallLogService.record(
                 run,
                 "generate_patch",
@@ -126,7 +145,7 @@ class ModelCallLogControllerIntegrationTest {
                 .andReturn();
 
         JsonNode calls = data(result);
-        assertThat(calls).hasSize(2);
+        assertThat(calls).hasSize(3);
         assertThat(calls).anySatisfy(call -> {
             assertThat(call.path("stepName").asText()).isEqualTo("plan_task");
             assertThat(call.path("modelProvider").asText()).isEqualTo("LOCAL_PLACEHOLDER");
@@ -134,8 +153,17 @@ class ModelCallLogControllerIntegrationTest {
             assertThat(call.path("status").asText()).isEqualTo("SUCCESS");
             assertThat(call.path("promptJson").asText()).contains("[REDACTED]").doesNotContain("secret-value");
             assertThat(call.path("responseJson").asText()).contains("Plan created");
+            assertThat(call.path("retryAudit").isNull()).isTrue();
             assertThat(call.path("totalTokens").asInt()).isGreaterThan(0);
             assertThat(call.path("durationMs").asInt()).isGreaterThanOrEqualTo(0);
+        });
+        assertThat(calls).anySatisfy(call -> {
+            assertThat(call.path("modelProvider").asText()).isEqualTo("OPENAI_COMPATIBLE");
+            assertThat(call.path("modelName").asText()).isEqualTo("gpt-retry-test");
+            assertThat(call.path("retryAudit").path("attemptCount").asInt()).isEqualTo(1);
+            assertThat(call.path("retryAudit").path("recovered").asBoolean()).isTrue();
+            assertThat(call.path("retryAudit").path("firstFailureType").asText()).isEqualTo("WorkerModelError");
+            assertThat(call.path("retryAudit").path("firstFailureMessage").asText()).contains("HTTP 429");
         });
         assertThat(calls).anySatisfy(call -> {
             assertThat(call.path("stepName").asText()).isEqualTo("generate_patch");

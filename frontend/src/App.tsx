@@ -29,6 +29,7 @@ import {
   ProjectSymbol,
   PullRequestPreflight,
   PullRequestRecord,
+  RetryAuditSummary,
   SandboxSettings,
   TaskFilters,
   TestRun,
@@ -117,11 +118,6 @@ type AgentEvidenceItem = {
   summary: string;
   meta: string[];
   highlights: string[];
-};
-
-type RetryAuditSummary = {
-  attemptCount: number;
-  firstFailure: string | null;
 };
 
 type TaskStreamState = "idle" | "connecting" | "live" | "ended" | "fallback";
@@ -2916,7 +2912,7 @@ function AgentEvidencePanel({
 
 function ToolCallPanel({ toolCalls, runId }: { toolCalls: ToolCallLog[]; runId: number | null }) {
   const calls = useMemo(
-    () => toolCalls.map((call) => ({ call, retryAudit: retryAuditFromJson(call.outputJson) })),
+    () => toolCalls.map((call) => ({ call, retryAudit: retryAuditSummary(call.retryAudit, call.outputJson, call.status) })),
     [toolCalls]
   );
   const retryAuditCount = calls.filter(({ retryAudit }) => retryAudit !== null).length;
@@ -2942,12 +2938,12 @@ function ToolCallPanel({ toolCalls, runId }: { toolCalls: ToolCallLog[]; runId: 
                   <span>{formatDate(call.finishedAt)} · {call.durationMs} ms</span>
                 </div>
                 <div className="auditStatusGroup">
-                  <RetryAuditBadge summary={retryAudit} status={call.status} />
+                  <RetryAuditBadge summary={retryAudit} />
                   <Badge value={call.status} />
                 </div>
               </div>
               {call.errorMessage ? <div className="errorBox">{call.errorMessage}</div> : null}
-              <RetryAuditNote summary={retryAudit} status={call.status} />
+              <RetryAuditNote summary={retryAudit} />
               <div className="toolJsonGrid">
                 <div>
                   <span>输入</span>
@@ -2968,7 +2964,7 @@ function ToolCallPanel({ toolCalls, runId }: { toolCalls: ToolCallLog[]; runId: 
 
 function ModelCallPanel({ modelCalls, runId }: { modelCalls: ModelCallLog[]; runId: number | null }) {
   const calls = useMemo(
-    () => modelCalls.map((call) => ({ call, retryAudit: retryAuditFromJson(call.responseJson) })),
+    () => modelCalls.map((call) => ({ call, retryAudit: retryAuditSummary(call.retryAudit, call.responseJson, call.status) })),
     [modelCalls]
   );
   const retryAuditCount = calls.filter(({ retryAudit }) => retryAudit !== null).length;
@@ -2996,12 +2992,12 @@ function ModelCallPanel({ modelCalls, runId }: { modelCalls: ModelCallLog[]; run
                   </span>
                 </div>
                 <div className="auditStatusGroup">
-                  <RetryAuditBadge summary={retryAudit} status={call.status} />
+                  <RetryAuditBadge summary={retryAudit} />
                   <Badge value={call.status} />
                 </div>
               </div>
               {call.errorMessage ? <div className="errorBox">{call.errorMessage}</div> : null}
-              <RetryAuditNote summary={retryAudit} status={call.status} />
+              <RetryAuditNote summary={retryAudit} />
               <div className="toolJsonGrid">
                 <div>
                   <span>提示词</span>
@@ -3020,27 +3016,26 @@ function ModelCallPanel({ modelCalls, runId }: { modelCalls: ModelCallLog[]; run
   );
 }
 
-function RetryAuditBadge({ summary, status }: { summary: RetryAuditSummary | null; status: string }) {
+function RetryAuditBadge({ summary }: { summary: RetryAuditSummary | null }) {
   if (summary === null) {
     return null;
   }
-  const recovered = status === "SUCCESS";
   return (
-    <span className={`retryAuditBadge ${recovered ? "recovered" : "failed"}`}>
-      {recovered ? "已重试恢复" : "重试后失败"} · {summary.attemptCount} 次
+    <span className={`retryAuditBadge ${summary.recovered ? "recovered" : "failed"}`}>
+      {summary.recovered ? "已重试恢复" : "重试后失败"} · {summary.attemptCount} 次
     </span>
   );
 }
 
-function RetryAuditNote({ summary, status }: { summary: RetryAuditSummary | null; status: string }) {
+function RetryAuditNote({ summary }: { summary: RetryAuditSummary | null }) {
   if (summary === null) {
     return null;
   }
-  const recovered = status === "SUCCESS";
+  const firstFailure = retryAuditFirstFailure(summary);
   return (
-    <div className={`retryAuditNote ${recovered ? "recovered" : "failed"}`}>
-      <strong>{recovered ? "已重试恢复" : "重试后仍失败"}：{summary.attemptCount} 次可恢复失败尝试</strong>
-      {summary.firstFailure ? <span>首次失败：{summary.firstFailure}</span> : null}
+    <div className={`retryAuditNote ${summary.recovered ? "recovered" : "failed"}`}>
+      <strong>{summary.recovered ? "已重试恢复" : "重试后仍失败"}：{summary.attemptCount} 次可恢复失败尝试</strong>
+      {firstFailure ? <span>首次失败：{firstFailure}</span> : null}
     </div>
   );
 }
@@ -3548,7 +3543,18 @@ function agentEvidenceFromRunReport(report: AgentRunReport): AgentEvidenceItem[]
   }));
 }
 
-function retryAuditFromJson(value: string | null): RetryAuditSummary | null {
+function retryAuditSummary(
+  structured: RetryAuditSummary | null | undefined,
+  legacyJson: string | null,
+  status: string
+): RetryAuditSummary | null {
+  if (structured && structured.attemptCount > 0) {
+    return structured;
+  }
+  return retryAuditFromJson(legacyJson, status);
+}
+
+function retryAuditFromJson(value: string | null, status: string): RetryAuditSummary | null {
   const output = parseJsonObject(value);
   const attempts = objectArrayField(output, "retryAttempts");
   const count = numberField(output, "retryAttemptCount") ?? attempts.length;
@@ -3561,8 +3567,14 @@ function retryAuditFromJson(value: string | null): RetryAuditSummary | null {
     : "";
   return {
     attemptCount: count,
-    firstFailure: firstFailure || null
+    recovered: status === "SUCCESS",
+    firstFailureType: firstAttempt ? stringField(firstAttempt, "errorType") : null,
+    firstFailureMessage: firstFailure || null
   };
+}
+
+function retryAuditFirstFailure(summary: RetryAuditSummary): string | null {
+  return summary.firstFailureMessage ?? summary.firstFailureType;
 }
 
 function latestStepByName(steps: AgentStep[], stepName: string) {

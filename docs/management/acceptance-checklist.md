@@ -35,8 +35,8 @@
 | AC-009 | 未审批不能创建 PR | API 返回 `PATCH_NOT_APPROVED` |
 | AC-010 | 审批后可以准备 PR | 未开启 GitHub 发布时生成 `pull_request_record.status=DRAFT_READY`、target branch 和 commit，并将 task 标为 `DONE` 释放项目写入槽；开启 GitHub 发布并提供 token 后生成 `OPEN` 记录且 `pull_request_record.url` 可打开；远端发布路径通过本地 bare Git origin + GitHub API stub 验证真实 `git push`、PR 请求体和失败记录重试 |
 | AC-010b | PR 发布前置检查可见 | `GET /api/tasks/{id}/pull-request/preflight` 需要鉴权，返回 task、patch、test、local draft、remote GitHub 的 `PASS`/`PENDING`/`BLOCKED`/`WARN` 检查项和中文 label/message/blockers；前端 PR 面板展示 preflight，审批前显示“需要先审批已测试通过的补丁”的 blocker，审批且测试通过后显示本地 branch/commit 可准备，准备完成后显示已有 `DRAFT_READY` 记录；远端发布失败时展示中文失败解释、下一步、原始错误，并把任务详情按钮切换为“重试发布 PR” |
-| AC-011 | 工具调用可审计 | `tool_call_log` 可按 run 查询，`GET /api/agent/runs/{runId}/tool-calls` 返回脱敏输入、输出摘要、状态和耗时；当前端检测到 `output.retryAttemptCount > 0` 时，工具调用审计面板在列表头和单条记录中显示 `已重试恢复`、失败尝试次数和首次失败摘要 |
-| AC-011b | 模型调用可追踪 | `model_call_log` 可按 run 查询，`GET /api/agent/runs/{runId}/model-calls` 返回脱敏 prompt、response 摘要、模型名、token 和耗时；当前端检测到 `response.retryAttemptCount > 0` 时，模型调用审计面板在列表头和单条记录中显示 `已重试恢复`、失败尝试次数和首次失败摘要 |
+| AC-011 | 工具调用可审计 | `tool_call_log` 可按 run 查询，`GET /api/agent/runs/{runId}/tool-calls` 返回脱敏输入、输出摘要、状态、耗时和结构化 `retryAudit`；当 `retryAudit.attemptCount > 0` 时，工具调用审计面板在列表头和单条记录中显示 `已重试恢复`、失败尝试次数和首次失败摘要；前端兼容旧 `output.retryAttemptCount` |
+| AC-011b | 模型调用可追踪 | `model_call_log` 可按 run 查询，`GET /api/agent/runs/{runId}/model-calls` 返回脱敏 prompt、response 摘要、模型名、token、耗时和结构化 `retryAudit`；当 `retryAudit.attemptCount > 0` 时，模型调用审计面板在列表头和单条记录中显示 `已重试恢复`、失败尝试次数和首次失败摘要；前端兼容旧 `response.retryAttemptCount` |
 | AC-011c | Patch 风险审查可见 | `review_patch` step 输出 `riskLevel`、`summary` 和 findings；前端 Patch 面板展示 `Automated review`，包含新增接口缺鉴权、分页边界和测试覆盖提示 |
 | AC-011d | RepairAgent 修复循环可追踪 | Maven 测试因缺少测试依赖或常见 Java 标准库缺 import 编译失败时，任务进入 `REPAIRING`，`repair_patch` step/model call 生成补充 `spring-boot-starter-test` 或补 import 的新 patch，并重新执行沙箱应用与 `mvn -q test`；最多尝试 2 次 |
 | AC-011e | 任务事件流可订阅 | `GET /api/agent/tasks/{id}/stream` 返回 `text/event-stream`，包含 `TASK_SNAPSHOT`、`STEP_SNAPSHOT`、运行中的 `TASK_UPDATED`/`STEP_RECORDED` 和 `STREAM_COMPLETE`；非任务 owner 不能订阅；前端运行任务时显示 stream 状态并以 SSE 事件触发任务详情刷新，断线后保留轮询兜底 |

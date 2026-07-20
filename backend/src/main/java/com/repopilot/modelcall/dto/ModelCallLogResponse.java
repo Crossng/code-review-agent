@@ -2,6 +2,7 @@ package com.repopilot.modelcall.dto;
 
 import java.time.Instant;
 
+import com.repopilot.common.RetryAuditSummaryResponse;
 import com.repopilot.modelcall.domain.ModelCallLog;
 import com.repopilot.modelcall.domain.ModelCallStatus;
 
@@ -13,6 +14,7 @@ public record ModelCallLogResponse(
         String modelName,
         String promptJson,
         String responseJson,
+        RetryAuditSummaryResponse retryAudit,
         ModelCallStatus status,
         Integer promptTokens,
         Integer completionTokens,
@@ -32,6 +34,7 @@ public record ModelCallLogResponse(
                 log.getModelName(),
                 log.getPromptJson(),
                 log.getResponseJson(),
+                RetryAuditSummaryResponse.fromJson(log.getResponseJson(), log.getStatus() == ModelCallStatus.SUCCESS),
                 log.getStatus(),
                 log.getPromptTokens(),
                 log.getCompletionTokens(),

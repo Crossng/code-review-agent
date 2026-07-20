@@ -339,12 +339,20 @@ export type TestRun = {
   createdAt: string;
 };
 
+export type RetryAuditSummary = {
+  attemptCount: number;
+  recovered: boolean;
+  firstFailureType: string | null;
+  firstFailureMessage: string | null;
+};
+
 export type ToolCallLog = {
   id: number;
   agentRunId: number;
   toolName: string;
   inputJson: string | null;
   outputJson: string | null;
+  retryAudit: RetryAuditSummary | null;
   status: string;
   durationMs: number;
   errorMessage: string | null;
@@ -360,6 +368,7 @@ export type ModelCallLog = {
   modelName: string;
   promptJson: string | null;
   responseJson: string | null;
+  retryAudit: RetryAuditSummary | null;
   status: string;
   promptTokens: number;
   completionTokens: number;
