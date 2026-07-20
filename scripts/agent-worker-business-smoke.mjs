@@ -21,6 +21,7 @@ const repoUrl = process.env.REPOPILOT_WORKER_BUSINESS_SMOKE_REPO_URL
 const modelName = "gpt-worker-business-smoke";
 const workerToken = "worker-business-smoke-token";
 const workerApiKey = "worker-business-smoke-key";
+const injectCoderRetry = process.env.REPOPILOT_WORKER_BUSINESS_SMOKE_INJECT_CODER_RETRY !== "false";
 const taskTitle = "Worker Coder 业务演示：新增 User 汇总接口";
 const taskDescription = [
   "请基于 UserController 和 UserService 新增一个最小业务接口。",
@@ -106,7 +107,9 @@ try {
         REPOPILOT_WORKER_CODER_MODEL_NAME: modelName,
         REPOPILOT_WORKER_CODER_MODEL_MAX_COMPLETION_TOKENS: "900",
         REPOPILOT_WORKER_CODER_MODEL_ORGANIZATION: "org-worker-business-smoke",
-        REPOPILOT_WORKER_CODER_MODEL_PROJECT: "proj-worker-business-smoke"
+        REPOPILOT_WORKER_CODER_MODEL_PROJECT: "proj-worker-business-smoke",
+        REPOPILOT_WORKER_RETRY_MAX_ATTEMPTS: "2",
+        REPOPILOT_WORKER_RETRY_BACKOFF_SECONDS: "0"
       }
     }
   );
@@ -152,7 +155,7 @@ try {
     apiGet(apiBase, `/agent/runs/${runId}/tool-calls`, token),
     apiGet(apiBase, `/agent/tasks/${task.id}/run-report`, token)
   ]);
-  const { workerPatch, workerStart } = assertWorkerEvidence({ steps, patches, testRuns, modelCalls, toolCalls, runReport });
+  const { workerPatch, workerStart, generateCall } = assertWorkerEvidence({ steps, patches, testRuns, modelCalls, toolCalls, runReport });
   assertModelRequest();
   console.log(`Worker patch 可审批: #${workerPatch.id} ${workerPatch.generationProvider}/${workerPatch.generationModel}`);
 
@@ -193,6 +196,7 @@ try {
       generationModel: workerPatch.generationModel,
       changedFiles: workerPatch.changedFiles
     },
+    retryAudit: generateCall.retryAudit,
     pullRequest: {
       id: pullRequest.id,
       status: pullRequest.status,
@@ -211,11 +215,14 @@ try {
     })),
     runReportSectionCount: runReport.sections.length,
     modelRequest: {
-      path: modelRequests[0]?.path,
-      model: modelRequests[0]?.body?.model,
-      maxCompletionTokens: modelRequests[0]?.body?.max_completion_tokens,
-      organizationConfigured: Boolean(modelRequests[0]?.organization),
-      projectConfigured: Boolean(modelRequests[0]?.project)
+      requestCount: modelRequests.length,
+      injectedRetry: injectCoderRetry,
+      statuses: modelRequests.map((request) => request.responseStatus),
+      path: modelRequests.at(-1)?.path,
+      model: modelRequests.at(-1)?.body?.model,
+      maxCompletionTokens: modelRequests.at(-1)?.body?.max_completion_tokens,
+      organizationConfigured: Boolean(modelRequests.at(-1)?.organization),
+      projectConfigured: Boolean(modelRequests.at(-1)?.project)
     }
   };
   const artifactPath = join(artifactDir, "last-run.json");
@@ -244,13 +251,24 @@ async function startModelServer() {
     }
     const rawBody = await readRequestBody(request);
     const body = JSON.parse(rawBody);
+    const responseStatus = injectCoderRetry && modelRequests.length === 0 ? 429 : 200;
     modelRequests.push({
       path: request.url,
       authorization: request.headers.authorization,
       organization: request.headers["openai-organization"],
       project: request.headers["openai-project"],
-      body
+      body,
+      responseStatus
     });
+    if (responseStatus === 429) {
+      const encoded = Buffer.from(JSON.stringify({ error: { message: "worker business smoke rate limited once" } }), "utf8");
+      response.writeHead(429, {
+        "Content-Type": "application/json",
+        "Content-Length": encoded.length
+      });
+      response.end(encoded);
+      return;
+    }
     const payload = {
       model: modelName,
       usage: {
@@ -397,6 +415,17 @@ function assertWorkerEvidence({ steps, patches, testRuns, modelCalls, toolCalls,
   if (!generateCall || generateCall.totalTokens !== 148) {
     throw new Error(`缺少 Worker Coder generate_patch 模型调用审计: ${JSON.stringify(generateCall)}`);
   }
+  if (injectCoderRetry) {
+    if (
+      !generateCall.retryAudit
+      || generateCall.retryAudit.attemptCount !== 1
+      || generateCall.retryAudit.recovered !== true
+      || generateCall.retryAudit.firstFailureType !== "WorkerModelError"
+      || !String(generateCall.retryAudit.firstFailureMessage ?? "").includes("HTTP 429")
+    ) {
+      throw new Error(`模型调用缺少结构化 retryAudit: ${JSON.stringify(generateCall.retryAudit)}`);
+    }
+  }
   const serializedModelCall = JSON.stringify(generateCall);
   if (serializedModelCall.includes(workerApiKey) || serializedModelCall.includes("Authorization")) {
     throw new Error("模型调用审计泄漏了 API key 或 Authorization header。");
@@ -409,7 +438,7 @@ function assertWorkerEvidence({ steps, patches, testRuns, modelCalls, toolCalls,
   if (!Array.isArray(runReport.sections) || runReport.sections.length < 5) {
     throw new Error("运行报告没有生成足够的 Agent evidence sections。");
   }
-  return { workerPatch, workerStart };
+  return { workerPatch, workerStart, generateCall };
 }
 
 function parseStepOutput(step, stepName) {
@@ -421,10 +450,14 @@ function parseStepOutput(step, stepName) {
 }
 
 function assertModelRequest() {
-  if (modelRequests.length !== 1) {
-    throw new Error(`模型 stub 请求数量=${modelRequests.length}，预期 1。`);
+  const expectedRequestCount = injectCoderRetry ? 2 : 1;
+  if (modelRequests.length !== expectedRequestCount) {
+    throw new Error(`模型 stub 请求数量=${modelRequests.length}，预期 ${expectedRequestCount}。`);
   }
-  const request = modelRequests[0];
+  if (injectCoderRetry && (modelRequests[0].responseStatus !== 429 || modelRequests[1].responseStatus !== 200)) {
+    throw new Error(`模型 stub 没有先 429 后恢复: ${JSON.stringify(modelRequests.map((request) => request.responseStatus))}`);
+  }
+  const request = modelRequests.at(-1);
   if (request.authorization !== `Bearer ${workerApiKey}`) {
     throw new Error("Worker Coder 没有通过 Authorization header 传递模型 key。");
   }
