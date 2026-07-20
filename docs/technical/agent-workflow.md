@@ -168,7 +168,7 @@ Worker primary 只自动重试可恢复且低副作用的读路径：OpenAI-comp
 
 Worker 写型 callback 不做透明重试，包括 step/model/tool/patch/status 回写和 approval-ready 等会落库或推进状态的请求，避免请求超时后重复写 patch 或重复推进审批。不可恢复失败保持显式失败：HTTP `400/401/403/404/409`、模型输出契约错误、diff parser 错误、安全预检失败、沙箱应用失败、Maven 测试失败和风险审查失败不会自动重试。
 
-端到端 smoke 也固定了这条边界：`./scripts/agent-worker-planner-smoke.sh` 注入一次后端 `/context` `503` 和一次 Planner 模型 `429`，恢复后证据写入 `retryEvidence.contextGetCount=2`、`plannerRequestCount=2`；`./scripts/agent-worker-coder-model-smoke.sh` 注入一次 Coder 模型 `429`，恢复后证据写入 `retryEvidence.coderRequestCount=2`；`./scripts/agent-worker-business-smoke.sh` 在真实后端业务闭环里注入一次 Coder 模型 `429`，并断言 `GET /api/agent/runs/{runId}/model-calls` 返回结构化 `retryAudit`。
+端到端 smoke 也固定了这条边界：`./scripts/agent-worker-planner-smoke.sh` 注入一次后端 `/context` `503` 和一次 Planner 模型 `429`，恢复后证据写入 `retryEvidence.contextGetCount=2`、`plannerRequestCount=2`；`./scripts/agent-worker-coder-model-smoke.sh` 注入一次 Coder 模型 `429`，恢复后证据写入 `retryEvidence.coderRequestCount=2`；`./scripts/agent-worker-business-smoke.sh` 在真实后端业务闭环里注入一次 Coder 模型 `429`，并断言 `GET /api/agent/runs/{runId}/model-calls` 返回结构化 `retryAudit`，且 `GET /api/agent/tasks/{taskId}/run-report` 返回 `Worker 重试恢复证据` section 和 Markdown。
 
 Worker 恢复证据现在也会进入正式审计数据：模型调用的 `response.retryAttempts` 记录 OpenAI-compatible Planner/Coder 的可恢复失败尝试，只读工具调用的 `output.retryAttempts` 记录后端 GET 工具的可恢复失败尝试，并同步写入 `retryAttemptCount`。后端 `GET /api/agent/tasks/{id}/run-report` 会扫描当前 run 的 model/tool audit，生成 `Worker 重试恢复证据` 小节，汇总失败尝试数、恢复调用数、模型/工具来源和首次失败摘要；前端任务详情在有 run report 时直接展示后端 report sections，因此该诊断小节会出现在 Agent 执行证据面板、可复制/下载的 Markdown 和运行报告快照中。
 

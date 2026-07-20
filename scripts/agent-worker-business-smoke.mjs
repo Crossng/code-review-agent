@@ -155,7 +155,14 @@ try {
     apiGet(apiBase, `/agent/runs/${runId}/tool-calls`, token),
     apiGet(apiBase, `/agent/tasks/${task.id}/run-report`, token)
   ]);
-  const { workerPatch, workerStart, generateCall } = assertWorkerEvidence({ steps, patches, testRuns, modelCalls, toolCalls, runReport });
+  const { workerPatch, workerStart, generateCall, retryReportSection } = assertWorkerEvidence({
+    steps,
+    patches,
+    testRuns,
+    modelCalls,
+    toolCalls,
+    runReport
+  });
   assertModelRequest();
   console.log(`Worker patch 可审批: #${workerPatch.id} ${workerPatch.generationProvider}/${workerPatch.generationModel}`);
 
@@ -214,6 +221,13 @@ try {
       durationMs: testRun.durationMs
     })),
     runReportSectionCount: runReport.sections.length,
+    retryReportSection: retryReportSection ? {
+      key: retryReportSection.key,
+      title: retryReportSection.title,
+      summary: retryReportSection.summary,
+      facts: retryReportSection.facts,
+      highlights: retryReportSection.highlights
+    } : null,
     modelRequest: {
       requestCount: modelRequests.length,
       injectedRetry: injectCoderRetry,
@@ -438,7 +452,40 @@ function assertWorkerEvidence({ steps, patches, testRuns, modelCalls, toolCalls,
   if (!Array.isArray(runReport.sections) || runReport.sections.length < 5) {
     throw new Error("运行报告没有生成足够的 Agent evidence sections。");
   }
-  return { workerPatch, workerStart, generateCall };
+  const retryReportSection = assertRunReportRetryEvidence(runReport);
+  return { workerPatch, workerStart, generateCall, retryReportSection };
+}
+
+function assertRunReportRetryEvidence(runReport) {
+  if (!injectCoderRetry) {
+    return null;
+  }
+  const section = (runReport.sections ?? []).find((candidate) =>
+    candidate.key === "worker_retry" || candidate.title === "Worker 重试恢复证据"
+  );
+  if (!section) {
+    throw new Error("运行报告缺少 Worker 重试恢复证据 section。");
+  }
+  const facts = section.facts ?? [];
+  for (const expectedFact of ["重试失败尝试：1", "恢复调用：1/1", "模型调用：1"]) {
+    if (!facts.includes(expectedFact)) {
+      throw new Error(`Worker 重试恢复证据 facts 缺少 ${expectedFact}: ${JSON.stringify(facts)}`);
+    }
+  }
+  const serializedHighlights = JSON.stringify(section.highlights ?? []);
+  if (!serializedHighlights.includes("模型 generate_patch") || !serializedHighlights.includes("HTTP 429")) {
+    throw new Error(`Worker 重试恢复证据 highlights 不完整: ${serializedHighlights}`);
+  }
+  if (!String(section.summary ?? "").includes("1 次可恢复失败尝试")) {
+    throw new Error(`Worker 重试恢复证据 summary 不完整: ${section.summary}`);
+  }
+  const markdown = String(runReport.markdown ?? "");
+  for (const expected of ["## Worker 重试恢复证据", "模型 generate_patch", "HTTP 429", "写型 callback 仍不做透明重试"]) {
+    if (!markdown.includes(expected)) {
+      throw new Error(`运行报告 Markdown 缺少 ${expected}。`);
+    }
+  }
+  return section;
 }
 
 function parseStepOutput(step, stepName) {
