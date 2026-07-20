@@ -22,18 +22,44 @@ const modelName = "gpt-worker-business-smoke";
 const workerToken = "worker-business-smoke-token";
 const workerApiKey = "worker-business-smoke-key";
 const injectCoderRetry = process.env.REPOPILOT_WORKER_BUSINESS_SMOKE_INJECT_CODER_RETRY !== "false";
-const taskTitle = "Worker Coder 业务演示：新增 User 汇总接口";
-const taskDescription = [
-  "请基于 UserController 和 UserService 新增一个最小业务接口。",
-  "目标：GET /api/users/summary 返回一个中文字符串，说明当前示例用户数量。",
-  "只修改 UserController.java 和 UserService.java。",
-  "输出必须是 raw unified diff，不要输出 Markdown fence 或解释文字。"
-].join("\n");
 const timeoutMs = Number(process.env.REPOPILOT_WORKER_BUSINESS_SMOKE_TIMEOUT_MS ?? 420_000);
 const pollMs = Number(process.env.REPOPILOT_WORKER_BUSINESS_SMOKE_POLL_MS ?? 1_000);
-const expectedPaths = [
+const userModulePaths = [
   "src/main/java/com/example/demo/user/UserController.java",
   "src/main/java/com/example/demo/user/UserService.java"
+];
+const businessScenarios = [
+  {
+    id: "summary",
+    name: "User 汇总接口",
+    title: "Worker Coder 业务演示：新增 User 汇总接口",
+    description: [
+      "请基于 UserController 和 UserService 新增一个最小业务接口。",
+      "目标：GET /api/users/summary 返回一个中文字符串，说明当前示例用户数量。",
+      "只修改 UserController.java 和 UserService.java。",
+      "输出必须是 raw unified diff，不要输出 Markdown fence 或解释文字。"
+    ].join("\n"),
+    expectedPaths: userModulePaths,
+    expectedDiffSnippets: ["/summary", "summarizeUsers", "示例用户数量"],
+    diff: summaryBusinessDiff,
+    expectRetryAudit: injectCoderRetry
+  },
+  {
+    id: "names",
+    name: "User 名称接口",
+    title: "Worker Coder 业务演示：新增 User 名称接口",
+    description: [
+      "请基于 UserController 和 UserService 新增一个最小业务接口。",
+      "目标：GET /api/users/names 返回当前示例用户名称列表。",
+      "Controller 方法返回 List<String>，Service 复用 userMapper.findAll() 并读取 getName()。",
+      "只修改 UserController.java 和 UserService.java。",
+      "输出必须是 raw unified diff，不要输出 Markdown fence 或解释文字。"
+    ].join("\n"),
+    expectedPaths: userModulePaths,
+    expectedDiffSnippets: ["/names", "listUserNames", "UserEntity::getName"],
+    diff: namesBusinessDiff,
+    expectRetryAudit: false
+  }
 ];
 const failureStatuses = new Set([
   "FAILED_REPO_CLONE",
@@ -119,33 +145,95 @@ try {
   const token = auth.token;
   console.log(`登录成功: ${auth.user.email}`);
 
+  const scenarioResults = [];
+  for (const scenario of businessScenarios) {
+    scenarioResults.push(await runBusinessScenario({ apiBase, token, scenario }));
+  }
+  assertModelRequests();
+
+  const firstScenario = scenarioResults[0];
+  const artifact = {
+    generatedAt: new Date().toISOString(),
+    backendUrl,
+    workerUrl,
+    repoUrl,
+    email,
+    workerHealth,
+    scenarioCount: scenarioResults.length,
+    scenarios: scenarioResults,
+    projectId: firstScenario.projectId,
+    taskId: firstScenario.taskId,
+    runId: firstScenario.runId,
+    workerStart: firstScenario.workerStart,
+    taskStatus: firstScenario.taskStatus,
+    patch: firstScenario.patch,
+    retryAudit: firstScenario.retryAudit,
+    pullRequest: firstScenario.pullRequest,
+    modelCallCount: firstScenario.modelCallCount,
+    toolCallCount: firstScenario.toolCallCount,
+    testRuns: firstScenario.testRuns,
+    runReportSectionCount: firstScenario.runReportSectionCount,
+    retryReportSection: firstScenario.retryReportSection,
+    modelRequest: {
+      requestCount: modelRequests.length,
+      injectedRetry: injectCoderRetry,
+      statuses: modelRequests.map((request) => request.responseStatus),
+      scenarioHints: modelRequests.map((request) => request.scenarioId ?? null),
+      path: modelRequests.at(-1)?.path,
+      model: modelRequests.at(-1)?.body?.model,
+      maxCompletionTokens: modelRequests.at(-1)?.body?.max_completion_tokens,
+      organizationConfigured: Boolean(modelRequests.at(-1)?.organization),
+      projectConfigured: Boolean(modelRequests.at(-1)?.project)
+    }
+  };
+  const artifactPath = join(artifactDir, "last-run.json");
+  await writeFile(artifactPath, `${JSON.stringify(artifact, null, 2)}\n`, "utf8");
+
+  console.log("Agent Worker 双业务闭环 smoke 通过。");
+  for (const result of scenarioResults) {
+    console.log(`[${result.scenarioName}] Patch: #${result.patch.id} ${result.patch.generationMode} / ${result.patch.generationModel}`);
+    console.log(`[${result.scenarioName}] PR 草稿: ${result.pullRequest.targetBranch} ${result.pullRequest.commitSha}`);
+  }
+  console.log(`证据文件: ${artifactPath}`);
+} catch (error) {
+  console.error(redact(`Agent Worker 业务闭环 smoke 失败: ${error.message}`));
+  if (error.details) {
+    console.error(redact(error.details));
+  }
+  process.exitCode = 1;
+} finally {
+  await cleanup();
+}
+
+async function runBusinessScenario({ apiBase, token, scenario }) {
+  console.log(`[${scenario.name}] 开始业务闭环验证。`);
   const project = await apiPost(apiBase, "/projects", token, {
     repoUrl,
     accessToken: "",
     defaultBranch: "main"
   });
-  console.log(`项目已创建: #${project.id} ${project.repoFullName}`);
+  console.log(`[${scenario.name}] 项目已创建: #${project.id} ${project.repoFullName}`);
 
   const cloneResult = await apiPost(apiBase, `/projects/${project.id}/clone`, token, {});
-  console.log(`仓库已克隆: ${cloneResult.branch} ${cloneResult.commitSha}`);
+  console.log(`[${scenario.name}] 仓库已克隆: ${cloneResult.branch} ${cloneResult.commitSha}`);
 
   const indexResult = await apiPost(apiBase, `/projects/${project.id}/index`, token, {});
-  console.log(`索引完成: files=${indexResult.fileCount}, symbols=${indexResult.symbolCount}, chunks=${indexResult.chunkCount}`);
+  console.log(`[${scenario.name}] 索引完成: files=${indexResult.fileCount}, symbols=${indexResult.symbolCount}, chunks=${indexResult.chunkCount}`);
 
   const task = await apiPost(apiBase, "/agent/tasks", token, {
     projectId: project.id,
     taskType: "FEATURE",
-    title: taskTitle,
-    description: taskDescription
+    title: scenario.title,
+    description: scenario.description
   });
-  console.log(`任务已创建: #${task.id}`);
+  console.log(`[${scenario.name}] 任务已创建: #${task.id}`);
 
   const run = await apiPost(apiBase, `/agent/tasks/${task.id}/run`, token, {});
   const runId = run.id;
-  console.log(`后端 Worker bridge run 已启动: #${runId}`);
+  console.log(`[${scenario.name}] 后端 Worker bridge run 已启动: #${runId}`);
 
-  const approvalReadyTask = await waitForWorkerPatchReady(apiBase, token, task.id, runId);
-  console.log(`任务进入人工审批: ${approvalReadyTask.status}`);
+  const approvalReadyTask = await waitForWorkerPatchReady(apiBase, token, task.id, runId, scenario);
+  console.log(`[${scenario.name}] 任务进入人工审批: ${approvalReadyTask.status}`);
 
   const [steps, patches, testRuns, modelCalls, toolCalls, runReport] = await Promise.all([
     apiGet(apiBase, `/agent/tasks/${task.id}/steps`, token),
@@ -161,38 +249,34 @@ try {
     testRuns,
     modelCalls,
     toolCalls,
-    runReport
+    runReport,
+    scenario
   });
-  assertModelRequest();
-  console.log(`Worker patch 可审批: #${workerPatch.id} ${workerPatch.generationProvider}/${workerPatch.generationModel}`);
+  console.log(`[${scenario.name}] Worker patch 可审批: #${workerPatch.id} ${workerPatch.generationProvider}/${workerPatch.generationModel}`);
 
   await apiPost(apiBase, `/tasks/${task.id}/approval/approve`, token, {
     patchId: workerPatch.id,
-    comment: "Worker 业务闭环 smoke 自动审批：沙箱测试和风险审查已通过。"
+    comment: `Worker 业务闭环 smoke 自动审批：${scenario.name} 沙箱测试和风险审查已通过。`
   });
   const preflight = await apiGet(apiBase, `/tasks/${task.id}/pull-request/preflight`, token);
   if (!preflight.canPrepare || preflight.publishMode !== "LOCAL_DRAFT_ONLY") {
-    throw new Error(`PR preflight 未通过: ${JSON.stringify(preflight)}`);
+    throw new Error(`[${scenario.name}] PR preflight 未通过: ${JSON.stringify(preflight)}`);
   }
   const pullRequest = await apiPost(apiBase, `/tasks/${task.id}/pull-request`, token, {});
   if (pullRequest.status !== "DRAFT_READY" || !pullRequest.commitSha || !pullRequest.targetBranch) {
-    throw new Error(`本地 PR 草稿不完整: ${JSON.stringify(pullRequest)}`);
+    throw new Error(`[${scenario.name}] 本地 PR 草稿不完整: ${JSON.stringify(pullRequest)}`);
   }
   const finalTask = await apiGet(apiBase, `/agent/tasks/${task.id}`, token);
   if (finalTask.status !== "DONE") {
-    throw new Error(`PR 准备后任务状态=${finalTask.status}，预期 DONE。`);
+    throw new Error(`[${scenario.name}] PR 准备后任务状态=${finalTask.status}，预期 DONE。`);
   }
 
-  const artifact = {
-    generatedAt: new Date().toISOString(),
-    backendUrl,
-    workerUrl,
-    repoUrl,
-    email,
+  return {
+    scenarioId: scenario.id,
+    scenarioName: scenario.name,
     projectId: project.id,
     taskId: task.id,
     runId,
-    workerHealth,
     workerStart,
     taskStatus: finalTask.status,
     patch: {
@@ -201,9 +285,10 @@ try {
       generationMode: workerPatch.generationMode,
       generationProvider: workerPatch.generationProvider,
       generationModel: workerPatch.generationModel,
-      changedFiles: workerPatch.changedFiles
+      changedFiles: workerPatch.changedFiles,
+      expectedDiffSnippets: scenario.expectedDiffSnippets
     },
-    retryAudit: generateCall.retryAudit,
+    retryAudit: generateCall.retryAudit ?? null,
     pullRequest: {
       id: pullRequest.id,
       status: pullRequest.status,
@@ -227,33 +312,8 @@ try {
       summary: retryReportSection.summary,
       facts: retryReportSection.facts,
       highlights: retryReportSection.highlights
-    } : null,
-    modelRequest: {
-      requestCount: modelRequests.length,
-      injectedRetry: injectCoderRetry,
-      statuses: modelRequests.map((request) => request.responseStatus),
-      path: modelRequests.at(-1)?.path,
-      model: modelRequests.at(-1)?.body?.model,
-      maxCompletionTokens: modelRequests.at(-1)?.body?.max_completion_tokens,
-      organizationConfigured: Boolean(modelRequests.at(-1)?.organization),
-      projectConfigured: Boolean(modelRequests.at(-1)?.project)
-    }
+    } : null
   };
-  const artifactPath = join(artifactDir, "last-run.json");
-  await writeFile(artifactPath, `${JSON.stringify(artifact, null, 2)}\n`, "utf8");
-
-  console.log("Agent Worker 业务闭环 smoke 通过。");
-  console.log(`Patch: #${workerPatch.id} ${workerPatch.generationMode} / ${workerPatch.generationModel}`);
-  console.log(`PR 草稿: ${pullRequest.targetBranch} ${pullRequest.commitSha}`);
-  console.log(`证据文件: ${artifactPath}`);
-} catch (error) {
-  console.error(redact(`Agent Worker 业务闭环 smoke 失败: ${error.message}`));
-  if (error.details) {
-    console.error(redact(error.details));
-  }
-  process.exitCode = 1;
-} finally {
-  await cleanup();
 }
 
 async function startModelServer() {
@@ -265,8 +325,10 @@ async function startModelServer() {
     }
     const rawBody = await readRequestBody(request);
     const body = JSON.parse(rawBody);
+    const scenario = selectModelScenario(body);
     const responseStatus = injectCoderRetry && modelRequests.length === 0 ? 429 : 200;
     modelRequests.push({
+      scenarioId: scenario.id,
       path: request.url,
       authorization: request.headers.authorization,
       organization: request.headers["openai-organization"],
@@ -293,7 +355,7 @@ async function startModelServer() {
       choices: [
         {
           message: {
-            content: businessDiff()
+            content: scenario.diff()
           }
         }
       ]
@@ -309,7 +371,20 @@ async function startModelServer() {
   return server;
 }
 
-function businessDiff() {
+function selectModelScenario(body) {
+  const serialized = JSON.stringify(body);
+  const scenario = businessScenarios.find((candidate) =>
+    serialized.includes(candidate.title)
+      || serialized.includes(`GET /api/users/${candidate.id}`)
+      || candidate.expectedDiffSnippets.some((snippet) => serialized.includes(snippet))
+  );
+  if (!scenario) {
+    throw new Error(`模型请求无法识别业务场景: ${serialized.slice(0, 800)}`);
+  }
+  return scenario;
+}
+
+function summaryBusinessDiff() {
   return [
     "diff --git a/src/main/java/com/example/demo/user/UserController.java b/src/main/java/com/example/demo/user/UserController.java",
     "index 924c6d2..2222222 100644",
@@ -343,7 +418,43 @@ function businessDiff() {
   ].join("\n");
 }
 
-async function waitForWorkerPatchReady(apiBase, token, taskId, runId) {
+function namesBusinessDiff() {
+  return [
+    "diff --git a/src/main/java/com/example/demo/user/UserController.java b/src/main/java/com/example/demo/user/UserController.java",
+    "index 924c6d2..4444444 100644",
+    "--- a/src/main/java/com/example/demo/user/UserController.java",
+    "+++ b/src/main/java/com/example/demo/user/UserController.java",
+    "@@ -25,5 +25,10 @@ public class UserController {",
+    "     @GetMapping(\"/{id}\")",
+    "     public UserEntity getUser(@PathVariable Long id) {",
+    "         return userService.getUser(id);",
+    "     }",
+    "+",
+    "+    @GetMapping(\"/names\")",
+    "+    public List<String> listUserNames() {",
+    "+        return userService.listUserNames();",
+    "+    }",
+    " }",
+    "diff --git a/src/main/java/com/example/demo/user/UserService.java b/src/main/java/com/example/demo/user/UserService.java",
+    "index 486208d..5555555 100644",
+    "--- a/src/main/java/com/example/demo/user/UserService.java",
+    "+++ b/src/main/java/com/example/demo/user/UserService.java",
+    "@@ -20,4 +20,10 @@ public class UserService {",
+    "     public UserEntity getUser(Long id) {",
+    "         return userMapper.findById(id);",
+    "     }",
+    "+",
+    "+    public List<String> listUserNames() {",
+    "+        return userMapper.findAll().stream()",
+    "+                .map(UserEntity::getName)",
+    "+                .toList();",
+    "+    }",
+    " }",
+    ""
+  ].join("\n");
+}
+
+async function waitForWorkerPatchReady(apiBase, token, taskId, runId, scenario) {
   const startedAt = Date.now();
   let lastStatus = "";
   while (Date.now() - startedAt < timeoutMs) {
@@ -353,7 +464,7 @@ async function waitForWorkerPatchReady(apiBase, token, taskId, runId) {
       lastStatus = task.status;
     }
     const patches = await apiGet(apiBase, `/tasks/${taskId}/patches`, token).catch(() => []);
-    const workerPatch = patches.find((patch) => isExpectedWorkerPatch(patch, runId));
+    const workerPatch = patches.find((patch) => isExpectedWorkerPatch(patch, scenario, runId));
     if (task.status === "WAITING_HUMAN_APPROVAL" && workerPatch) {
       return task;
     }
@@ -371,7 +482,7 @@ async function waitForWorkerPatchReady(apiBase, token, taskId, runId) {
   throw new Error(`等待 Worker patch 进入人工审批超时: ${timeoutMs}ms`);
 }
 
-function assertWorkerEvidence({ steps, patches, testRuns, modelCalls, toolCalls, runReport }) {
+function assertWorkerEvidence({ steps, patches, testRuns, modelCalls, toolCalls, runReport, scenario }) {
   const stepNames = [
     "agent_worker_start",
     "load_task_context",
@@ -396,29 +507,34 @@ function assertWorkerEvidence({ steps, patches, testRuns, modelCalls, toolCalls,
   if (!approvalStep || approvalStep.status !== "PENDING") {
     throw new Error("缺少 waiting_human_approval PENDING step。");
   }
-  const workerPatch = patches.find((patch) => isExpectedWorkerPatch(patch));
+  const workerPatch = patches.find((patch) => isExpectedWorkerPatch(patch, scenario));
   if (!workerPatch) {
-    throw new Error("缺少 Worker Coder 生成的 OPENAI_COMPATIBLE / LLM_CODER_DRAFT patch。");
+    throw new Error(`[${scenario.name}] 缺少 Worker Coder 生成的 OPENAI_COMPATIBLE / LLM_CODER_DRAFT patch。`);
   }
   if (patches.length !== 1) {
-    throw new Error(`当前任务产生了 ${patches.length} 个 patch，预期只有 Worker primary 生成的 1 个。`);
+    throw new Error(`[${scenario.name}] 当前任务产生了 ${patches.length} 个 patch，预期只有 Worker primary 生成的 1 个。`);
   }
   if (workerPatch.status !== "APPLIED") {
-    throw new Error(`Worker patch status=${workerPatch.status}，预期 APPLIED。`);
+    throw new Error(`[${scenario.name}] Worker patch status=${workerPatch.status}，预期 APPLIED。`);
   }
   if (!workerPatch.diffContent.startsWith("diff --git ")) {
-    throw new Error("Worker patch 不是 raw unified diff。");
+    throw new Error(`[${scenario.name}] Worker patch 不是 raw unified diff。`);
   }
-  for (const expectedPath of expectedPaths) {
+  for (const expectedPath of scenario.expectedPaths) {
     if (!workerPatch.diffContent.includes(expectedPath)) {
-      throw new Error(`Worker patch 缺少预期路径: ${expectedPath}`);
+      throw new Error(`[${scenario.name}] Worker patch 缺少预期路径: ${expectedPath}`);
+    }
+  }
+  for (const expectedSnippet of scenario.expectedDiffSnippets) {
+    if (!workerPatch.diffContent.includes(expectedSnippet)) {
+      throw new Error(`[${scenario.name}] Worker patch 缺少预期业务片段: ${expectedSnippet}`);
     }
   }
   const passedTest = testRuns.find((testRun) =>
     testRun.patchId === workerPatch.id && testRun.status === "PASSED" && testRun.exitCode === 0
   );
   if (!passedTest) {
-    throw new Error("缺少 Worker patch 对应的 PASSED 沙箱 test_run。");
+    throw new Error(`[${scenario.name}] 缺少 Worker patch 对应的 PASSED 沙箱 test_run。`);
   }
   const generateCall = modelCalls.find((call) =>
     call.stepName === "generate_patch"
@@ -427,9 +543,9 @@ function assertWorkerEvidence({ steps, patches, testRuns, modelCalls, toolCalls,
       && call.status === "SUCCESS"
   );
   if (!generateCall || generateCall.totalTokens !== 148) {
-    throw new Error(`缺少 Worker Coder generate_patch 模型调用审计: ${JSON.stringify(generateCall)}`);
+    throw new Error(`[${scenario.name}] 缺少 Worker Coder generate_patch 模型调用审计: ${JSON.stringify(generateCall)}`);
   }
-  if (injectCoderRetry) {
+  if (scenario.expectRetryAudit) {
     if (
       !generateCall.retryAudit
       || generateCall.retryAudit.attemptCount !== 1
@@ -437,52 +553,57 @@ function assertWorkerEvidence({ steps, patches, testRuns, modelCalls, toolCalls,
       || generateCall.retryAudit.firstFailureType !== "WorkerModelError"
       || !String(generateCall.retryAudit.firstFailureMessage ?? "").includes("HTTP 429")
     ) {
-      throw new Error(`模型调用缺少结构化 retryAudit: ${JSON.stringify(generateCall.retryAudit)}`);
+      throw new Error(`[${scenario.name}] 模型调用缺少结构化 retryAudit: ${JSON.stringify(generateCall.retryAudit)}`);
     }
+  } else if (generateCall.retryAudit && Number(generateCall.retryAudit.attemptCount ?? 0) > 0) {
+    throw new Error(`[${scenario.name}] 不应出现模型 retryAudit: ${JSON.stringify(generateCall.retryAudit)}`);
   }
   const serializedModelCall = JSON.stringify(generateCall);
   if (serializedModelCall.includes(workerApiKey) || serializedModelCall.includes("Authorization")) {
-    throw new Error("模型调用审计泄漏了 API key 或 Authorization header。");
+    throw new Error(`[${scenario.name}] 模型调用审计泄漏了 API key 或 Authorization header。`);
   }
   for (const toolName of ["load_run_context", "list_project_files", "search_code", "read_project_file"]) {
     if (!toolCalls.some((call) => call.toolName === toolName && call.status === "SUCCESS")) {
-      throw new Error(`缺少成功工具调用审计: ${toolName}`);
+      throw new Error(`[${scenario.name}] 缺少成功工具调用审计: ${toolName}`);
     }
   }
   if (!Array.isArray(runReport.sections) || runReport.sections.length < 5) {
-    throw new Error("运行报告没有生成足够的 Agent evidence sections。");
+    throw new Error(`[${scenario.name}] 运行报告没有生成足够的 Agent evidence sections。`);
   }
-  const retryReportSection = assertRunReportRetryEvidence(runReport);
+  const retryReportSection = assertRunReportRetryEvidence(runReport, scenario);
   return { workerPatch, workerStart, generateCall, retryReportSection };
 }
 
-function assertRunReportRetryEvidence(runReport) {
-  if (!injectCoderRetry) {
-    return null;
-  }
+function assertRunReportRetryEvidence(runReport, scenario) {
   const section = (runReport.sections ?? []).find((candidate) =>
     candidate.key === "worker_retry" || candidate.title === "Worker 重试恢复证据"
   );
+  if (!scenario.expectRetryAudit) {
+    if (section) {
+      throw new Error(`[${scenario.name}] 不应生成 Worker 重试恢复证据 section。`);
+    }
+    return null;
+  }
   if (!section) {
-    throw new Error("运行报告缺少 Worker 重试恢复证据 section。");
+    throw new Error(`[${scenario.name}] 运行报告缺少 Worker 重试恢复证据 section。`);
   }
   const facts = section.facts ?? [];
   for (const expectedFact of ["重试失败尝试：1", "恢复调用：1/1", "模型调用：1"]) {
     if (!facts.includes(expectedFact)) {
-      throw new Error(`Worker 重试恢复证据 facts 缺少 ${expectedFact}: ${JSON.stringify(facts)}`);
+      throw new Error(`[${scenario.name}] Worker 重试恢复证据 facts 缺少 ${expectedFact}: ${JSON.stringify(facts)}`);
     }
   }
   const serializedHighlights = JSON.stringify(section.highlights ?? []);
   if (!serializedHighlights.includes("模型 generate_patch") || !serializedHighlights.includes("HTTP 429")) {
-    throw new Error(`Worker 重试恢复证据 highlights 不完整: ${serializedHighlights}`);
+    throw new Error(`[${scenario.name}] Worker 重试恢复证据 highlights 不完整: ${serializedHighlights}`);
   }
   if (!String(section.summary ?? "").includes("1 次可恢复失败尝试")) {
-    throw new Error(`Worker 重试恢复证据 summary 不完整: ${section.summary}`);
+    throw new Error(`[${scenario.name}] Worker 重试恢复证据 summary 不完整: ${section.summary}`);
   }
   const markdown = String(runReport.markdown ?? "");
   for (const expected of ["## Worker 重试恢复证据", "模型 generate_patch", "HTTP 429", "写型 callback 仍不做透明重试"]) {
     if (!markdown.includes(expected)) {
-      throw new Error(`运行报告 Markdown 缺少 ${expected}。`);
+      throw new Error(`[${scenario.name}] 运行报告 Markdown 缺少 ${expected}。`);
     }
   }
   return section;
@@ -496,41 +617,50 @@ function parseStepOutput(step, stepName) {
   }
 }
 
-function assertModelRequest() {
-  const expectedRequestCount = injectCoderRetry ? 2 : 1;
+function assertModelRequests() {
+  const expectedRequestCount = businessScenarios.length + (injectCoderRetry ? 1 : 0);
   if (modelRequests.length !== expectedRequestCount) {
     throw new Error(`模型 stub 请求数量=${modelRequests.length}，预期 ${expectedRequestCount}。`);
   }
   if (injectCoderRetry && (modelRequests[0].responseStatus !== 429 || modelRequests[1].responseStatus !== 200)) {
     throw new Error(`模型 stub 没有先 429 后恢复: ${JSON.stringify(modelRequests.map((request) => request.responseStatus))}`);
   }
-  const request = modelRequests.at(-1);
-  if (request.authorization !== `Bearer ${workerApiKey}`) {
-    throw new Error("Worker Coder 没有通过 Authorization header 传递模型 key。");
-  }
-  if (request.organization !== "org-worker-business-smoke" || request.project !== "proj-worker-business-smoke") {
-    throw new Error("Worker Coder 没有传递 organization/project header。");
-  }
-  if (request.body.model !== modelName || request.body.max_completion_tokens !== 900) {
-    throw new Error(`模型请求参数不符合预期: ${JSON.stringify(request.body)}`);
-  }
-  const serialized = JSON.stringify(request.body);
-  for (const expected of ["RepoPilot CoderAgent", "Return only one raw unified diff", "UserController", "UserService"]) {
-    if (!serialized.includes(expected)) {
-      throw new Error(`模型请求缺少上下文: ${expected}`);
+  for (const request of modelRequests) {
+    if (request.authorization !== `Bearer ${workerApiKey}`) {
+      throw new Error("Worker Coder 没有通过 Authorization header 传递模型 key。");
+    }
+    if (request.organization !== "org-worker-business-smoke" || request.project !== "proj-worker-business-smoke") {
+      throw new Error("Worker Coder 没有传递 organization/project header。");
+    }
+    if (request.body.model !== modelName || request.body.max_completion_tokens !== 900) {
+      throw new Error(`模型请求参数不符合预期: ${JSON.stringify(request.body)}`);
+    }
+    const serialized = JSON.stringify(request.body);
+    for (const expected of ["RepoPilot CoderAgent", "Return only one raw unified diff", "UserController", "UserService"]) {
+      if (!serialized.includes(expected)) {
+        throw new Error(`模型请求缺少上下文: ${expected}`);
+      }
+    }
+    if (serialized.includes(workerApiKey)) {
+      throw new Error("模型 prompt 泄漏了 API key。");
     }
   }
-  if (serialized.includes(workerApiKey)) {
-    throw new Error("模型 prompt 泄漏了 API key。");
+  const successfulScenarioIds = modelRequests
+    .filter((request) => request.responseStatus === 200)
+    .map((request) => request.scenarioId);
+  for (const scenario of businessScenarios) {
+    if (!successfulScenarioIds.includes(scenario.id)) {
+      throw new Error(`模型 stub 缺少成功业务场景请求: ${scenario.id}`);
+    }
   }
 }
 
-function isExpectedWorkerPatch(patch, runId = null) {
+function isExpectedWorkerPatch(patch, scenario, runId = null) {
   return patch.generationMode === "LLM_CODER_DRAFT"
     && patch.generationProvider === "OPENAI_COMPATIBLE"
     && patch.generationModel === modelName
     && (runId === null || patch.agentRunId === runId)
-    && expectedPaths.every((expectedPath) =>
+    && scenario.expectedPaths.every((expectedPath) =>
       (patch.changedFiles ?? []).some((changedFile) => changedFile.path === expectedPath)
     );
 }
