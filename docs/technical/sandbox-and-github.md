@@ -104,7 +104,7 @@ REPOPILOT_GITHUB_API_BASE_URL=https://api.github.com
 
 本地开发默认 `REPOPILOT_GITHUB_ENABLED=false`，因此只生成本地分支、commit 和 `DRAFT_READY` 记录，不推送远端。
 
-真实远端 PR 演示前可运行 `./scripts/real-token-demo-check.sh` 做只读体检；默认模式会提示 Docker、PostgreSQL/Redis、沙箱镜像、Maven cache、后端真实 Coder、Worker Planner/Coder 可选模型入口、`REPOPILOT_GITHUB_ENABLED=true` 和 `REPOPILOT_GITHUB_TOKEN`/`GITHUB_TOKEN` 是否到位但不失败，`--strict` 模式会在 Docker、后端真实 Coder 或远端 PR 缺项时返回非 0；Worker Planner/Coder 默认关闭只作为可选增强提示，显式启用但缺少 fixture/model/key 时才在 strict 模式失败。需要顺手启动基础依赖时可加 `--start-deps`。脚本只展示 token/key 是否配置，不打印 token、模型 key 或 Authorization header。
+真实远端 PR 演示前可运行 `./scripts/real-token-demo-check.sh` 做体检；默认模式会提示 Docker、PostgreSQL/Redis、沙箱镜像、Maven cache、后端真实 Coder、Worker Planner/Coder 可选模型入口、`REPOPILOT_REAL_GITHUB_PR_CONFIRM=create-pr`、`REPOPILOT_REAL_GITHUB_PR_REPO_URL`、`REPOPILOT_GITHUB_ENABLED=true` 和 `REPOPILOT_GITHUB_TOKEN`/`GITHUB_TOKEN` 是否到位但不失败，`--strict` 模式会在 Docker、后端真实 Coder 或远端 PR 缺项时返回非 0；Worker Planner/Coder 默认关闭只作为可选增强提示，显式启用但缺少 fixture/model/key 时才在 strict 模式失败。需要顺手启动基础依赖时可加 `--start-deps`。脚本将脱敏体检证据写入 `output/real-token-demo-check/last-run.json`，并生成中文 Markdown 操作手册 `output/real-token-demo-check/last-run.md`；脚本只展示 token/key 是否配置，不打印 token、模型 key 或 Authorization header。
 
 真实 GitHub PR 发布演示可运行 `./scripts/real-github-pr-demo.sh`。该脚本要求显式设置 `REPOPILOT_REAL_GITHUB_PR_CONFIRM=create-pr`、`REPOPILOT_REAL_GITHUB_PR_REPO_URL`、`REPOPILOT_GITHUB_ENABLED=true` 和 GitHub token，然后创建临时用户和指定 GitHub 项目，生成稳定的 User count API patch，自动审批，通过 PR preflight 后真实 push `repopilot/task-{taskId}` 分支并创建远端 PR。脚本会清理 RepoPilot 本地临时业务数据，但不会关闭远端 PR 或删除远端分支；演示时应使用可丢弃的公开仓库，且仓库内容应与 `examples/demo-spring-repo` 结构一致。当前 clone 阶段不注入 token，私有仓库需要本机 Git 已有读取凭据。
 

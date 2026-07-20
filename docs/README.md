@@ -24,6 +24,7 @@
 9. [数据库设计](./technical/database-design.md)
 10. [里程碑路线图](./management/roadmap.md)
 11. [验收清单](./management/acceptance-checklist.md)
+12. [真实 Token 演示操作手册](./management/real-token-demo-runbook.md)
 
 ## 文档维护规则
 

@@ -106,14 +106,14 @@
 
 该脚本用于真实 token 演示前做环境体检，默认只提示缺项，不因为没有模型 key 或 GitHub token 失败。它会检查：
 
-- 项目关键文件、`git`、`java`、`mvn`、`npm`、`docker` 和 Docker Compose。
+- 项目关键文件、`git`、`java`、`mvn`、`npm`、`node`、`docker` 和 Docker Compose。
 - Docker daemon、PostgreSQL/Redis Compose 状态、沙箱镜像、超时和 Maven cache。
 - 真实 Coder 所需的 `REPOPILOT_CODER_MODE=openai-compatible`、`REPOPILOT_CODER_API_KEY`/`OPENAI_API_KEY` 和 `REPOPILOT_CODER_MODEL`。
 - Worker Planner/Coder 可选模型入口所需的 `REPOPILOT_WORKER_MODEL_MODE`、`REPOPILOT_WORKER_MODEL_API_KEY`、`REPOPILOT_WORKER_MODEL_NAME`、`REPOPILOT_WORKER_CODER_MODEL_MODE`、`REPOPILOT_WORKER_CODER_MODEL_API_KEY` 和 `REPOPILOT_WORKER_CODER_MODEL_NAME`。
-- 远端 GitHub PR 所需的 `REPOPILOT_GITHUB_ENABLED=true` 和 `REPOPILOT_GITHUB_TOKEN`/`GITHUB_TOKEN`。
+- 远端 GitHub PR 所需的 `REPOPILOT_REAL_GITHUB_PR_CONFIRM=create-pr`、`REPOPILOT_REAL_GITHUB_PR_REPO_URL`、`REPOPILOT_GITHUB_ENABLED=true` 和 `REPOPILOT_GITHUB_TOKEN`/`GITHUB_TOKEN`。
 - 后端和前端端口是否已有进程监听。
 
-脚本只展示密钥是否配置，不打印 GitHub token、模型 key 或 Authorization header。Worker Planner/Coder 默认关闭时只提示可选增强；如果显式切到 `fixture` 或 `openai-compatible` 但缺少对应 fixture/model/key，`--strict` 会失败。正式演示前可使用严格模式：
+脚本会把脱敏体检证据写入 `output/real-token-demo-check/last-run.json`，并生成一份可直接照着走的中文 Markdown 手册 `output/real-token-demo-check/last-run.md`。脚本只展示密钥是否配置，不打印 GitHub token、模型 key 或 Authorization header。Worker Planner/Coder 默认关闭时只提示可选增强；如果显式切到 `fixture` 或 `openai-compatible` 但缺少对应 fixture/model/key，`--strict` 会失败。正式演示前可使用严格模式：
 
 ```bash
 ./scripts/real-token-demo-check.sh --strict
@@ -124,6 +124,8 @@
 ```bash
 ./scripts/real-token-demo-check.sh --start-deps
 ```
+
+完整操作者流程见 [真实 Token 演示操作手册](../docs/management/real-token-demo-runbook.md)。
 
 ## Real Coder Demo
 

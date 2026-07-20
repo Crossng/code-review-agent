@@ -4,6 +4,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STRICT=false
 START_DEPS=false
+ARTIFACT_DIR="${REPOPILOT_REAL_TOKEN_DEMO_CHECK_ARTIFACT_DIR:-$ROOT_DIR/output/real-token-demo-check}"
+CHECKS_FILE=""
+current_section="启动"
 
 usage() {
   cat <<'EOF'
@@ -18,8 +21,9 @@ RepoPilot 真实演示环境检查
   -h, --help   显示帮助。
 
 说明:
-  默认模式只做只读检查，缺少真实 token 时给出下一步，不会失败。
+  默认模式只做环境检查并写脱敏证据，缺少真实 token 时给出下一步，不会失败。
   脚本只展示环境变量是否配置，不打印 GitHub token、模型 key 或 Authorization header。
+  体检证据会写入 output/real-token-demo-check/last-run.json 和 last-run.md。
 EOF
 }
 
@@ -43,16 +47,35 @@ for arg in "$@"; do
   esac
 done
 
+mkdir -p "$ARTIFACT_DIR"
+CHECKS_FILE="$(mktemp "${TMPDIR:-/tmp}/repopilot-real-token-check.XXXXXX")"
+trap 'rm -f "$CHECKS_FILE"' EXIT
+
 pass_count=0
 warn_count=0
 miss_count=0
 strict_failures=0
+
+record_check() {
+  local status="$1"
+  local label="$2"
+  local detail="$3"
+  local clean_section clean_label clean_detail
+  clean_section="${current_section//$'\t'/ }"
+  clean_section="${clean_section//$'\n'/ }"
+  clean_label="${label//$'\t'/ }"
+  clean_label="${clean_label//$'\n'/ }"
+  clean_detail="${detail//$'\t'/ }"
+  clean_detail="${clean_detail//$'\n'/ }"
+  printf '%s\t%s\t%s\t%s\n' "$clean_section" "$status" "$clean_label" "$clean_detail" >> "$CHECKS_FILE"
+}
 
 line() {
   local status="$1"
   local label="$2"
   local detail="$3"
   printf '%-6s %-24s %s\n' "$status" "$label" "$detail"
+  record_check "$status" "$label" "$detail"
 }
 
 pass() {
@@ -103,6 +126,11 @@ is_fixture_mode() {
   local normalized
   normalized="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')"
   [ "$normalized" = "fixture" ]
+}
+
+is_github_repo_url() {
+  local value="$1"
+  [[ "$value" == https://github.com/*/* ]] || [[ "$value" == git@github.com:*/* ]]
 }
 
 worker_model_status() {
@@ -214,7 +242,177 @@ check_port() {
 }
 
 section() {
+  current_section="$1"
   printf '\n## %s\n' "$1"
+}
+
+write_artifacts() {
+  if ! command -v node >/dev/null 2>&1; then
+    echo "证据文件未生成：node 不可用。"
+    return
+  fi
+
+  local artifact_json="$ARTIFACT_DIR/last-run.json"
+  local artifact_markdown="$ARTIFACT_DIR/last-run.md"
+  local generated_at
+  generated_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+  REPOPILOT_CHECKS_FILE="$CHECKS_FILE" \
+  REPOPILOT_ARTIFACT_JSON="$artifact_json" \
+  REPOPILOT_ARTIFACT_MARKDOWN="$artifact_markdown" \
+  REPOPILOT_REPO_ROOT="$ROOT_DIR" \
+  REPOPILOT_GENERATED_AT="$generated_at" \
+  REPOPILOT_CHECK_MODE="$([ "$STRICT" = true ] && echo strict || echo default)" \
+  REPOPILOT_START_DEPS="$START_DEPS" \
+  REPOPILOT_PASS_COUNT="$pass_count" \
+  REPOPILOT_WARN_COUNT="$warn_count" \
+  REPOPILOT_MISS_COUNT="$miss_count" \
+  REPOPILOT_STRICT_FAILURES="$strict_failures" \
+  REPOPILOT_DOCKER_READY="$docker_ready" \
+  REPOPILOT_CODER_READY="$coder_ready" \
+  REPOPILOT_GITHUB_READY="$github_ready" \
+    node <<'NODE'
+const fs = require("node:fs");
+
+const readBool = (value) => value === "true";
+const checks = fs.readFileSync(process.env.REPOPILOT_CHECKS_FILE, "utf8")
+  .split(/\n/)
+  .filter(Boolean)
+  .map((line) => {
+    const [section, status, label, ...detailParts] = line.split("\t");
+    return { section, status, label, detail: detailParts.join("\t") };
+  });
+
+const summary = {
+  pass: Number(process.env.REPOPILOT_PASS_COUNT ?? 0),
+  warn: Number(process.env.REPOPILOT_WARN_COUNT ?? 0),
+  miss: Number(process.env.REPOPILOT_MISS_COUNT ?? 0),
+  strictFailures: Number(process.env.REPOPILOT_STRICT_FAILURES ?? 0)
+};
+summary.strictPassed = process.env.REPOPILOT_CHECK_MODE !== "strict" || summary.strictFailures === 0;
+
+const readiness = {
+  dockerReady: readBool(process.env.REPOPILOT_DOCKER_READY),
+  realCoderReady: readBool(process.env.REPOPILOT_CODER_READY),
+  remoteGithubPrReady: readBool(process.env.REPOPILOT_GITHUB_READY)
+};
+
+const recommendedCommands = [
+  {
+    name: "本地闭环演示",
+    command: "./scripts/browser-smoke.sh",
+    readiness: "无需真实 token，验证本地任务、补丁、沙箱、审批和本地 PR 草稿。"
+  },
+  {
+    name: "真实 Coder 演示",
+    command: "./scripts/real-coder-demo.sh",
+    readiness: readiness.realCoderReady
+      ? "当前真实 Coder 配置就绪。"
+      : "需要配置 REPOPILOT_CODER_MODE=openai-compatible、模型 key 和 REPOPILOT_CODER_MODEL。"
+  },
+  {
+    name: "真实 GitHub PR 演示",
+    command: "./scripts/real-github-pr-demo.sh",
+    readiness: readiness.remoteGithubPrReady
+      ? "当前远端 PR 配置就绪；执行前仍需确认演示仓库是可丢弃仓库。"
+      : "需要配置 REPOPILOT_REAL_GITHUB_PR_CONFIRM=create-pr、REPOPILOT_REAL_GITHUB_PR_REPO_URL、REPOPILOT_GITHUB_ENABLED=true 和 GitHub token。"
+  }
+];
+
+const artifact = {
+  schemaVersion: 1,
+  generatedAt: process.env.REPOPILOT_GENERATED_AT,
+  repoRoot: process.env.REPOPILOT_REPO_ROOT,
+  mode: process.env.REPOPILOT_CHECK_MODE,
+  startDeps: readBool(process.env.REPOPILOT_START_DEPS),
+  summary,
+  readiness,
+  checks,
+  recommendedCommands,
+  outputFiles: {
+    json: process.env.REPOPILOT_ARTIFACT_JSON,
+    markdown: process.env.REPOPILOT_ARTIFACT_MARKDOWN
+  },
+  secretPolicy: [
+    "仅记录 key/token 是否配置，不记录密钥明文。",
+    "不记录 Authorization header。",
+    "真实远端 PR 演示前必须使用可丢弃仓库。"
+  ]
+};
+
+fs.writeFileSync(process.env.REPOPILOT_ARTIFACT_JSON, `${JSON.stringify(artifact, null, 2)}\n`);
+
+const escapeCell = (value) => String(value ?? "").replace(/\|/g, "\\|").replace(/\n/g, " ");
+const grouped = new Map();
+for (const check of checks) {
+  if (!grouped.has(check.section)) {
+    grouped.set(check.section, []);
+  }
+  grouped.get(check.section).push(check);
+}
+
+const lines = [
+  "# RepoPilot 真实 token 演示操作手册",
+  "",
+  `生成时间：${artifact.generatedAt}`,
+  `仓库：${artifact.repoRoot}`,
+  `模式：${artifact.mode}`,
+  "",
+  "## 当前结论",
+  "",
+  `- PASS：${summary.pass}`,
+  `- WARN：${summary.warn}`,
+  `- MISS：${summary.miss}`,
+  `- Strict 关键缺项：${summary.strictFailures}`,
+  `- 严格模式结论：${summary.strictPassed ? "通过或未启用 strict" : "未通过"}`,
+  "",
+  "## 演示路径",
+  ""
+];
+
+for (const command of recommendedCommands) {
+  lines.push(`### ${command.name}`, "", command.readiness, "", "```bash", command.command, "```", "");
+}
+
+lines.push(
+  "## 正式演示前环境变量",
+  "",
+  "```bash",
+  "export REPOPILOT_CODER_MODE=openai-compatible",
+  "export REPOPILOT_CODER_API_KEY=...",
+  "export REPOPILOT_CODER_MODEL=...",
+  "export REPOPILOT_GITHUB_ENABLED=true",
+  "export REPOPILOT_GITHUB_TOKEN=...",
+  "export REPOPILOT_REAL_GITHUB_PR_CONFIRM=create-pr",
+  "export REPOPILOT_REAL_GITHUB_PR_REPO_URL=https://github.com/<owner>/<demo-repo>.git",
+  "./scripts/real-token-demo-check.sh --strict",
+  "```",
+  "",
+  "## 体检明细",
+  ""
+);
+
+for (const [section, sectionChecks] of grouped.entries()) {
+  lines.push(`### ${section}`, "", "| 状态 | 项目 | 详情 |", "| --- | --- | --- |");
+  for (const check of sectionChecks) {
+    lines.push(`| ${escapeCell(check.status)} | ${escapeCell(check.label)} | ${escapeCell(check.detail)} |`);
+  }
+  lines.push("");
+}
+
+lines.push(
+  "## 安全说明",
+  "",
+  "- 本手册只记录密钥是否配置，不记录模型 key、GitHub token 或 Authorization header。",
+  "- `real-github-pr-demo.sh` 会真实创建远端分支和 PR，请只使用可丢弃演示仓库。",
+  "- 远端 PR 和远端分支不会由脚本自动关闭或删除，方便演示留档，也需要演示后人工清理。"
+);
+
+fs.writeFileSync(process.env.REPOPILOT_ARTIFACT_MARKDOWN, `${lines.join("\n")}\n`);
+NODE
+
+  echo "JSON 证据: $artifact_json"
+  echo "Markdown 手册: $artifact_markdown"
 }
 
 echo "RepoPilot 真实演示环境检查"
@@ -236,6 +434,7 @@ check_command "git"
 check_command "java"
 check_command "mvn"
 check_command "npm"
+check_command "node"
 check_command "docker"
 
 docker_ready=false
@@ -371,7 +570,11 @@ worker_model_status \
 section "远端 GitHub PR"
 github_enabled="${REPOPILOT_GITHUB_ENABLED:-false}"
 github_base_url="${REPOPILOT_GITHUB_API_BASE_URL:-https://api.github.com}"
+github_demo_repo_url="${REPOPILOT_REAL_GITHUB_PR_REPO_URL:-}"
+github_confirm="${REPOPILOT_REAL_GITHUB_PR_CONFIRM:-}"
 github_token_ready=false
+github_demo_repo_ready=false
+github_confirm_ready=false
 github_ready=false
 
 if configured_any "REPOPILOT_GITHUB_TOKEN" "GITHUB_TOKEN"; then
@@ -379,6 +582,37 @@ if configured_any "REPOPILOT_GITHUB_TOKEN" "GITHUB_TOKEN"; then
 fi
 
 pass "GitHub API base URL" "$github_base_url"
+if [ "$github_confirm" = "create-pr" ]; then
+  github_confirm_ready=true
+  pass "GitHub PR confirm" "已显式确认 create-pr"
+else
+  detail="真实远端 PR 演示需 REPOPILOT_REAL_GITHUB_PR_CONFIRM=create-pr"
+  if [ "$STRICT" = true ]; then
+    strict_miss "GitHub PR confirm" "$detail"
+  else
+    warn "GitHub PR confirm" "$detail"
+  fi
+fi
+if [ -n "$github_demo_repo_url" ]; then
+  if is_github_repo_url "$github_demo_repo_url"; then
+    github_demo_repo_ready=true
+    pass "GitHub demo repo" "$github_demo_repo_url"
+  else
+    detail="REPOPILOT_REAL_GITHUB_PR_REPO_URL 需要是 github.com 仓库地址"
+    if [ "$STRICT" = true ]; then
+      strict_miss "GitHub demo repo" "$detail"
+    else
+      warn "GitHub demo repo" "$detail"
+    fi
+  fi
+else
+  detail="未配置 REPOPILOT_REAL_GITHUB_PR_REPO_URL"
+  if [ "$STRICT" = true ]; then
+    strict_miss "GitHub demo repo" "$detail"
+  else
+    warn "GitHub demo repo" "$detail"
+  fi
+fi
 if is_true "$github_enabled"; then
   pass "GitHub remote PR" "已启用 REPOPILOT_GITHUB_ENABLED=true"
 else
@@ -390,11 +624,11 @@ else
   warn "GitHub token" "未配置 REPOPILOT_GITHUB_TOKEN / GITHUB_TOKEN"
 fi
 
-if is_true "$github_enabled" && [ "$github_token_ready" = true ]; then
+if is_true "$github_enabled" && [ "$github_token_ready" = true ] && [ "$github_demo_repo_ready" = true ] && [ "$github_confirm_ready" = true ]; then
   github_ready=true
   pass "远端 PR 演示" "可演示；审批后会 push target branch 并调用 GitHub PR API"
 else
-  detail="本地草稿模式可演示；远端 PR 需 REPOPILOT_GITHUB_ENABLED=true 和 GitHub token"
+  detail="本地草稿模式可演示；远端 PR 需确认开关、github.com 演示仓库、REPOPILOT_GITHUB_ENABLED=true 和 GitHub token"
   if [ "$STRICT" = true ]; then
     strict_miss "远端 PR 演示" "$detail"
   else
@@ -420,6 +654,8 @@ cat <<'EOF'
   export REPOPILOT_CODER_MODEL=...
   export REPOPILOT_GITHUB_ENABLED=true
   export REPOPILOT_GITHUB_TOKEN=...
+  export REPOPILOT_REAL_GITHUB_PR_CONFIRM=create-pr
+  export REPOPILOT_REAL_GITHUB_PR_REPO_URL=https://github.com/<owner>/<demo-repo>.git
   ./scripts/real-token-demo-check.sh --strict
 
 可选 Worker 模型演示:
@@ -444,6 +680,11 @@ if [ "$STRICT" = true ]; then
   if [ "$github_ready" != true ]; then
     :
   fi
+fi
+
+write_artifacts
+
+if [ "$STRICT" = true ]; then
   if [ "$strict_failures" -gt 0 ]; then
     echo "strict 检查未通过：还有 $strict_failures 个关键缺项。"
     exit 1

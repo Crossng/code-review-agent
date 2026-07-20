@@ -262,7 +262,7 @@ Worker 写型 callback 不做透明重试，包括 `record_step`、`record_model
 
 Worker 会把恢复证据写入正式审计：模型调用的 `response.retryAttempts` 记录 Planner/Coder 模型临时失败，只读工具调用的 `output.retryAttempts` 记录后端 GET 工具临时失败，并同步 `retryAttemptCount`。后端运行报告会把这些审计汇总成 `Worker 重试恢复证据` 小节，前端任务详情也会通过 run report sections 展示该诊断。
 
-`./scripts/agent-worker-planner-smoke.sh` 会让后端 `/context` 首次返回 `503`、Planner 模型首次返回 `429`，随后验证 Worker 自动重试并恢复，并断言 tool/model audit 里的 retry 字段；`./scripts/agent-worker-coder-model-smoke.sh` 会让 Coder 模型首次返回 `429`，验证恢复后的 `LLM_CODER_DRAFT` 仍继续进入安全、沙箱、审查和审批后置门，并断言 Coder model audit 里的 retry 字段；`./scripts/agent-worker-business-smoke.sh` 会在真实 Spring Boot 后端双业务闭环中注入一次 Coder 模型 `429`，并通过标准模型审计 API 断言结构化 `retryAudit`，同时断言 run report 包含 `Worker 重试恢复证据` 小节和 Markdown，并继续验证第二个无 retry 业务场景不会误报恢复证据。
+`./scripts/agent-worker-planner-smoke.sh` 会让后端 `/context` 首次返回 `503`、Planner 模型首次返回 `429`，随后验证 Worker 自动重试并恢复，并断言 tool/model audit 里的 retry 字段；`./scripts/agent-worker-coder-model-smoke.sh` 会让 Coder 模型首次返回 `429`，验证恢复后的 `LLM_CODER_DRAFT` 仍继续进入安全、沙箱、审查和审批后置门，并断言 Coder model audit 里的 retry 字段；`./scripts/agent-worker-business-smoke.sh` 会在真实 Spring Boot 后端双业务闭环中注入一次 Coder 模型 `429`，并通过标准模型审计 API 断言结构化 `retryAudit`，同时断言 run report 包含 `Worker 重试恢复证据` 小节和 Markdown，并继续验证第二个无 retry 业务场景不会误报恢复证据。真实 token 演示前可运行 `./scripts/real-token-demo-check.sh` 生成脱敏 JSON 体检证据和中文 Markdown 操作手册。
 
 ## Backend Patch Callback
 
@@ -332,6 +332,5 @@ This keeps LangGraph wiring small and makes future model-backed nodes easier to 
 
 Next implementation steps:
 
-1. Expand model-backed Worker Coder business scenarios while preserving parser, safety, sandbox, review and approval gates.
-2. Exercise Worker-approved patches against real remote GitHub PR publishing once a token-backed demo repository is available.
-3. Promote the real-token demos into a repeatable Chinese operator runbook.
+1. Exercise Worker-approved patches against real remote GitHub PR publishing once a token-backed demo repository is available.
+2. Expand Worker Coder beyond demo User endpoints into broader Spring service/controller changes while preserving parser, safety, sandbox, review and approval gates.
