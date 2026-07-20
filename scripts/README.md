@@ -156,6 +156,28 @@ export REPOPILOT_CODER_MODEL=...
 
 如果已有后端在运行，脚本会先通过 `GET /api/settings/coder` 检查后端实际 Coder 配置；若不是 `OPENAI_COMPATIBLE` 且 ready，则直接失败并提示重启后端。脚本不会打印模型 key、GitHub token 或 Authorization header。
 
+## 远端 GitHub PR 本地替身 Smoke
+
+```bash
+./scripts/remote-github-pr-smoke.sh
+```
+
+该脚本用于在没有真实 GitHub token 的本地环境中，重复验证远端 GitHub PR 发布主路径。它不会访问 github.com，也不会创建真实 PR，而是使用本地 bare Git 仓库模拟 GitHub origin，并用本地 HTTP server 模拟 GitHub `/repos/{owner}/{repo}/pulls` API。
+
+该脚本会：
+
+- 启动 PostgreSQL 和 Redis。
+- 基于 `examples/demo-spring-repo` 初始化一个临时本地 bare Git 仓库。
+- 临时启动启用 `REPOPILOT_GITHUB_ENABLED=true` 的 Spring Boot 后端，并把 `https://github.com/repopilot-smoke/demo-spring-repo.git` 通过 Git `insteadOf` 映射到本地 bare 仓库。
+- 注册临时用户，创建 github.com 形式的项目，执行 clone 和 index。
+- 创建“远端 PR smoke：新增 User count API”任务，生成 `SPRING_USER_COUNT_RECIPE` patch，通过 Docker 沙箱测试并自动审批。
+- 检查 PR preflight 的 `publishMode=REMOTE_GITHUB_PR`，随后调用 `/api/tasks/{taskId}/pull-request`。
+- 验证后端真实执行 `git push origin repopilot/task-{taskId}`，本地 bare 仓库存在目标分支，GitHub API stub 收到 1 次 PR 创建请求。
+- 验证 PR 记录为 `OPEN`，包含 PR number、URL、target branch、commit sha、`remotePushedAt` 和 `openedAt`。
+- 将脱敏后的运行证据写入 `output/remote-github-pr-smoke/last-run.json`，并清理临时业务数据、workspace 和 Git 替身仓库。
+
+脚本使用假的本地 token，只校验 token 是否进入 Authorization header；输出和证据文件会把 Authorization header 脱敏，不打印 GitHub token、模型 key 或 Authorization header 原文。
+
 ## Real GitHub PR Demo
 
 ```bash

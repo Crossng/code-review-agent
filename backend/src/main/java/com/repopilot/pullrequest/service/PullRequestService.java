@@ -324,7 +324,7 @@ public class PullRequestService {
                 - Commit：%s
 
                 说明：
-                当前本地模式未启用 GitHub API 创建，因此 RepoPilot 只准备本地分支和提交，不创建外部 PR URL。
+                RepoPilot 会先准备本地分支和提交；启用远端 GitHub 发布时，会继续推送目标分支并创建 PR。
                 """
                 .formatted(
                         task.getDescription(),

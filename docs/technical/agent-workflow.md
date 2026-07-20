@@ -146,6 +146,8 @@ LLM CoderAgent 的 raw response 必须满足以下契约，才能进入 `patch_r
 
 真实模型 API 级端到端演示可运行 `./scripts/real-coder-demo.sh`。该脚本在真实 Coder 配置 ready 时创建临时用户和本地 demo 项目，发起一个不会命中 recipe catalog 的最小任务，要求模型只新增 `.repopilot/real-coder-demo-note.md`，然后验证 `LLM_CODER_DRAFT`、`OPENAI_COMPATIBLE`、`generate_patch` model call、diff 安全预检、Docker 沙箱 `mvn -q test` 和 `WAITING_HUMAN_APPROVAL` 暂停点。脚本会清理临时业务数据，并只输出脱敏证据。
 
+远端 GitHub PR 发布主路径可先用 `./scripts/remote-github-pr-smoke.sh` 做无 token 回归验证。脚本启动真实 Spring Boot 后端、本地 bare Git origin 和本地 GitHub API stub，用 github.com 形式项目 URL 完成 clone/index、User count API patch、沙箱测试、人工审批、PR preflight 和 `/pull-request`；随后断言本地替身收到 `git push origin repopilot/task-{taskId}`，GitHub API stub 收到 1 次 PR 创建请求，PR record 为 `OPEN`，并把脱敏证据写入 `output/remote-github-pr-smoke/last-run.json`。有真实 GitHub token 和可丢弃 demo 仓库时，再运行 `./scripts/real-github-pr-demo.sh` 验证真实远端分支 push 和 GitHub PR 创建。
+
 `GET /api/settings/coder` 提供当前 Coder 模型入口的只读脱敏状态，前端可展示 mode、provider、model、API base URL、key 是否配置、fixture 是否配置、缺失项和支持模式，但不返回 API key、fixture response、organization 或 project 原文。
 
 ## 6.4 Worker Coder 模型客户端模式

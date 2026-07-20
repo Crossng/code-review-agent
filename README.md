@@ -2,7 +2,7 @@
 
 RepoPilot 是一个面向 Java/Spring Boot 仓库的 AI 软件工程 Agent 平台。它的目标是接入 GitHub 仓库，理解项目结构，分析自然语言任务，生成代码 diff，在沙箱中运行测试，并在人工审批后创建 Pull Request。
 
-当前仓库处于规划和项目骨架搭建阶段，文档以 [docs/development-plan.md](./docs/development-plan.md) 为原始开发基准。
+当前仓库处于 MVP 闭环持续打磨阶段，文档以 [docs/development-plan.md](./docs/development-plan.md) 为原始开发基准。
 
 ## 文档入口
 
@@ -43,9 +43,10 @@ GitHub 仓库接入
 
 - `docker-compose.yml`：PostgreSQL + pgvector、Redis。
 - `backend/`：Spring Boot、Flyway、JPA、JWT 鉴权、项目 API、Agent 任务 API。
-- `backend/` now includes Git clone workspace management and JavaParser AST symbol indexing.
+- `backend/`：已包含 Git 克隆工作区管理和 JavaParser AST 符号索引。
 - `agent-worker/`：FastAPI Worker 契约和 MVP graph node 清单。
 - `frontend/`：Vite React 控制台第一屏。
+- `scripts/`：覆盖本地闭环、Worker、真实 Coder、远端 PR 本地替身和真实 GitHub PR 的中文 smoke/演示脚本。
 
 ## 本地启动
 
@@ -84,3 +85,4 @@ curl http://127.0.0.1:8080/actuator/health
 - `frontend`: `npm run build`
 - `agent-worker`: Python 语法编译检查
 - 后端真实 API 流：注册、登录、创建项目、创建 Agent 任务、启动 run、查询 step
+- `./scripts/remote-github-pr-smoke.sh`：无真实 GitHub token 时验证远端 PR push + API 主路径

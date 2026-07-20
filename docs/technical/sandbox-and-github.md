@@ -112,7 +112,7 @@ REPOPILOT_GITHUB_API_BASE_URL=https://api.github.com
 
 `GET /api/tasks/{id}/pull-request/preflight` 提供任务级 PR 发布前置检查，覆盖任务状态、patch 审批、沙箱测试、本地草稿准备、远程 GitHub 仓库资格和 token 配置。该接口只读，不创建分支或 PR，供控制台在审批前后展示 blocker 和 warning。
 
-远端发布链路的本地验证使用临时 bare Git 仓库模拟 `origin`，并用本地 HTTP server 模拟 GitHub `/repos/{owner}/{repo}/pulls` API。测试会真实执行 `git push origin {targetBranch}`，断言远端分支存在、PR API 收到脱敏 token header、title/head/base/body 正确，并确认服务返回 PR number/url。这样即使没有真实 GitHub token，也可以重复验证 push + GitHub API 创建 PR 的主路径。
+远端发布链路的本地验证可运行 `./scripts/remote-github-pr-smoke.sh`。脚本使用临时 bare Git 仓库模拟 `origin`，并用本地 HTTP server 模拟 GitHub `/repos/{owner}/{repo}/pulls` API；后端仍以 `REPOPILOT_GITHUB_ENABLED=true`、github.com 形式仓库 URL 和标准用户 API 流程运行。脚本会真实执行 `git push origin {targetBranch}`，断言远端替身分支存在、PR API 收到 token header、title/head/base/body 正确，并确认服务返回 PR number/url 和 `OPEN` PR 记录。这样即使没有真实 GitHub token，也可以重复验证 push + GitHub API 创建 PR 的主路径；脱敏证据写入 `output/remote-github-pr-smoke/last-run.json`。
 
 PR body 模板：
 

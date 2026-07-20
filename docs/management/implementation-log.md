@@ -4231,6 +4231,37 @@ Python Agent Worker 从“所有初始节点和 helper 都堆在 `initial_nodes.
 - 在安装完整 `agent-worker` 依赖的运行环境中补充一次 `graph_engine=LANGGRAPH` 的真实依赖 smoke 证据。
 - 开始把确定性 planning/patch 节点替换为可配置的模型驱动节点，同时继续复用现有审计和安全后置门。
 
+## 2026-07-20, Slice 120 - 远端PR本地替身发布验证版
+
+远端 GitHub PR 发布链路从服务层单测推进到可重复的 API 级 smoke：无需真实 GitHub token，脚本会启动真实 Spring Boot 后端、本地 bare Git origin 和本地 GitHub PR API stub，完整穿过 clone/index、Agent 任务、recipe patch、沙箱测试、人工审批、PR preflight、分支 push 和 PR 创建接口。
+
+### Added
+
+- 新增 `./scripts/remote-github-pr-smoke.sh`，负责启动 PostgreSQL/Redis、传入 smoke 专用 workspace/Git 目录、调用 Node 主脚本并清理临时业务数据。
+- 新增 `./scripts/remote-github-pr-smoke.mjs`，基于 `examples/demo-spring-repo` 初始化本地 bare Git 仓库，使用 github.com 形式 repo URL 创建项目，并通过 Git `insteadOf` 把 clone/push 映射到本地替身仓库。
+- Node smoke 内置本地 GitHub API stub，断言 `/repos/repopilot-smoke/demo-spring-repo/pulls` 收到 1 次 POST、Authorization header 存在、GitHub API version、title/head/base/body 符合预期。
+- Smoke 使用真实后端 API 创建 User count API 任务，验证 `SPRING_USER_COUNT_RECIPE`、`LOCAL_RECIPE_CATALOG`、`validate_patch_safety`、`run_tests`、`review_patch`、人工审批、`publishMode=REMOTE_GITHUB_PR` 和最终 `OPEN` PR record。
+- 运行证据写入 `output/remote-github-pr-smoke/last-run.json`，只保存 Authorization header 的 `<redacted>` 标记，不落 GitHub token、模型 key 或 Authorization header 原文。
+- PR body 的通用说明从“本地模式未启用 GitHub API”改为“先准备本地分支和提交；启用远端 GitHub 发布时继续推送并创建 PR”，避免真实远端 PR 描述出现错误语义。
+- 脚本 README、沙箱/GitHub 集成设计、Agent workflow、真实 token 演示手册、验收清单和根 README 同步远端 PR 本地替身 smoke。
+
+### Verified
+
+- `./scripts/remote-github-pr-smoke.sh` passes，生成 `OPEN` PR record，stub PR number 为 `987`，`githubApiRequest.requestCount=1`，Authorization 证据为 `<redacted>`，证据中不包含 fake token 原文。
+- Smoke cleanup leaves `0` `remote-github-pr-smoke-%` users.
+- `rg --files scripts -g '*.sh' | xargs bash -n` passes.
+- `rg --files scripts -g '*.mjs' | xargs -n1 node --check` passes.
+- `PYTHONPATH=. python3 -m unittest discover -s tests` passes in `agent-worker` with 25 tests.
+- `mvn -q -Dmaven.repo.local=../.m2 test` passes.
+- `npm run build` passes.
+- `git diff --check` passes.
+- Ports `8080` and `8090` have no listening process after smoke runs.
+
+### Next
+
+- 在真实 GitHub token 和可丢弃 demo 仓库环境中继续保留 `./scripts/real-github-pr-demo.sh` 作为正式外网演示路线。
+- 继续推进 MCP Tool Server 的可运行契约和工具能力封装。
+
 ## 2026-07-17, Slice 119 - Worker图执行器LangGraph适配版
 
 Python Agent Worker 从“自研轻量顺序 runner”推进到“LangGraph 优先、顺序兜底”的图执行器：`WorkerGraphRunner` 在 `langgraph` 依赖可导入时会用 `StateGraph(AgentRunState)` 编译初始节点链，并通过 `compile().invoke(...)` 执行；本地开发环境未安装 `langgraph` 时只在 `ImportError` 下回退为同序顺序执行，并通过 `/health.graph_engine` 明确暴露当前引擎。
