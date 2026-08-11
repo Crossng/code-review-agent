@@ -2316,96 +2316,207 @@ function McpToolSettingsPanel({ settings }: { settings: McpToolSettings | null }
 }
 
 function McpToolCatalogDetails({ tools }: { tools: McpToolSummary[] }) {
-  const groupedTools = useMemo(() => groupMcpToolsByCategory(tools), [tools]);
+  const [query, setQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("ALL");
+  const [accessModeFilter, setAccessModeFilter] = useState("ALL");
+  const queryInputId = useId();
+  const categorySelectId = useId();
+  const accessModeSelectId = useId();
+  const categories = useMemo(() => {
+    return Array.from(new Set(tools.map((tool) => tool.category || "未分类")))
+      .sort((left, right) => left.localeCompare(right));
+  }, [tools]);
+  const accessModes = useMemo(() => {
+    return Array.from(new Set(tools.map((tool) => tool.accessMode || "UNKNOWN")))
+      .sort((left, right) => left.localeCompare(right));
+  }, [tools]);
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredTools = useMemo(() => {
+    return tools
+      .filter((tool) => categoryFilter === "ALL" || (tool.category || "未分类") === categoryFilter)
+      .filter((tool) => accessModeFilter === "ALL" || (tool.accessMode || "UNKNOWN") === accessModeFilter)
+      .filter((tool) => mcpToolMatchesQuery(tool, normalizedQuery));
+  }, [accessModeFilter, categoryFilter, normalizedQuery, tools]);
+  const groupedTools = useMemo(() => groupMcpToolsByCategory(filteredTools), [filteredTools]);
+  const filtersActive = query.trim() !== "" || categoryFilter !== "ALL" || accessModeFilter !== "ALL";
 
-  if (groupedTools.length === 0) {
+  if (tools.length === 0) {
     return <EmptyText text="工具目录暂未返回工具详情。" />;
   }
 
   return (
-    <div className="mcpToolCatalog" aria-label="MCP 工具详情">
-      {groupedTools.map((group) => (
-        <section className="mcpToolCategory" aria-label={`${group.category} 工具`} key={group.category}>
-          <div className="mcpToolCategoryHeader">
-            <h4>{group.category}</h4>
-            <span>{group.tools.length} 个工具</span>
-          </div>
-          <div className="mcpToolDetailList">
-            {group.tools.map((tool) => {
-              const toolArguments = tool.arguments ?? [];
-              const safetyRules = tool.safetyRules ?? [];
-              return (
-                <article className="mcpToolDetailCard" data-mode={tool.accessMode} key={tool.name}>
-                  <div className="mcpToolDetailHeader">
-                    <div>
-                      <strong>{tool.title || tool.name}</strong>
-                      <code>{tool.name}</code>
-                    </div>
-                    <div className="mcpToolDetailBadges">
-                      <Badge value={tool.accessMode || "UNKNOWN"} />
-                      {tool.mvp ? <Badge value="MVP" /> : null}
-                      {tool.auditRequired ? <Badge value="AUDIT" /> : null}
-                      {tool.approvalRequired ? <Badge value="APPROVAL" /> : null}
-                    </div>
-                  </div>
-                  {tool.description ? (
-                    <p className="mcpToolDescription">{tool.description}</p>
-                  ) : null}
-                  <div className="mcpBridgeLine">
-                    <span>后端桥</span>
-                    <code>{tool.backendBridge || "未声明"}</code>
-                  </div>
-                  <div className="mcpToolDetailColumns">
-                    <div>
-                      <h5>参数 schema</h5>
-                      {toolArguments.length > 0 ? (
-                        <div className="mcpArgumentList">
-                          {toolArguments.map((argument) => {
-                            const allowedValues = argument.allowedValues ?? [];
-                            const defaultValue = mcpDefaultValueText(argument.defaultValue);
-                            return (
-                              <div className="mcpArgumentRow" key={argument.name}>
-                                <div>
-                                  <strong>{argument.name}</strong>
-                                  <span>{argument.description || "未提供说明"}</span>
-                                </div>
-                                <div className="mcpArgumentMeta">
-                                  <span>{argument.type || "unknown"}</span>
-                                  <span>{argument.required ? "必填" : "可选"}</span>
-                                  {defaultValue === null ? null : <span>默认 {defaultValue}</span>}
-                                  {allowedValues.length > 0 ? (
-                                    <span>枚举 {summarizeList(allowedValues, 3)}</span>
-                                  ) : null}
-                                </div>
-                              </div>
-                            );
-                          })}
+    <>
+      <div className="mcpToolFilterBar" aria-label="MCP 工具筛选">
+        <label htmlFor={queryInputId}>
+          <span>搜索</span>
+          <input
+            id={queryInputId}
+            type="search"
+            placeholder="工具名、标题、说明或后端桥"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </label>
+        <label htmlFor={categorySelectId}>
+          <span>分类</span>
+          <select
+            id={categorySelectId}
+            value={categoryFilter}
+            onChange={(event) => setCategoryFilter(event.target.value)}
+          >
+            <option value="ALL">全部分类</option>
+            {categories.map((category) => (
+              <option value={category} key={category}>{category}</option>
+            ))}
+          </select>
+        </label>
+        <label htmlFor={accessModeSelectId}>
+          <span>模式</span>
+          <select
+            id={accessModeSelectId}
+            value={accessModeFilter}
+            onChange={(event) => setAccessModeFilter(event.target.value)}
+          >
+            <option value="ALL">全部模式</option>
+            {accessModes.map((mode) => (
+              <option value={mode} key={mode}>{mcpAccessModeLabel(mode)}</option>
+            ))}
+          </select>
+        </label>
+        <button
+          className="ghostButton"
+          type="button"
+          disabled={!filtersActive}
+          onClick={() => {
+            setQuery("");
+            setCategoryFilter("ALL");
+            setAccessModeFilter("ALL");
+          }}
+        >
+          重置
+        </button>
+        <span className="filterSummary">显示 {filteredTools.length}/{tools.length} 个工具</span>
+      </div>
+      {groupedTools.length === 0 ? (
+        <EmptyText text="没有工具匹配当前筛选。" />
+      ) : (
+        <div className="mcpToolCatalog" aria-label="MCP 工具详情">
+          {groupedTools.map((group) => (
+            <section className="mcpToolCategory" aria-label={`${group.category} 工具`} key={group.category}>
+              <div className="mcpToolCategoryHeader">
+                <h4>{group.category}</h4>
+                <span>{group.tools.length} 个工具</span>
+              </div>
+              <div className="mcpToolDetailList">
+                {group.tools.map((tool) => {
+                  const toolArguments = tool.arguments ?? [];
+                  const safetyRules = tool.safetyRules ?? [];
+                  return (
+                    <article className="mcpToolDetailCard" data-mode={tool.accessMode} key={tool.name}>
+                      <div className="mcpToolDetailHeader">
+                        <div>
+                          <strong>{tool.title || tool.name}</strong>
+                          <code>{tool.name}</code>
                         </div>
-                      ) : (
-                        <p className="mcpMutedText">未声明参数。</p>
-                      )}
-                    </div>
-                    <div>
-                      <h5>安全规则</h5>
-                      {safetyRules.length > 0 ? (
-                        <ul className="mcpSafetyList">
-                          {safetyRules.map((rule) => (
-                            <li key={rule}>{rule}</li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="mcpMutedText">未声明额外安全规则。</p>
-                      )}
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        </section>
-      ))}
-    </div>
+                        <div className="mcpToolDetailBadges">
+                          <Badge value={tool.accessMode || "UNKNOWN"} />
+                          {tool.mvp ? <Badge value="MVP" /> : null}
+                          {tool.auditRequired ? <Badge value="AUDIT" /> : null}
+                          {tool.approvalRequired ? <Badge value="APPROVAL" /> : null}
+                        </div>
+                      </div>
+                      {tool.description ? (
+                        <p className="mcpToolDescription">{tool.description}</p>
+                      ) : null}
+                      <div className="mcpBridgeLine">
+                        <span>后端桥</span>
+                        <code>{tool.backendBridge || "未声明"}</code>
+                      </div>
+                      <div className="mcpToolDetailColumns">
+                        <div>
+                          <h5>参数 schema</h5>
+                          {toolArguments.length > 0 ? (
+                            <div className="mcpArgumentList">
+                              {toolArguments.map((argument) => {
+                                const allowedValues = argument.allowedValues ?? [];
+                                const defaultValue = mcpDefaultValueText(argument.defaultValue);
+                                return (
+                                  <div className="mcpArgumentRow" key={argument.name}>
+                                    <div>
+                                      <strong>{argument.name}</strong>
+                                      <span>{argument.description || "未提供说明"}</span>
+                                    </div>
+                                    <div className="mcpArgumentMeta">
+                                      <span>{argument.type || "unknown"}</span>
+                                      <span>{argument.required ? "必填" : "可选"}</span>
+                                      {defaultValue === null ? null : <span>默认 {defaultValue}</span>}
+                                      {allowedValues.length > 0 ? (
+                                        <span>枚举 {summarizeList(allowedValues, 3)}</span>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <p className="mcpMutedText">未声明参数。</p>
+                          )}
+                        </div>
+                        <div>
+                          <h5>安全规则</h5>
+                          {safetyRules.length > 0 ? (
+                            <ul className="mcpSafetyList">
+                              {safetyRules.map((rule) => (
+                                <li key={rule}>{rule}</li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="mcpMutedText">未声明额外安全规则。</p>
+                          )}
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
+        </div>
+      )}
+    </>
   );
+}
+
+function mcpToolMatchesQuery(tool: McpToolSummary, normalizedQuery: string) {
+  if (normalizedQuery === "") {
+    return true;
+  }
+  const searchableText = [
+    tool.name,
+    tool.title,
+    tool.category,
+    tool.description,
+    tool.accessMode,
+    tool.backendBridge,
+    ...(tool.arguments ?? []).flatMap((argument) => [
+      argument.name,
+      argument.type,
+      argument.description,
+      ...(argument.allowedValues ?? [])
+    ]),
+    ...(tool.safetyRules ?? [])
+  ].join(" ").toLowerCase();
+  return searchableText.includes(normalizedQuery);
+}
+
+function mcpAccessModeLabel(mode: string) {
+  if (mode === "READ") {
+    return "READ 读取";
+  }
+  if (mode === "WRITE") {
+    return "WRITE 写入";
+  }
+  return mode;
 }
 
 function groupMcpToolsByCategory(tools: McpToolSummary[]) {

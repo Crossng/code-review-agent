@@ -105,6 +105,7 @@ Agent 执行页必须特别处理长任务状态：
 | `CoderSettingsPanel` | 用中文标签展示当前 Coder mode、provider、model、API base URL、key 是否配置、fixture 是否配置、缺失配置项和支持模式；不展示任何密钥或 fixture 原文 |
 | `GitHubSettingsPanel` | 用中文标签展示当前 GitHub PR 发布模式、provider、API base URL、token 是否配置、远程发布是否启用和缺失配置项；不展示 token 原文 |
 | `SandboxSettingsPanel` | 用中文标签展示 Docker daemon、sandbox image、Maven cache、workspace root、timeout 和 readiness 检查；不启动测试容器 |
+| `McpToolSettingsPanel` | 用中文标签展示 MCP 工具目录协议、工具数量、读/写工具、审批门、就绪检查、关键工具和服务地址；工具详情支持按工具名/标题/说明/后端桥搜索，按分类和读写模式筛选，展示筛选命中数量、重置入口、空结果状态、参数 schema、安全规则和 backend bridge |
 
 ## 6. 交互约束
 

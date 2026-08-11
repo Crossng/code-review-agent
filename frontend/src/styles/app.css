@@ -671,6 +671,48 @@ textarea {
   margin-bottom: 14px;
 }
 
+.mcpToolFilterBar {
+  align-items: end;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(220px, 1.2fr) minmax(150px, 0.7fr) minmax(130px, 0.6fr) max-content max-content;
+  margin: 0 0 12px;
+  padding: 10px;
+}
+
+.mcpToolFilterBar label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.mcpToolFilterBar label span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.mcpToolFilterBar input,
+.mcpToolFilterBar select {
+  padding: 8px 10px;
+}
+
+.mcpToolFilterBar .ghostButton {
+  padding: 9px 10px;
+}
+
+.mcpToolFilterBar .filterSummary {
+  align-self: center;
+  justify-self: end;
+  margin: 0;
+  white-space: nowrap;
+}
+
 .mcpToolCategory {
   border-top: 1px solid var(--line);
   padding-top: 12px;
@@ -1885,6 +1927,7 @@ textarea {
   .githubSettingsGrid,
   .sandboxSettingsGrid,
   .mcpToolSettingsGrid,
+  .mcpToolFilterBar,
   .historyItem,
   .changedFileRow,
   .reviewFindingRow,
@@ -1904,6 +1947,10 @@ textarea {
   .mcpToolDetailBadges,
   .mcpArgumentMeta {
     justify-content: flex-start;
+  }
+
+  .mcpToolFilterBar .filterSummary {
+    justify-self: start;
   }
 
   .apiParams,

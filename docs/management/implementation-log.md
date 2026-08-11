@@ -4231,6 +4231,39 @@ Python Agent Worker 从“所有初始节点和 helper 都堆在 `initial_nodes.
 - 在安装完整 `agent-worker` 依赖的运行环境中补充一次 `graph_engine=LANGGRAPH` 的真实依赖 smoke 证据。
 - 开始把确定性 planning/patch 节点替换为可配置的模型驱动节点，同时继续复用现有审计和安全后置门。
 
+## 2026-08-11, Slice 126 - 工具目录筛选版
+
+MCP 工具目录从“能展开查看”继续走向“工具多了也能快速定位”：配置区的工具详情现在可以按关键词、分类和读写模式筛选，筛选后仍保留按分类分组、参数 schema、安全规则和 backend bridge 的完整展示。
+
+### Added
+
+- `McpToolCatalogDetails` 新增工具搜索框，覆盖工具名、中文标题、分类、说明、访问模式、backend bridge、参数 schema 和安全规则。
+- 工具详情新增分类筛选和读写模式筛选，选项从当前 MCP 目录动态生成。
+- 筛选结果继续按分类分组展示，并显示 `显示 N/M 个工具`。
+- 无匹配结果时展示中文空状态；无筛选时重置按钮自动禁用。
+- `app.css` 为筛选条补齐桌面密集横排和移动端单列布局。
+- 前端页面规格和验收清单同步 `McpToolSettingsPanel` 的筛选能力。
+
+### Verified
+
+- `docker compose up -d postgres redis` passes.
+- `docker compose exec -T postgres pg_isready -U repopilot -d repopilot` passes.
+- `docker compose exec -T redis redis-cli ping` passes.
+- `npm run build` passes in `frontend`.
+- `mvn -q -Dmaven.repo.local=../.m2 test` passes in `backend`.
+- `mvn -q -Dmaven.repo.local=../.m2 test` passes in `mcp-tool-server`.
+- `PYTHONPATH=. python3 -m unittest discover -s tests` passes in `agent-worker`.
+- `rg --files scripts -g '*.sh' | xargs bash -n` passes.
+- `rg --files scripts -g '*.mjs' | xargs -n1 node --check` passes.
+- `./scripts/mcp-tool-server-smoke.sh` passes.
+- `git diff --check` passes.
+- `lsof -nP -iTCP:8095 -sTCP:LISTEN` returns no listener.
+
+### Next
+
+- 给 MCP 工具详情筛选状态增加 URL 参数恢复，方便复制某个工具目录视图给别人排查。
+- 继续把 Worker Coder 从 stub 双场景推进到真实 token 演示质量。
+
 ## 2026-08-11, Slice 125 - 工具契约报告可见版
 
 MCP 工具契约快照从“工具审计面板可见”继续进入后端运行报告：现在 run report 会把当前 run 的 `mcp_tool_snapshot_json` 汇总成 `MCP 工具契约快照` section，复制、下载和保存报告快照时都能看到协议版本、目录匹配、后端 bridge、参数数量和安全规则摘要。
