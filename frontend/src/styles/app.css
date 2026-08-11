@@ -611,9 +611,14 @@ textarea {
   content-visibility: auto;
 }
 
+.mcpToolSettingsPanel {
+  content-visibility: auto;
+}
+
 .coderSettingsGrid,
 .githubSettingsGrid,
-.sandboxSettingsGrid {
+.sandboxSettingsGrid,
+.mcpToolSettingsGrid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
@@ -627,6 +632,37 @@ textarea {
 
 .compactDescription {
   margin-bottom: 0;
+}
+
+.mcpToolList {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.mcpToolRow {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  padding: 10px 12px;
+}
+
+.mcpToolRow[data-missing="true"] {
+  border-color: rgba(180, 51, 51, 0.34);
+  background: #fff8f6;
+}
+
+.mcpToolRow strong {
+  display: block;
+  font-size: 0.9rem;
+}
+
+.mcpToolRow span {
+  color: var(--muted);
+  font-size: 0.78rem;
 }
 
 .insightGrid {
@@ -1622,6 +1658,7 @@ textarea {
   .coderSettingsGrid,
   .githubSettingsGrid,
   .sandboxSettingsGrid,
+  .mcpToolSettingsGrid,
   .historyItem,
   .changedFileRow,
   .reviewFindingRow,

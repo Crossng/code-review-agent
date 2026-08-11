@@ -20,6 +20,7 @@ import {
   DashboardRunMetrics,
   DashboardSummary,
   GitHubSettings,
+  McpToolSettings,
   ModelCallLog,
   PatchChangedFile,
   PatchRecord,
@@ -54,6 +55,7 @@ import {
   getDashboardRunMetrics,
   getDashboardSummary,
   getGitHubSettings,
+  getMcpToolSettings,
   getPullRequestPreflight,
   getSandboxSettings,
   getTask,
@@ -617,6 +619,7 @@ export function App() {
   const [coderSettings, setCoderSettings] = useState<CoderSettings | null>(null);
   const [githubSettings, setGitHubSettings] = useState<GitHubSettings | null>(null);
   const [sandboxSettings, setSandboxSettings] = useState<SandboxSettings | null>(null);
+  const [mcpToolSettings, setMcpToolSettings] = useState<McpToolSettings | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<number | "">(initialSelectedProjectId);
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(initialSelectedTaskId);
   const [details, setDetails] = useState<TaskDetails>(emptyDetails);
@@ -676,6 +679,7 @@ export function App() {
       setCoderSettings(null);
       setGitHubSettings(null);
       setSandboxSettings(null);
+      setMcpToolSettings(null);
       setDetails(emptyDetails);
       setSelectedProjectId("");
       setProjectInsight(emptyProjectInsight);
@@ -908,7 +912,8 @@ export function App() {
         [nextDashboardSummary, nextDashboardRunMetrics, nextDashboardActivity],
         nextCoderSettings,
         nextGitHubSettings,
-        nextSandboxSettings
+        nextSandboxSettings,
+        nextMcpToolSettings
       ] = await Promise.all([
         listProjects(authToken),
         listProjects(authToken, projectFilters),
@@ -916,7 +921,8 @@ export function App() {
         fetchDashboard(authToken),
         getCoderSettings(authToken),
         getGitHubSettings(authToken),
-        getSandboxSettings(authToken)
+        getSandboxSettings(authToken),
+        getMcpToolSettings(authToken)
       ]);
       setProjects(nextProjects);
       setProjectRows(nextProjectRows);
@@ -927,6 +933,7 @@ export function App() {
       setCoderSettings(nextCoderSettings);
       setGitHubSettings(nextGitHubSettings);
       setSandboxSettings(nextSandboxSettings);
+      setMcpToolSettings(nextMcpToolSettings);
       if (nextProjects.length > 0 && taskProjectId === "") {
         setTaskProjectId(nextProjects[0].id);
       }
@@ -1300,10 +1307,12 @@ export function App() {
               coderSettings={coderSettings}
               githubSettings={githubSettings}
               sandboxSettings={sandboxSettings}
+              mcpToolSettings={mcpToolSettings}
             />
             <CoderSettingsPanel settings={coderSettings} />
             <GitHubSettingsPanel settings={githubSettings} />
             <SandboxSettingsPanel settings={sandboxSettings} />
+            <McpToolSettingsPanel settings={mcpToolSettings} />
           </section>
         ) : null}
 
@@ -1922,19 +1931,21 @@ type DemoReadinessItem = {
 function DemoReadinessPanel({
   coderSettings,
   githubSettings,
-  sandboxSettings
+  sandboxSettings,
+  mcpToolSettings
 }: {
   coderSettings: CoderSettings | null;
   githubSettings: GitHubSettings | null;
   sandboxSettings: SandboxSettings | null;
+  mcpToolSettings: McpToolSettings | null;
 }) {
-  const items = demoReadinessItems(coderSettings, githubSettings, sandboxSettings);
+  const items = demoReadinessItems(coderSettings, githubSettings, sandboxSettings, mcpToolSettings);
   return (
     <section className="panel demoReadinessPanel">
       <div className="panelHeader">
         <div>
           <p className="eyebrow">演示就绪</p>
-          <h2>本地闭环、真实模型、远端 PR</h2>
+          <h2>本地闭环、工具目录、真实模型、远端 PR</h2>
         </div>
         <Badge value={items.some((item) => item.status === "需要配置") ? "CHECK" : "READY"} />
       </div>
@@ -1961,20 +1972,22 @@ function DemoReadinessPanel({
 function demoReadinessItems(
   coderSettings: CoderSettings | null,
   githubSettings: GitHubSettings | null,
-  sandboxSettings: SandboxSettings | null
+  sandboxSettings: SandboxSettings | null,
+  mcpToolSettings: McpToolSettings | null
 ): DemoReadinessItem[] {
-  if (coderSettings === null || githubSettings === null || sandboxSettings === null) {
+  if (coderSettings === null || githubSettings === null || sandboxSettings === null || mcpToolSettings === null) {
     return [
       {
         title: "演示环境",
         status: "加载中",
-        summary: "正在读取 Coder、GitHub 和 Sandbox 配置。",
+        summary: "正在读取 Coder、GitHub、Sandbox 和 MCP 工具目录配置。",
         details: ["配置接口会脱敏返回状态，不会暴露模型 key 或 GitHub token。"]
       }
     ];
   }
 
   const sandboxReady = sandboxSettings.ready;
+  const mcpReady = mcpToolSettings.ready;
   const modelMode = coderSettings.mode.toLowerCase();
   const realCoderMode = modelMode === "openai" || modelMode === "openai-compatible";
   const realCoderReady = realCoderMode && coderSettings.ready;
@@ -1992,6 +2005,26 @@ function demoReadinessItems(
         `沙箱镜像：${sandboxSettings.dockerImage ?? "未配置"}`,
         githubSettings.localDraftMode ? "GitHub 远端发布关闭时仍会生成 DRAFT_READY 记录。" : "当前已启用远端 GitHub 发布。"
       ])
+    },
+    {
+      title: "MCP 工具目录",
+      status: mcpReady ? "可演示" : "需要配置",
+      summary: mcpReady
+        ? "工具目录服务已接入控制台，读写工具、协议版本和审批门都可见。"
+        : "独立工具目录服务暂不可用，Agent 工具执行仍走后端内部桥接。",
+      details: mcpReady
+        ? compactStrings([
+            `协议：${mcpToolSettings.protocolVersion ?? "未知"}`,
+            `工具：${mcpToolSettings.toolCount} 个，读 ${mcpToolSettings.readToolCount} / 写 ${mcpToolSettings.writeToolCount}`,
+            `写型审批门：${mcpToolSettings.approvalRequiredToolCount}/${mcpToolSettings.writeToolCount}`
+          ])
+        : compactStrings([
+            "启动 mcp-tool-server：cd mcp-tool-server && mvn spring-boot:run。",
+            "默认地址为 REPOPILOT_MCP_TOOL_SERVER_URL=http://127.0.0.1:8095。",
+            mcpToolSettings.missingRequirements.length > 0
+              ? `当前缺少：${mcpToolSettings.missingRequirements.join(", ")}`
+              : null
+          ])
     },
     {
       title: "真实模型演示",
@@ -2187,6 +2220,87 @@ function SandboxSettingsPanel({ settings }: { settings: SandboxSettings | null }
           ) : null}
           <p className="description compactDescription">
             Maven 缓存路径：{settings.mavenCachePath}。工作区根目录：{settings.workspaceRoot}。
+          </p>
+        </>
+      )}
+    </section>
+  );
+}
+
+function McpToolSettingsPanel({ settings }: { settings: McpToolSettings | null }) {
+  const readinessLabel = settings === null
+    ? "Loading"
+    : settings.ready
+      ? "READY"
+      : "NEEDS CONFIG";
+  return (
+    <section className="panel mcpToolSettingsPanel">
+      <div className="panelHeader">
+        <div>
+          <p className="eyebrow">MCP 工具目录</p>
+          <h2>工具契约与审批门</h2>
+        </div>
+        <div className="headerBadges">
+          {settings ? <Badge value="MCP" /> : null}
+          <Badge value={readinessLabel} />
+        </div>
+      </div>
+      {settings === null ? (
+        <EmptyText text="正在加载 MCP 工具目录配置。" />
+      ) : (
+        <>
+          <div className="metaGrid mcpToolSettingsGrid">
+            <Meta label="协议" value={settings.protocolVersion ?? "未连接"} />
+            <Meta label="工具数" value={`${settings.toolCount}`} />
+            <Meta label="读/写" value={`${settings.readToolCount}/${settings.writeToolCount}`} />
+            <Meta label="审批门" value={`${settings.approvalRequiredToolCount}/${settings.writeToolCount}`} />
+          </div>
+          <div className="settingsDetails">
+            <span className="paramChip"><strong>健康</strong> {settings.healthAvailable ? settings.healthStatus ?? "UP" : settings.healthCheckEnabled ? "不可用" : "未检查"}</span>
+            <span className="paramChip"><strong>MVP</strong> {settings.mvpToolCount} 个工具</span>
+            <span className="paramChip"><strong>审计</strong> {settings.auditRequiredToolCount}/{settings.toolCount}</span>
+            <span className="paramChip"><strong>必备工具</strong> {settings.requiredToolsPresent ? "已齐" : "缺失"}</span>
+          </div>
+          <div className="sectionHeader">
+            <h3>目录就绪检查</h3>
+            <span>{settings.checks.length} 项检查</span>
+          </div>
+          <div className="preflightCheckList" aria-label="MCP 工具目录就绪检查">
+            {settings.checks.map((check) => (
+              <div className="preflightCheckRow" data-status={check.status} key={check.code}>
+                <Badge value={check.status} />
+                <div>
+                  <strong>{check.label}</strong>
+                  <span>{check.message}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="sectionHeader">
+            <h3>关键工具</h3>
+            <span>{settings.requiredToolsPresent ? "全部可见" : "需要补齐"}</span>
+          </div>
+          <div className="mcpToolList">
+            {settings.requiredTools.map((toolName) => {
+              const tool = settings.tools.find((candidate) => candidate.name === toolName);
+              return (
+                <div className="mcpToolRow" data-missing={tool ? "false" : "true"} key={toolName}>
+                  <div>
+                    <strong>{tool?.title ?? toolName}</strong>
+                    <span>{tool?.category ?? "目录未返回"} · {tool?.accessMode ?? "MISSING"}</span>
+                  </div>
+                  <Badge value={tool ? (tool.approvalRequired ? "APPROVAL" : "READ") : "MISSING"} />
+                </div>
+              );
+            })}
+          </div>
+          {settings.missingRequirements.length > 0 ? (
+            <div className="errorBox">
+              缺少 MCP 工具目录要求：{settings.missingRequirements.join(", ")}
+            </div>
+          ) : null}
+          <p className="description compactDescription">
+            服务地址：{settings.baseUrl}。分类：{settings.categories.length > 0 ? summarizeList(settings.categories, 4) : "未读取"}。
           </p>
         </>
       )}

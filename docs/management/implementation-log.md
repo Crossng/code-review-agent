@@ -4231,6 +4231,38 @@ Python Agent Worker 从“所有初始节点和 helper 都堆在 `initial_nodes.
 - 在安装完整 `agent-worker` 依赖的运行环境中补充一次 `graph_engine=LANGGRAPH` 的真实依赖 smoke 证据。
 - 开始把确定性 planning/patch 节点替换为可配置的模型驱动节点，同时继续复用现有审计和安全后置门。
 
+## 2026-08-11, Slice 122 - 工具目录控制台接入版
+
+MCP 工具目录从“独立服务可跑”推进到“产品控制台可见”：后端新增脱敏配置接口读取 `mcp-tool-server` 的健康检查和工具目录，前端配置区新增 MCP 工具目录面板，演示就绪总览也把工具目录作为本地演示能力的一部分展示出来。
+
+### Added
+
+- 后端新增 `GET /api/settings/mcp-tools`，需要用户 JWT，默认读取 `REPOPILOT_MCP_TOOL_SERVER_URL=http://127.0.0.1:8095`。
+- 新增 `McpToolSettingsService`，读取 `/actuator/health` 和 `/api/mcp/tools`，归纳 provider、ready、baseUrl、healthStatus、serviceName、protocolVersion、toolCount、mvp/read/write/audit/approvalRequired 计数、关键工具缺失项、分类、工具摘要和 checks。
+- 健康检查失败时直接返回 `ready=false`、中文阻塞项并跳过后续目录请求，避免控制台加载被连续超时拖慢。
+- 新增 `McpToolSettingsControllerIntegrationTest`，使用本地 HTTP stub 验证鉴权、健康检查、协议版本、关键工具、写型工具审批门和不泄漏 secret。
+- 前端新增 `McpToolSettings` 类型、`getMcpToolSettings(...)` API、`McpToolSettingsPanel` 和演示就绪总览中的 `MCP 工具目录` 项。
+- 根 README、MCP 工具设计、架构文档和验收清单同步控制台接入边界。
+
+### Verified
+
+- `mvn -q -Dmaven.repo.local=../.m2 -Dtest=McpToolSettingsControllerIntegrationTest test` passes in `backend`.
+- `docker compose up -d postgres redis`, `docker compose exec -T postgres pg_isready -U repopilot -d repopilot`, and `docker compose exec -T redis redis-cli ping` pass before backend verification.
+- `mvn -q -Dmaven.repo.local=../.m2 test` passes in `backend`.
+- `mvn -q -Dmaven.repo.local=../.m2 test` passes in `mcp-tool-server`.
+- `PYTHONPATH=. python3 -m unittest discover -s tests` passes in `agent-worker`.
+- `npm run build` passes in `frontend`.
+- `rg --files scripts -g '*.sh' | xargs bash -n` passes.
+- `rg --files scripts -g '*.mjs' | xargs -n1 node --check` passes.
+- `./scripts/mcp-tool-server-smoke.sh` passes with `toolCount=17`.
+- `git diff --check` passes.
+- Port `8095` has no leftover listener after smoke cleanup.
+
+### Next
+
+- 将 MCP 工具目录中的工具 schema 继续映射到后端工具调用审计，给每次工具调用补充目录版本和安全规则快照。
+- 在工具目录面板增加按分类展开的工具详情，展示参数 schema、安全规则和后端 bridge。
+
 ## 2026-08-11, Slice 121 - MCP工具目录服务版
 
 MCP Tool Server 从占位目录推进到可独立启动的 Spring Boot 工具目录服务：这一版先固化 RepoPilot 工具清单、输入 schema、安全规则和参数校验，不迁移现有执行链路；Agent Worker 当前仍通过 backend 内部工具桥读取 run-scoped 工具，后续再把真实执行能力接入 Spring AI MCP Server 传输层。

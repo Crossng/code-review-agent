@@ -538,6 +538,47 @@ export type SandboxSettings = {
   checks: SandboxSettingsCheck[];
 };
 
+export type McpToolSettingsCheck = {
+  code: string;
+  label: string;
+  status: "PASS" | "WARN" | "BLOCKED" | string;
+  message: string;
+};
+
+export type McpToolSummary = {
+  name: string;
+  title: string;
+  category: string;
+  accessMode: "READ" | "WRITE" | string;
+  mvp: boolean;
+  auditRequired: boolean;
+  approvalRequired: boolean;
+};
+
+export type McpToolSettings = {
+  provider: string;
+  ready: boolean;
+  baseUrl: string;
+  healthCheckEnabled: boolean;
+  healthAvailable: boolean;
+  healthStatus: string | null;
+  serviceName: string | null;
+  protocolVersion: string | null;
+  toolCount: number;
+  mvpToolCount: number;
+  readToolCount: number;
+  writeToolCount: number;
+  auditRequiredToolCount: number;
+  approvalRequiredToolCount: number;
+  requiredToolsPresent: boolean;
+  requiredTools: string[];
+  missingRequiredTools: string[];
+  categories: string[];
+  tools: McpToolSummary[];
+  missingRequirements: string[];
+  checks: McpToolSettingsCheck[];
+};
+
 export type CloneProjectResponse = {
   projectId: number;
   status: string;
@@ -896,6 +937,10 @@ export function getGitHubSettings(token: string): Promise<GitHubSettings> {
 
 export function getSandboxSettings(token: string): Promise<SandboxSettings> {
   return getJson<SandboxSettings>("/settings/sandbox", token);
+}
+
+export function getMcpToolSettings(token: string): Promise<McpToolSettings> {
+  return getJson<McpToolSettings>("/settings/mcp-tools", token);
 }
 
 export function getDashboardSummary(token: string): Promise<DashboardSummary> {

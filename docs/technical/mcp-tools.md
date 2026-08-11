@@ -12,6 +12,14 @@ GET  /api/mcp/tools/{toolName}
 POST /api/mcp/tools/{toolName}/validate
 ```
 
+后端控制台可见入口：
+
+```text
+GET /api/settings/mcp-tools
+```
+
+该接口需要用户 JWT，只返回脱敏状态：`baseUrl`、健康检查结果、服务名、协议版本、工具数量、读/写工具数量、审计工具数量、写型工具审批门数量、关键 MVP 工具缺失项、分类和工具摘要。后端默认从 `REPOPILOT_MCP_TOOL_SERVER_URL` 读取独立工具目录；健康检查失败时不会继续等待工具目录请求，会直接返回 `ready=false` 和中文阻塞项，避免控制台加载被连续超时拖慢。
+
 本地 smoke：
 
 ```bash
@@ -28,7 +36,7 @@ POST /api/mcp/tools/{toolName}/validate
 | Patch 操作 | `apply_patch`, `validate_unified_diff` |
 | 构建测试 | `run_maven_compile`, `run_maven_test` |
 | GitHub 集成 | `create_pull_request` |
-| 审计辅助 | `record_tool_call`, `summarize_test_log` |
+| 审计辅助 | `query_db_schema`, `generate_api_doc`, `run_security_check` |
 
 ## 3. MVP 工具清单
 
