@@ -4231,6 +4231,38 @@ Python Agent Worker 从“所有初始节点和 helper 都堆在 `initial_nodes.
 - 在安装完整 `agent-worker` 依赖的运行环境中补充一次 `graph_engine=LANGGRAPH` 的真实依赖 smoke 证据。
 - 开始把确定性 planning/patch 节点替换为可配置的模型驱动节点，同时继续复用现有审计和安全后置门。
 
+## 2026-08-11, Slice 131 - 中文工程工作台视觉重构版
+
+前端从“所有功能纵向堆叠的控制台”重构为以执行路径为中心的中文工程工作台：首屏先展示任务到 PR 的受控链路，再提供仓库接入和任务创建；任务现场、代码洞察、运行数据与系统配置按操作优先级展开。视觉采用克制的石墨黑、纸白和安全绿，并同步补齐键盘、表单、破坏性操作与移动端布局约束。
+
+### Added
+
+- 工作台外壳改为语义化 `aside + main`，左侧导航使用“发起任务、执行现场、仓库项目、代码洞察、运行数据、系统配置”中文命名，并通过 `aria-current` 标识当前入口。
+- 当前执行链路将任务、补丁、沙箱测试和 Pull Request 组合为一个四阶段状态带，展示中文状态和后端枚举原文；首屏紧接“仓库接入 / 创建任务”快速发起区。
+- 任务现场提前到代码洞察之前，工作台指标和 Coder/GitHub/Sandbox/MCP 配置下沉为支撑区；清除旧 `content-visibility`，避免全页截图和跳转时出现延迟渲染空白。
+- 视觉系统改为石墨黑侧栏、纸白内容和安全绿状态色，统一 6px 圆角、紧凑间距、技术数据等宽字体和表格数字；移除页面网格渐变和大标题式控制台文案。
+- `index.html` 使用 `zh-CN`、中文标题、描述和 theme color；页面新增跳到主要内容、可见 `focus-visible`、`prefers-reduced-motion`、中文日期/耗时、`aria-live` 消息和带 label/name/type/autocomplete/spellcheck 的表单字段。
+- 删除单份接口文档快照和批量清空快照前新增确认，browser smoke 接受确认后继续验证真实 DELETE 请求。
+- 移动端侧栏改为顶部导航，横向滚动隔离在导航自身；单列网格使用 `minmax(0, 1fr)` 并允许 Java 全限定名与源码路径断行，避免 390px 视口被固有宽度撑开。
+- Browser smoke 默认中文分页任务及中文搜索词，新增 1440×1100 桌面首屏、390×844 移动端首屏和全页截图；移动端检查文档级横向溢出，失败时输出元素和关键容器宽度诊断。
+- 前端 README、页面规格、脚本手册和验收清单同步中文工程工作台规范。
+
+### Verified
+
+- `npm run build` passes in `frontend`.
+- `node --check scripts/browser-smoke.mjs` passes.
+- `./scripts/browser-smoke.sh` passes the full registration, dashboard, settings, project, index, Controller API docs/snapshots, task filtering, Agent, patch, sandbox, approval and local PR workflow.
+- Desktop screenshot: `output/playwright/repopilot-browser-smoke-desktop.png` (1440×1100).
+- Mobile screenshot: `output/playwright/repopilot-browser-smoke-mobile.png` (390×844), with document horizontal overflow equal to 0.
+- Full-page evidence: `output/playwright/repopilot-browser-smoke.png`.
+- Smoke cleanup leaves `0` `browser-smoke-%` users; ports `8080`、`8090` and `5173` are free after verification.
+- `git diff --check` passes.
+
+### Next
+
+- 把任务创建类型从固定 `FEATURE` 扩展为可选择的 FEATURE/BUGFIX/REVIEW/DOC 控件。
+- 继续拆分当前单文件 `App.tsx`，按工作区区域提取组件并补充前端组件级测试。
+
 ## 2026-08-11, Slice 130 - GitHub PR幂等对账版
 
 真实 GitHub 发布从“失败后可以重试”推进到“先查重、再创建、异常后自动对账”：RepoPilot 现在会按 open/head/base 查询已有 PR，避免重复创建；创建发生 422、5xx、限流、超时或响应解析异常时，会再次查询远端状态，已经创建成功的 PR 可以自动恢复为 `OPEN`。发布结果会持久化并在中文控制台展示，能够区分新建、复用已有、对账恢复和真实失败。

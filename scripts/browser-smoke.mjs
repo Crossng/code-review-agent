@@ -390,6 +390,7 @@ try {
     throw new Error("Downloaded Controller API docs snapshot did not contain expected Markdown content.");
   }
   const snapshotDeleteResponse = waitForControllerApiDocsSnapshotDelete(page, snapshotId);
+  page.once("dialog", (dialog) => dialog.accept());
   await apiDocSnapshots.getByRole("button", { name: "删除快照" }).click();
   await snapshotDeleteResponse;
   await apiDocSnapshots.getByText(`快照 #${snapshotId} 已删除`).waitFor();
@@ -416,6 +417,7 @@ try {
   }
   await apiDocSnapshots.getByText(`快照 #${secondClearSnapshotId}`).waitFor();
   const snapshotClearResponse = waitForControllerApiDocsSnapshotClear(page);
+  page.once("dialog", (dialog) => dialog.accept());
   await apiDocSnapshots.getByRole("button", { name: "清空快照" }).click();
   const snapshotClearPayload = await (await snapshotClearResponse).json();
   if (snapshotClearPayload.data.deletedCount !== 2) {
@@ -430,25 +432,25 @@ try {
 
   const taskForm = page.locator("form").filter({ hasText: "创建任务" });
   await clickAndWaitForIdle(page, taskForm.getByRole("button", { name: "创建任务" }));
-  await page.locator(".taskListItem").filter({ hasText: "Add User pagination API" }).waitFor();
+  await page.locator(".taskListItem").filter({ hasText: "新增 User 分页查询接口" }).waitFor();
   const taskFilters = page.getByLabel("任务筛选");
-  await taskFilters.getByLabel("搜索任务").fill("pagination");
+  await taskFilters.getByLabel("搜索任务").fill("分页");
   await clickAndWaitForIdle(page, taskFilters.getByRole("button", { name: "应用筛选" }));
-  await page.locator(".taskListItem").filter({ hasText: "Add User pagination API" }).waitFor();
+  await page.locator(".taskListItem").filter({ hasText: "新增 User 分页查询接口" }).waitFor();
   await page.waitForFunction(() => {
     const params = new URLSearchParams(window.location.search);
-    return params.get("taskQuery") === "pagination" && params.has("taskId");
+    return params.get("taskQuery") === "分页" && params.has("taskId");
   });
-  const reloadFilteredTasks = waitForTaskListQuery(page, { query: "pagination" });
+  const reloadFilteredTasks = waitForTaskListQuery(page, { query: "分页" });
   await page.reload({ waitUntil: "domcontentloaded" });
   await reloadFilteredTasks;
-  await page.locator(".taskListItem").filter({ hasText: "Add User pagination API" }).waitFor();
+  await page.locator(".taskListItem").filter({ hasText: "新增 User 分页查询接口" }).waitFor();
   const restoredTaskQuery = await taskFilters.getByLabel("搜索任务").inputValue();
-  if (restoredTaskQuery !== "pagination") {
-    throw new Error(`Expected restored task query pagination, got ${restoredTaskQuery}`);
+  if (restoredTaskQuery !== "分页") {
+    throw new Error(`Expected restored task query 分页, got ${restoredTaskQuery}`);
   }
   const taskDetail = page.locator(".detailStack");
-  await taskDetail.getByRole("heading", { name: /#\d+ Add User pagination API/ }).waitFor();
+  await taskDetail.getByRole("heading", { name: /#\d+ 新增 User 分页查询接口/ }).waitFor();
 
   await clickAndWaitForIdle(page, taskDetail.getByRole("button", { name: "运行任务" }));
   await taskDetail.getByText(/正在连接实时流|实时流/).first().waitFor({ timeout: 15000 });
@@ -459,27 +461,27 @@ try {
   await activity.locator(".activityTitle strong").filter({ hasText: /^waiting_human_approval$/ }).waitFor();
   await taskFilters.getByLabel("任务状态筛选").selectOption("WAITING_HUMAN_APPROVAL");
   await clickAndWaitForIdle(page, taskFilters.getByRole("button", { name: "应用筛选" }));
-  await page.locator(".taskListItem").filter({ hasText: "Add User pagination API" }).waitFor();
+  await page.locator(".taskListItem").filter({ hasText: "新增 User 分页查询接口" }).waitFor();
   await page.waitForFunction(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get("taskStatus") === "WAITING_HUMAN_APPROVAL"
-      && params.get("taskQuery") === "pagination"
+      && params.get("taskQuery") === "分页"
       && params.has("taskId");
   });
   const reloadStatusFilteredTasks = waitForTaskListQuery(page, {
     status: "WAITING_HUMAN_APPROVAL",
-    query: "pagination"
+    query: "分页"
   });
   await page.reload({ waitUntil: "domcontentloaded" });
   await reloadStatusFilteredTasks;
-  await page.locator(".taskListItem").filter({ hasText: "Add User pagination API" }).waitFor();
+  await page.locator(".taskListItem").filter({ hasText: "新增 User 分页查询接口" }).waitFor();
   await page.waitForFunction(() => {
     const status = document.querySelector('[aria-label="任务状态筛选"]');
     return status?.value === "WAITING_HUMAN_APPROVAL";
   });
   const restoredStatusTaskQuery = await taskFilters.getByLabel("搜索任务").inputValue();
-  if (restoredStatusTaskQuery !== "pagination") {
-    throw new Error(`Expected restored task query pagination after status reload, got ${restoredStatusTaskQuery}`);
+  if (restoredStatusTaskQuery !== "分页") {
+    throw new Error(`Expected restored task query 分页 after status reload, got ${restoredStatusTaskQuery}`);
   }
   await taskFilters.getByRole("button", { name: "复制任务视图链接" }).click();
   await taskFilters.getByText("任务链接已复制").waitFor();
@@ -490,7 +492,7 @@ try {
       }
       const url = new URL(text);
       return url.searchParams.get("taskStatus") === "WAITING_HUMAN_APPROVAL"
-        && url.searchParams.get("taskQuery") === "pagination"
+        && url.searchParams.get("taskQuery") === "分页"
         && url.searchParams.has("taskId");
     }).catch(() => false)
   );
@@ -587,7 +589,7 @@ try {
   }
   injectRetryAuditEvidence(email);
   await page.reload({ waitUntil: "domcontentloaded" });
-  await taskDetail.getByRole("heading", { name: /#\d+ Add User pagination API/ }).waitFor();
+  await taskDetail.getByRole("heading", { name: /#\d+ 新增 User 分页查询接口/ }).waitFor();
   await taskDetail.getByText("Worker 重试恢复证据").waitFor();
   await taskDetail.getByText("工具调用审计").waitFor();
   await taskDetail.getByText("模型调用审计").waitFor();
@@ -719,10 +721,69 @@ try {
   await createChangedFiles.getByText("src/test/java/com/example/demo/user/UserServiceTest.java").waitFor();
   await assertLatestCreatePatchChangedFiles(page);
 
+  await page.evaluate(() => {
+    window.scrollTo({ top: 0, behavior: "instant" });
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+  });
+  await page.waitForTimeout(150);
+  const desktopScreenshotPath = join(artifactDir, "repopilot-browser-smoke-desktop.png");
+  await page.screenshot({ path: desktopScreenshotPath });
   const screenshotPath = join(artifactDir, "repopilot-browser-smoke.png");
   await page.screenshot({ path: screenshotPath, fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+  await page.waitForTimeout(150);
+  const horizontalOverflow = await page.evaluate(() =>
+    document.documentElement.scrollWidth - document.documentElement.clientWidth
+  );
+  if (horizontalOverflow > 1) {
+    const layoutDiagnostics = await page.evaluate(() => {
+      const viewportWidth = document.documentElement.clientWidth;
+      const overflowingElements = [...document.querySelectorAll("body *")]
+        .map((element) => {
+          const rect = element.getBoundingClientRect();
+          return {
+            element: `${element.tagName.toLowerCase()}.${[...element.classList].join(".")}`,
+            left: Math.round(rect.left),
+            right: Math.round(rect.right),
+            width: Math.round(rect.width),
+            text: (element.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, 80)
+          };
+        })
+        .filter((item) => item.right > viewportWidth + 1 || item.left < -1)
+        .sort((left, right) => right.right - left.right)
+        .slice(0, 30);
+      const selectors = ["html", "body", "#root", ".shell", ".rail", ".rail nav", ".workspace", ".projectInsightPanel", ".insightGrid", ".chipRow", ".symbolRow"];
+      const containers = selectors.flatMap((selector) => {
+        const element = document.querySelector(selector);
+        if (!(element instanceof HTMLElement)) {
+          return [];
+        }
+        const rect = element.getBoundingClientRect();
+        const style = getComputedStyle(element);
+        return [{
+          selector,
+          left: Math.round(rect.left),
+          right: Math.round(rect.right),
+          width: Math.round(rect.width),
+          clientWidth: element.clientWidth,
+          scrollWidth: element.scrollWidth,
+          minWidth: style.minWidth,
+          overflowX: style.overflowX
+        }];
+      });
+      return { viewportWidth, scrollX: window.scrollX, containers, overflowingElements };
+    });
+    throw new Error(`Mobile layout overflowed horizontally by ${horizontalOverflow}px: ${JSON.stringify(layoutDiagnostics)}`);
+  }
+  const mobileScreenshotPath = join(artifactDir, "repopilot-browser-smoke-mobile.png");
+  await page.screenshot({ path: mobileScreenshotPath });
   console.log(`Browser smoke passed for ${email}`);
+  console.log(`Desktop screenshot: ${desktopScreenshotPath}`);
   console.log(`Screenshot: ${screenshotPath}`);
+  console.log(`Mobile screenshot: ${mobileScreenshotPath}`);
 } catch (error) {
   const failurePath = join(artifactDir, "repopilot-browser-smoke-failure.png");
   await page.screenshot({ path: failurePath, fullPage: true }).catch(() => {});

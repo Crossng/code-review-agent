@@ -659,9 +659,10 @@ function streamLabel(task: AgentTask | null, state: TaskStreamState) {
 
 export function App() {
   const [token, setToken] = useState(() => localStorage.getItem("repopilot.token") ?? "");
+  const [activeSection, setActiveSection] = useState(() => window.location.hash.slice(1) || (token ? "launch" : "access"));
   const [email, setEmail] = useState("dev@example.com");
   const [password, setPassword] = useState("password123");
-  const [displayName, setDisplayName] = useState("RepoPilot Developer");
+  const [displayName, setDisplayName] = useState("RepoPilot 开发者");
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectRows, setProjectRows] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<AgentTask[]>([]);
@@ -683,8 +684,8 @@ export function App() {
   const [repoUrl, setRepoUrl] = useState("file:///Users/crossng/Desktop/ai-agent/examples/demo-spring-repo");
   const [defaultBranch, setDefaultBranch] = useState("main");
   const [taskProjectId, setTaskProjectId] = useState<number | "">("");
-  const [taskTitle, setTaskTitle] = useState("Add User pagination API");
-  const [taskDescription, setTaskDescription] = useState("Add a paginated query API for the User module and preserve existing style.");
+  const [taskTitle, setTaskTitle] = useState("新增 User 分页查询接口");
+  const [taskDescription, setTaskDescription] = useState("为 User 模块新增分页查询接口，并保持现有工程风格。");
   const [projectFilters, setProjectFilters] = useState<ProjectFilters>(initialProjectFilters);
   const [taskFilters, setTaskFilters] = useState<TaskFilters>(initialTaskFilters);
   const [codeSearchQuery, setCodeSearchQuery] = useState("UserService");
@@ -740,6 +741,14 @@ export function App() {
       return;
     }
     void loadWorkspace(token);
+  }, [token]);
+
+  useEffect(() => {
+    const allowedSections = token
+      ? ["workflow", "launch", "tasks", "projects", "code", "overview", "settings"]
+      : ["access"];
+    const requestedSection = window.location.hash.slice(1);
+    setActiveSection(allowedSections.includes(requestedSection) ? requestedSection : (token ? "launch" : "access"));
   }, [token]);
 
   useEffect(() => {
@@ -1295,86 +1304,90 @@ export function App() {
     setMessage("已退出登录。");
   }
 
+  const navigationItems = token ? [
+    { id: "launch", index: "01", label: "发起任务" },
+    { id: "tasks", index: "02", label: "执行现场" },
+    { id: "projects", index: "03", label: "仓库项目" },
+    { id: "code", index: "04", label: "代码洞察" },
+    { id: "overview", index: "05", label: "运行数据" },
+    { id: "settings", index: "06", label: "系统配置" }
+  ] : [
+    { id: "access", index: "01", label: "登录工作区" }
+  ];
+
   return (
-    <main className="shell">
-      <aside className="rail" aria-label="RepoPilot navigation">
-        <div className="mark">RP</div>
-        <nav>
-          <a className="navItem active" href="#tasks">任务</a>
-          <a className="navItem" href="#overview">概览</a>
-          <a className="navItem" href="#projects">项目</a>
-          <a className="navItem" href="#settings">配置</a>
-          <a className="navItem" href="#patch">补丁</a>
-          <a className="navItem" href="#pr">PR</a>
+    <div className="shell">
+      <a className="skipLink" href="#main-content">跳到主要内容</a>
+      <aside className="rail" aria-label="RepoPilot 工作区导航">
+        <a className="brand" href={token ? "#launch" : "#access"} onClick={() => setActiveSection(token ? "launch" : "access")}>
+          <span className="mark" aria-hidden="true">RP</span>
+          <span className="brandText">
+            <strong>RepoPilot</strong>
+            <small>仓库工程工作台</small>
+          </span>
+        </a>
+        <nav aria-label="工作区功能">
+          {navigationItems.map((item) => (
+            <a
+              className={activeSection === item.id ? "navItem active" : "navItem"}
+              href={`#${item.id}`}
+              aria-current={activeSection === item.id ? "location" : undefined}
+              onClick={() => setActiveSection(item.id)}
+              key={item.id}
+            >
+              <span>{item.index}</span>
+              {item.label}
+            </a>
+          ))}
         </nav>
+        <div className="railMeta">
+          <span>本地优先</span>
+          <strong>{token ? "工作区已连接" : "等待身份认证"}</strong>
+        </div>
       </aside>
 
-      <section className="workspace">
+      <main className="workspace" id="main-content" tabIndex={-1}>
         <header className="topbar">
           <div>
-            <p className="eyebrow">RepoPilot 控制台</p>
-            <h1>接入仓库、运行 Agent、审查补丁、测试通过后再准备 PR。</h1>
+            <p className="eyebrow">RepoPilot · 仓库自动化</p>
+            <h1>工程执行工作台</h1>
+            <p className="topbarLead">从仓库接入到补丁审批与 PR 发布，把每一步证据留在同一个现场。</p>
           </div>
           <div className="topActions">
+            <span className="connectionStatus"><span aria-hidden="true" />{token ? "本地服务已连接" : "本地工作区"}</span>
             <button className="ghostButton" type="button" onClick={() => void loadWorkspace()} disabled={!token || busy !== null}>
-              刷新
+              刷新数据
             </button>
             {token ? <button className="ghostButton" type="button" onClick={signOut}>退出登录</button> : null}
           </div>
         </header>
 
-        <StatusStrip
-          selectedTask={selectedTask}
-          patch={details.patch}
-          testRun={latestTestRun}
-          pullRequest={details.pullRequest}
-        />
+        {message ? <div className="notice" role="status" aria-live="polite">{message}</div> : null}
+        {busy ? <div className="notice mutedNotice" role="status" aria-live="polite">{busy}…</div> : null}
 
         {token ? (
-          <DashboardSummaryPanel
-            busy={busy !== null}
-            copyLinkStatus={copyOverviewLinkStatus}
-            onCopyLink={() => void copyOverviewLink()}
-            summary={dashboardSummary}
+          <StatusStrip
+            selectedTask={selectedTask}
+            patch={details.patch}
+            testRun={latestTestRun}
+            pullRequest={details.pullRequest}
           />
         ) : null}
-        {token ? (
-          <DashboardRunMetricsPanel
-            busy={busy !== null}
-            days={runMetricsDays}
-            metrics={dashboardRunMetrics}
-            onDaysChange={(days) => void handleRunMetricsDaysChange(days)}
-          />
-        ) : null}
-        {token ? (
-          <DashboardActivityPanel
-            activity={dashboardActivity}
-            busy={busy !== null}
-            limit={activityLimit}
-            onLimitChange={(limit) => void handleActivityLimitChange(limit)}
-          />
-        ) : null}
-
-        {token ? (
-          <section className="settingsGrid" id="settings">
-            <DemoReadinessPanel
-              coderSettings={coderSettings}
-              githubSettings={githubSettings}
-              sandboxSettings={sandboxSettings}
-              mcpToolSettings={mcpToolSettings}
-            />
-            <CoderSettingsPanel settings={coderSettings} />
-            <GitHubSettingsPanel settings={githubSettings} />
-            <SandboxSettingsPanel settings={sandboxSettings} />
-            <McpToolSettingsPanel settings={mcpToolSettings} />
-          </section>
-        ) : null}
-
-        {message ? <div className="notice">{message}</div> : null}
-        {busy ? <div className="notice mutedNotice">{busy}...</div> : null}
 
         {!token ? (
-          <section className="authGrid">
+          <section className="authRegion" id="access">
+            <div className="authIntro">
+              <p className="eyebrow">本地工程控制台</p>
+              <h2>登录后开始接入仓库</h2>
+              <p>项目、Agent 运行、沙箱测试和发布记录都保存在你的本地工作区。</p>
+              <div className="authFacts" aria-label="工作区能力">
+                <span>仓库索引</span>
+                <span>补丁审查</span>
+                <span>沙箱测试</span>
+                <span>PR 发布</span>
+              </div>
+            </div>
+            <div className="authGrid">
             <form className="panel" onSubmit={(event) => void handleAuth(event, "login")}>
                 <div className="panelHeader">
                   <div>
@@ -1382,8 +1395,8 @@ export function App() {
                     <h2>登录</h2>
                   </div>
                 </div>
-              <TextField label="邮箱" value={email} onChange={setEmail} />
-              <TextField label="密码" value={password} onChange={setPassword} type="password" />
+              <TextField label="邮箱" name="login-email" value={email} onChange={setEmail} type="email" autoComplete="email" />
+              <TextField label="密码" name="login-password" value={password} onChange={setPassword} type="password" autoComplete="current-password" />
               <button className="primaryButton fullButton" type="submit" disabled={busy !== null}>登录</button>
             </form>
             <form className="panel" onSubmit={(event) => void handleAuth(event, "register")}>
@@ -1393,15 +1406,24 @@ export function App() {
                   <h2>创建本地账号</h2>
                 </div>
               </div>
-              <TextField label="显示名称" value={displayName} onChange={setDisplayName} />
-              <TextField label="邮箱" value={email} onChange={setEmail} />
-              <TextField label="密码" value={password} onChange={setPassword} type="password" />
+              <TextField label="显示名称" name="register-name" value={displayName} onChange={setDisplayName} autoComplete="name" spellCheck />
+              <TextField label="邮箱" name="register-email" value={email} onChange={setEmail} type="email" autoComplete="email" />
+              <TextField label="密码" name="register-password" value={password} onChange={setPassword} type="password" autoComplete="new-password" />
               <button className="primaryButton fullButton" type="submit" disabled={busy !== null}>注册</button>
             </form>
+            </div>
           </section>
         ) : (
           <>
-            <section className="mainGrid" id="projects">
+            <section className="workspaceRegion launchRegion" id="launch">
+              <div className="regionHeader">
+                <div>
+                  <p className="eyebrow">快速发起</p>
+                  <h2>先接入仓库，再交给 Agent 执行</h2>
+                </div>
+                <span>01 / 建立任务上下文</span>
+              </div>
+              <div className="mainGrid">
               <form className="panel" onSubmit={(event) => void handleCreateProject(event)}>
                 <div className="panelHeader">
                   <div>
@@ -1409,8 +1431,8 @@ export function App() {
                     <h2>添加项目</h2>
                   </div>
                 </div>
-                <TextField label="仓库地址" value={repoUrl} onChange={setRepoUrl} />
-                <TextField label="默认分支" value={defaultBranch} onChange={setDefaultBranch} />
+                <TextField label="仓库地址" name="repository-url" value={repoUrl} onChange={setRepoUrl} type="url" autoComplete="url" />
+                <TextField label="默认分支" name="default-branch" value={defaultBranch} onChange={setDefaultBranch} />
                 <button className="primaryButton fullButton" type="submit" disabled={busy !== null}>创建项目</button>
               </form>
 
@@ -1425,6 +1447,7 @@ export function App() {
                 <label className="fieldLabel" htmlFor="projectSelect">项目</label>
                 <select
                   id="projectSelect"
+                  name="task-project"
                   value={taskProjectId}
                   onChange={(event) => setTaskProjectId(event.target.value === "" ? "" : Number(event.target.value))}
                 >
@@ -1435,18 +1458,21 @@ export function App() {
                     </option>
                   ))}
                 </select>
-                <TextField label="标题" value={taskTitle} onChange={setTaskTitle} />
+                <TextField label="标题" name="task-title" value={taskTitle} onChange={setTaskTitle} spellCheck />
                 <label className="fieldLabel" htmlFor="taskDescription">任务描述</label>
                 <textarea
                   id="taskDescription"
+                  name="task-description"
+                  spellCheck
                   value={taskDescription}
                   onChange={(event) => setTaskDescription(event.target.value)}
                 />
                 <button className="primaryButton fullButton" type="submit" disabled={busy !== null}>创建任务</button>
               </form>
+              </div>
             </section>
 
-            <section className="panel">
+            <section className="panel projectWorkspacePanel" id="projects">
               <div className="panelHeader">
                 <div>
                   <p className="eyebrow">项目</p>
@@ -1457,6 +1483,7 @@ export function App() {
                 <label className="fieldLabel" htmlFor="projectFilterStatus">状态</label>
                 <select
                   id="projectFilterStatus"
+                  name="project-status"
                   aria-label="项目状态筛选"
                   value={projectFilters.status ?? "ALL"}
                   onChange={(event) => setProjectFilters((current) => ({ ...current, status: event.target.value }))}
@@ -1468,6 +1495,8 @@ export function App() {
                 </select>
                 <TextField
                   label="搜索项目"
+                  name="project-query"
+                  type="search"
                   value={projectFilters.query ?? ""}
                   onChange={(query) => setProjectFilters((current) => ({ ...current, query }))}
                 />
@@ -1507,79 +1536,6 @@ export function App() {
               </div>
             </section>
 
-            <ProjectInsightPanel
-              projects={projectRows}
-              selectedProject={selectedInsightProject}
-              selectedProjectId={selectedProjectId}
-              insight={projectInsight}
-              codeSearchQuery={codeSearchQuery}
-              riskLevelFilter={controllerApiRiskFilters.riskLevel}
-              riskCodeFilter={controllerApiRiskFilters.riskCode}
-              busy={busy !== null}
-              onSelectProject={setSelectedProjectId}
-              setCodeSearchQuery={setCodeSearchQuery}
-              setRiskLevelFilter={(riskLevel) => setControllerApiRiskFilters((current) => ({ ...current, riskLevel }))}
-              setRiskCodeFilter={(riskCode) => setControllerApiRiskFilters((current) => ({ ...current, riskCode }))}
-              onLoadApiDocs={async (limit) => {
-                if (selectedProjectId === "") {
-                  throw new Error("请先选择项目再加载接口文档。");
-                }
-                return getControllerApiDocs(token, Number(selectedProjectId), controllerApiRiskFilters, limit);
-              }}
-              onSaveApiDocsSnapshot={async (limit) => {
-                if (selectedProjectId === "") {
-                  throw new Error("请先选择项目再保存接口文档快照。");
-                }
-                const snapshot = await createControllerApiDocsSnapshot(
-                  token,
-                  Number(selectedProjectId),
-                  controllerApiRiskFilters,
-                  limit
-                );
-                setProjectInsight((current) => ({
-                  ...current,
-                  controllerApiDocSnapshots: [
-                    snapshot,
-                    ...current.controllerApiDocSnapshots.filter((item) => item.id !== snapshot.id)
-                  ].slice(0, 5)
-                }));
-                return snapshot;
-              }}
-              onLoadApiDocsSnapshot={async (snapshotId) => {
-                if (selectedProjectId === "") {
-                  throw new Error("请先选择项目再加载接口文档快照。");
-                }
-                return getControllerApiDocsSnapshot(token, Number(selectedProjectId), snapshotId);
-              }}
-              onDeleteApiDocsSnapshot={async (snapshotId) => {
-                if (selectedProjectId === "") {
-                  throw new Error("请先选择项目再删除接口文档快照。");
-                }
-                await deleteControllerApiDocsSnapshot(token, Number(selectedProjectId), snapshotId);
-                setProjectInsight((current) => ({
-                  ...current,
-                  controllerApiDocSnapshots: current.controllerApiDocSnapshots.filter((item) => item.id !== snapshotId)
-                }));
-              }}
-              onClearApiDocsSnapshots={async () => {
-                if (selectedProjectId === "") {
-                  throw new Error("请先选择项目再清空接口文档快照。");
-                }
-                const result = await clearControllerApiDocsSnapshots(token, Number(selectedProjectId));
-                setProjectInsight((current) => ({
-                  ...current,
-                  controllerApiDocSnapshots: []
-                }));
-                return result;
-              }}
-              onRefresh={() => {
-                if (selectedProjectId !== "") {
-                  void loadProjectInsight(token, Number(selectedProjectId), controllerApiRiskFilters);
-                }
-              }}
-              onSearch={(event) => void handleCodeSearch(event)}
-            />
-
             <section className="taskLayout" id="tasks">
               <aside className="panel taskListPanel">
                 <div className="panelHeader">
@@ -1592,6 +1548,7 @@ export function App() {
                   <label className="fieldLabel" htmlFor="taskFilterProject">项目</label>
                   <select
                     id="taskFilterProject"
+                    name="task-project-filter"
                     aria-label="任务项目筛选"
                     value={taskFilters.projectId ?? ""}
                     onChange={(event) => setTaskFilters((current) => ({
@@ -1609,6 +1566,7 @@ export function App() {
                   <label className="fieldLabel" htmlFor="taskFilterStatus">状态</label>
                   <select
                     id="taskFilterStatus"
+                    name="task-status-filter"
                     aria-label="任务状态筛选"
                     value={taskFilters.status ?? "ALL"}
                     onChange={(event) => setTaskFilters((current) => ({ ...current, status: event.target.value }))}
@@ -1621,6 +1579,7 @@ export function App() {
                   <label className="fieldLabel" htmlFor="taskFilterType">类型</label>
                   <select
                     id="taskFilterType"
+                    name="task-type-filter"
                     aria-label="任务类型筛选"
                     value={taskFilters.taskType ?? "ALL"}
                     onChange={(event) => setTaskFilters((current) => ({ ...current, taskType: event.target.value }))}
@@ -1632,6 +1591,8 @@ export function App() {
                   </select>
                   <TextField
                     label="搜索任务"
+                    name="task-query"
+                    type="search"
                     value={taskFilters.query ?? ""}
                     onChange={(query) => setTaskFilters((current) => ({ ...current, query }))}
                   />
@@ -1742,10 +1703,119 @@ export function App() {
                 </section>
               </section>
             </section>
+
+            <ProjectInsightPanel
+              projects={projectRows}
+              selectedProject={selectedInsightProject}
+              selectedProjectId={selectedProjectId}
+              insight={projectInsight}
+              codeSearchQuery={codeSearchQuery}
+              riskLevelFilter={controllerApiRiskFilters.riskLevel}
+              riskCodeFilter={controllerApiRiskFilters.riskCode}
+              busy={busy !== null}
+              onSelectProject={setSelectedProjectId}
+              setCodeSearchQuery={setCodeSearchQuery}
+              setRiskLevelFilter={(riskLevel) => setControllerApiRiskFilters((current) => ({ ...current, riskLevel }))}
+              setRiskCodeFilter={(riskCode) => setControllerApiRiskFilters((current) => ({ ...current, riskCode }))}
+              onLoadApiDocs={async (limit) => {
+                if (selectedProjectId === "") {
+                  throw new Error("请先选择项目再加载接口文档。");
+                }
+                return getControllerApiDocs(token, Number(selectedProjectId), controllerApiRiskFilters, limit);
+              }}
+              onSaveApiDocsSnapshot={async (limit) => {
+                if (selectedProjectId === "") {
+                  throw new Error("请先选择项目再保存接口文档快照。");
+                }
+                const snapshot = await createControllerApiDocsSnapshot(
+                  token,
+                  Number(selectedProjectId),
+                  controllerApiRiskFilters,
+                  limit
+                );
+                setProjectInsight((current) => ({
+                  ...current,
+                  controllerApiDocSnapshots: [
+                    snapshot,
+                    ...current.controllerApiDocSnapshots.filter((item) => item.id !== snapshot.id)
+                  ].slice(0, 5)
+                }));
+                return snapshot;
+              }}
+              onLoadApiDocsSnapshot={async (snapshotId) => {
+                if (selectedProjectId === "") {
+                  throw new Error("请先选择项目再加载接口文档快照。");
+                }
+                return getControllerApiDocsSnapshot(token, Number(selectedProjectId), snapshotId);
+              }}
+              onDeleteApiDocsSnapshot={async (snapshotId) => {
+                if (selectedProjectId === "") {
+                  throw new Error("请先选择项目再删除接口文档快照。");
+                }
+                await deleteControllerApiDocsSnapshot(token, Number(selectedProjectId), snapshotId);
+                setProjectInsight((current) => ({
+                  ...current,
+                  controllerApiDocSnapshots: current.controllerApiDocSnapshots.filter((item) => item.id !== snapshotId)
+                }));
+              }}
+              onClearApiDocsSnapshots={async () => {
+                if (selectedProjectId === "") {
+                  throw new Error("请先选择项目再清空接口文档快照。");
+                }
+                const result = await clearControllerApiDocsSnapshots(token, Number(selectedProjectId));
+                setProjectInsight((current) => ({
+                  ...current,
+                  controllerApiDocSnapshots: []
+                }));
+                return result;
+              }}
+              onRefresh={() => {
+                if (selectedProjectId !== "") {
+                  void loadProjectInsight(token, Number(selectedProjectId), controllerApiRiskFilters);
+                }
+              }}
+              onSearch={(event) => void handleCodeSearch(event)}
+            />
+
+            <section className="dashboardRegion" aria-label="工作台运行数据">
+              <DashboardSummaryPanel
+                busy={busy !== null}
+                copyLinkStatus={copyOverviewLinkStatus}
+                onCopyLink={() => void copyOverviewLink()}
+                summary={dashboardSummary}
+              />
+              <div className="dashboardSplit">
+                <DashboardRunMetricsPanel
+                  busy={busy !== null}
+                  days={runMetricsDays}
+                  metrics={dashboardRunMetrics}
+                  onDaysChange={(days) => void handleRunMetricsDaysChange(days)}
+                />
+                <DashboardActivityPanel
+                  activity={dashboardActivity}
+                  busy={busy !== null}
+                  limit={activityLimit}
+                  onLimitChange={(limit) => void handleActivityLimitChange(limit)}
+                />
+              </div>
+            </section>
+
+            <section className="settingsGrid" id="settings">
+              <DemoReadinessPanel
+                coderSettings={coderSettings}
+                githubSettings={githubSettings}
+                sandboxSettings={sandboxSettings}
+                mcpToolSettings={mcpToolSettings}
+              />
+              <CoderSettingsPanel settings={coderSettings} />
+              <GitHubSettingsPanel settings={githubSettings} />
+              <SandboxSettingsPanel settings={sandboxSettings} />
+              <McpToolSettingsPanel settings={mcpToolSettings} />
+            </section>
           </>
         )}
-      </section>
-    </main>
+      </main>
+    </div>
   );
 }
 
@@ -1761,20 +1831,31 @@ function StatusStrip({
   pullRequest: PullRequestRecord | null;
 }) {
   const cards = [
-    { label: "任务", value: selectedTask?.status ?? "未选择", tone: toneFor(selectedTask?.status) },
-    { label: "补丁", value: patch?.status ?? "未生成", tone: toneFor(patch?.status) },
-    { label: "测试", value: testRun?.status ?? "未运行", tone: toneFor(testRun?.status) },
-    { label: "PR", value: pullRequest?.status ?? "未准备", tone: toneFor(pullRequest?.status) }
+    { index: "01", label: "任务", value: selectedTask?.status ?? "未选择", tone: toneFor(selectedTask?.status) },
+    { index: "02", label: "补丁", value: patch?.status ?? "未生成", tone: toneFor(patch?.status) },
+    { index: "03", label: "沙箱测试", value: testRun?.status ?? "未运行", tone: toneFor(testRun?.status) },
+    { index: "04", label: "Pull Request", value: pullRequest?.status ?? "未准备", tone: toneFor(pullRequest?.status) }
   ];
 
   return (
-    <section className="statusGrid" aria-label="系统状态">
-      {cards.map((card) => (
-        <article className="statusCard" data-tone={card.tone} key={card.label}>
-          <span>{card.label}</span>
-          <strong>{card.value}</strong>
-        </article>
-      ))}
+    <section className="statusGrid" id="workflow" aria-label="当前执行链路">
+      <div className="statusStripHeader">
+        <div>
+          <span>当前执行链路</span>
+          <strong>{selectedTask ? `#${selectedTask.id} ${selectedTask.title}` : "选择任务后查看实时进度"}</strong>
+        </div>
+        <small>4 个受控阶段</small>
+      </div>
+      <div className="statusFlow">
+        {cards.map((card) => (
+          <article className="statusCard" data-tone={card.tone} key={card.label}>
+            <span className="statusIndex">{card.index}</span>
+            <span>{card.label}</span>
+            <strong>{statusDisplay(card.value)}</strong>
+            <code>{card.value}</code>
+          </article>
+        ))}
+      </div>
     </section>
   );
 }
@@ -1810,7 +1891,7 @@ function DashboardSummaryPanel({
     <section className="dashboardSummaryPanel" id="overview" aria-label="工作台概览">
       <div className="sectionHeader">
         <div>
-          <h3>工作台概览</h3>
+          <h2>工作台概览</h2>
           {summary === null ? <span>正在加载概览</span> : <span>{summary.cancelledTasks} 个已取消，{summary.failedPullRequests} 个 PR 失败</span>}
         </div>
         <div className="buttonRow overviewShareActions">
@@ -1875,6 +1956,7 @@ function DashboardRunMetricsPanel({
           <span>窗口</span>
           <select
             id="runMetricsWindow"
+            name="run-metrics-window"
             aria-label="运行指标窗口"
             value={days}
             onChange={(event) => onDaysChange(Number(event.target.value))}
@@ -1939,6 +2021,7 @@ function DashboardActivityPanel({
           <span>数量</span>
           <select
             id="activityLimit"
+            name="activity-limit"
             aria-label="活动数量"
             value={limit}
             onChange={(event) => onLimitChange(Number(event.target.value))}
@@ -2418,7 +2501,10 @@ function McpToolCatalogDetails({ tools }: { tools: McpToolSummary[] }) {
           <span>搜索</span>
           <input
             id={queryInputId}
+            name="mcp-tool-query"
             type="search"
+            autoComplete="off"
+            spellCheck={false}
             placeholder="工具名、标题、说明或后端桥"
             value={filters.query}
             onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))}
@@ -2428,6 +2514,7 @@ function McpToolCatalogDetails({ tools }: { tools: McpToolSummary[] }) {
           <span>分类</span>
           <select
             id={categorySelectId}
+            name="mcp-tool-category"
             value={filters.category}
             onChange={(event) => setFilters((current) => ({ ...current, category: event.target.value }))}
           >
@@ -2441,6 +2528,7 @@ function McpToolCatalogDetails({ tools }: { tools: McpToolSummary[] }) {
           <span>模式</span>
           <select
             id={accessModeSelectId}
+            name="mcp-tool-mode"
             value={filters.accessMode}
             onChange={(event) => setFilters((current) => ({ ...current, accessMode: event.target.value }))}
           >
@@ -2800,6 +2888,10 @@ function ProjectInsightPanel({
   }
 
   async function deleteSavedApiDocsSnapshot(snapshotId: number) {
+    if (!window.confirm(`确认删除接口文档快照 #${snapshotId}？此操作无法撤销。`)) {
+      setSnapshotActionStatus("已取消删除");
+      return;
+    }
     try {
       await onDeleteApiDocsSnapshot(snapshotId);
       setSnapshotActionStatus(`快照 #${snapshotId} 已删除`);
@@ -2811,6 +2903,10 @@ function ProjectInsightPanel({
   async function clearSavedApiDocsSnapshots() {
     if (insight.controllerApiDocSnapshots.length === 0) {
       setSnapshotActionStatus("没有可清空的快照");
+      return;
+    }
+    if (!window.confirm(`确认清空最近 ${insight.controllerApiDocSnapshots.length} 份接口文档快照？此操作无法撤销。`)) {
+      setSnapshotActionStatus("已取消清空");
       return;
     }
     try {
@@ -2830,6 +2926,7 @@ function ProjectInsightPanel({
         </div>
         <div className="insightControls">
           <select
+            name="insight-project"
             aria-label="洞察项目"
             value={selectedProjectId}
             onChange={(event) => onSelectProject(event.target.value === "" ? "" : Number(event.target.value))}
@@ -2922,6 +3019,7 @@ function ProjectInsightPanel({
               <label>
                 <span>风险等级</span>
                 <select
+                  name="controller-risk-level"
                   aria-label="风险等级"
                   value={riskLevelFilter}
                   onChange={(event) => setRiskLevelFilter(event.target.value)}
@@ -2935,6 +3033,7 @@ function ProjectInsightPanel({
               <label>
                 <span>风险码</span>
                 <select
+                  name="controller-risk-code"
                   aria-label="风险码"
                   value={riskCodeFilter}
                   onChange={(event) => setRiskCodeFilter(event.target.value)}
@@ -3106,6 +3205,10 @@ function ProjectInsightPanel({
             <div>
               <input
                 id="codeSearch"
+                name="code-search"
+                type="search"
+                autoComplete="off"
+                spellCheck={false}
                 value={codeSearchQuery}
                 onChange={(event) => setCodeSearchQuery(event.target.value)}
                 placeholder="搜索符号、摘要或代码片段"
@@ -3665,8 +3768,8 @@ function ApprovalPanel({
           <h2>人工闸口</h2>
         </div>
       </div>
-      <TextField label="审批备注" value={approvalComment} onChange={setApprovalComment} />
-      <TextField label="拒绝原因" value={rejectComment} onChange={setRejectComment} />
+      <TextField label="审批备注" name="approval-comment" value={approvalComment} onChange={setApprovalComment} spellCheck />
+      <TextField label="拒绝原因" name="rejection-reason" value={rejectComment} onChange={setRejectComment} spellCheck />
       <div className="buttonRow">
         <button className="primaryButton" type="button" onClick={onApprove} disabled={!canApprove || patch === null || busy}>
           通过审批
@@ -3830,21 +3933,35 @@ function PullRequestPreflightSummary({ preflight }: { preflight: PullRequestPref
 
 function TextField({
   label,
+  name,
   value,
   onChange,
-  type = "text"
+  type = "text",
+  autoComplete = "off",
+  spellCheck = false
 }: {
   label: string;
+  name: string;
   value: string;
   onChange: (value: string) => void;
   type?: string;
+  autoComplete?: string;
+  spellCheck?: boolean;
 }) {
   const reactId = useId();
   const id = `${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${reactId.replace(/:/g, "")}`;
   return (
     <>
       <label className="fieldLabel" htmlFor={id}>{label}</label>
-      <input id={id} type={type} value={value} onChange={(event) => onChange(event.target.value)} />
+      <input
+        id={id}
+        name={name}
+        type={type}
+        autoComplete={autoComplete}
+        spellCheck={spellCheck}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
     </>
   );
 }
@@ -4250,7 +4367,7 @@ function isAbortError(error: unknown) {
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat("zh-CN", {
     month: "short",
     day: "2-digit",
     hour: "2-digit",
@@ -4259,12 +4376,12 @@ function formatDate(value: string) {
 }
 
 function formatDuration(seconds: number) {
-  if (seconds <= 0) return "0s";
-  if (seconds < 60) return `${seconds}s`;
-  if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
+  if (seconds <= 0) return "0 秒";
+  if (seconds < 60) return `${seconds} 秒`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)} 分钟`;
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.round((seconds % 3600) / 60);
-  return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  return minutes > 0 ? `${hours} 小时 ${minutes} 分钟` : `${hours} 小时`;
 }
 
 function formatJson(value: string | null) {
@@ -4293,6 +4410,39 @@ function toneFor(value: string | undefined) {
   if (["FAILED", "FAILED_TEST", "FAILED_PR_CREATION", "REJECTED", "CANCELLED", "BLOCKED"].includes(value)) return "bad";
   if (terminalStatuses.has(value)) return "neutral";
   return "warn";
+}
+
+function statusDisplay(value: string) {
+  const labels: Record<string, string> = {
+    CREATED: "已创建",
+    REPO_INDEXING: "正在索引仓库",
+    PLANNING: "正在规划",
+    RETRIEVING_CONTEXT: "正在检索上下文",
+    GENERATING_PATCH: "正在生成补丁",
+    APPLYING_PATCH_IN_SANDBOX: "正在应用补丁",
+    RUNNING_TESTS: "正在运行测试",
+    REPAIRING: "正在自动修复",
+    REVIEWING_PATCH: "正在审查补丁",
+    WAITING_HUMAN_APPROVAL: "等待人工审批",
+    CREATING_PULL_REQUEST: "正在发布 PR",
+    DONE: "已完成",
+    FAILED_REPO_CLONE: "仓库克隆失败",
+    FAILED_INDEXING: "仓库索引失败",
+    FAILED_CONTEXT_RETRIEVAL: "上下文检索失败",
+    FAILED_PATCH_GENERATION: "补丁生成失败",
+    FAILED_TEST: "沙箱测试失败",
+    FAILED_PR_CREATION: "PR 发布失败",
+    CANCELLED: "已取消",
+    GENERATED: "补丁已生成",
+    APPLIED: "补丁已应用",
+    APPROVED: "补丁已批准",
+    REJECTED: "补丁已拒绝",
+    PASSED: "测试通过",
+    FAILED: "执行失败",
+    DRAFT_READY: "本地草稿已就绪",
+    OPEN: "PR 已打开"
+  };
+  return labels[value] ?? value;
 }
 
 function shortSha(value: string | null) {
