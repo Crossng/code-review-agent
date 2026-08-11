@@ -4231,6 +4231,38 @@ Python Agent Worker 从“所有初始节点和 helper 都堆在 `initial_nodes.
 - 在安装完整 `agent-worker` 依赖的运行环境中补充一次 `graph_engine=LANGGRAPH` 的真实依赖 smoke 证据。
 - 开始把确定性 planning/patch 节点替换为可配置的模型驱动节点，同时继续复用现有审计和安全后置门。
 
+## 2026-08-11, Slice 125 - 工具契约报告可见版
+
+MCP 工具契约快照从“工具审计面板可见”继续进入后端运行报告：现在 run report 会把当前 run 的 `mcp_tool_snapshot_json` 汇总成 `MCP 工具契约快照` section，复制、下载和保存报告快照时都能看到协议版本、目录匹配、后端 bridge、参数数量和安全规则摘要。
+
+### Added
+
+- `AgentTaskService` 新增 `mcp_tool_contracts` 报告段落，只在当前 run 存在 MCP 工具快照时出现，旧 run 不新增空 section。
+- 报告 facts 展示 MCP 协议、工具快照数、目录匹配数、写型工具数、安全规则数和目录工具总数。
+- 报告 highlights 展示每个工具的原始名到规范名映射、目录匹配状态、分类、读写模式、backend bridge、参数数量、安全规则或未匹配 reason。
+- `AgentTaskControllerIntegrationTest` 新增 run report MCP 快照断言，覆盖 API sections 和 Markdown 内容。
+- API 设计、前端页面规格和验收清单同步运行报告中的 MCP 工具契约段落。
+
+### Verified
+
+- `docker compose up -d postgres redis` passes.
+- `docker compose exec -T postgres pg_isready -U repopilot -d repopilot` passes.
+- `docker compose exec -T redis redis-cli ping` passes.
+- `mvn -q -Dmaven.repo.local=../.m2 test` passes in `backend`.
+- `npm run build` passes in `frontend`.
+- `mvn -q -Dmaven.repo.local=../.m2 test` passes in `mcp-tool-server`.
+- `PYTHONPATH=. python3 -m unittest discover -s tests` passes in `agent-worker`.
+- `rg --files scripts -g '*.sh' | xargs bash -n` passes.
+- `rg --files scripts -g '*.mjs' | xargs -n1 node --check` passes.
+- `./scripts/mcp-tool-server-smoke.sh` passes.
+- `git diff --check` passes.
+- `lsof -nP -iTCP:8095 -sTCP:LISTEN` returns no listener.
+
+### Next
+
+- 给工具详情面板增加工具名/分类/读写模式过滤，方便工具数量继续增长后的排查。
+- 继续把 Worker Coder 从 stub 双场景推进到真实 token 演示质量。
+
 ## 2026-08-11, Slice 124 - 工具审计契约快照版
 
 MCP 工具目录从“控制台可解释”继续接入到运行证据链：每次工具调用审计现在会附带调用时的 MCP 契约快照，包含协议版本、正式工具名、backend bridge、参数 schema 和安全规则；目录不可用或内部工具名还未纳入目录时，也会留下中文 reason，方便后续排查审计覆盖缺口。

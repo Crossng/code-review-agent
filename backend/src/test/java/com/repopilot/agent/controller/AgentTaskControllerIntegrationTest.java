@@ -403,6 +403,94 @@ class AgentTaskControllerIntegrationTest {
                 .andExpect(jsonPath("$.data.markdown").value(containsString("写型 callback 仍不做透明重试")));
     }
 
+    @Test
+    void runReportIncludesMcpToolContractSnapshots() throws Exception {
+        String ownerToken = register(ownerEmail);
+        User owner = userRepository.findByEmail(ownerEmail).orElseThrow();
+        Project project = project(owner, "owner/mcp-report", ProjectStatus.READY);
+        AgentTask task = task(
+                owner,
+                project,
+                AgentTaskType.FEATURE,
+                AgentTaskStatus.WAITING_HUMAN_APPROVAL,
+                "Expose MCP audit snapshots",
+                "Show MCP tool contracts in the run report."
+        );
+        AgentRun run = new AgentRun(task);
+        run.markSuccess();
+        run = agentRunRepository.save(run);
+        task.setCurrentRun(run);
+        agentTaskRepository.save(task);
+
+        Instant startedAt = Instant.now();
+        toolCallLogRepository.save(new ToolCallLog(
+                run,
+                "search_code",
+                json(Map.of("query", "UserService")),
+                json(Map.of("resultCount", 2)),
+                json(Map.ofEntries(
+                        Map.entry("provider", "REPOPILOT_MCP_TOOL_SERVER"),
+                        Map.entry("protocolVersion", "REPOPILOT_MCP_CONTRACT_V1"),
+                        Map.entry("toolName", "search_code"),
+                        Map.entry("normalizedToolName", "search_code"),
+                        Map.entry("toolFound", true),
+                        Map.entry("catalogToolCount", 16),
+                        Map.entry("category", "仓库读取"),
+                        Map.entry("accessMode", "READ"),
+                        Map.entry("backendBridge", "backend:/api/internal/agent-worker/runs/{runId}/project/search"),
+                        Map.entry("arguments", List.of(Map.of("name", "query", "type", "string", "required", true))),
+                        Map.entry("safetyRules", List.of("查询词会进入工具审计，不能包含 token 或密钥。"))
+                )),
+                ToolCallStatus.SUCCESS,
+                42,
+                null,
+                startedAt,
+                startedAt.plusMillis(42)
+        ));
+        toolCallLogRepository.save(new ToolCallLog(
+                run,
+                "load_run_context",
+                json(Map.of()),
+                json(Map.of("runId", run.getId())),
+                json(Map.of(
+                        "provider", "REPOPILOT_MCP_TOOL_SERVER",
+                        "protocolVersion", "REPOPILOT_MCP_CONTRACT_V1",
+                        "toolName", "load_run_context",
+                        "normalizedToolName", "load_run_context",
+                        "toolFound", false,
+                        "catalogToolCount", 16,
+                        "reason", "MCP 工具目录中未找到该工具。"
+                )),
+                ToolCallStatus.SUCCESS,
+                21,
+                null,
+                startedAt,
+                startedAt.plusMillis(21)
+        ));
+
+        mockMvc.perform(get("/api/agent/tasks/{id}/run-report", task.getId())
+                        .header(AUTHORIZATION, bearer(ownerToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.sections.length()").value(1))
+                .andExpect(jsonPath("$.data.sections[0].key").value("mcp_tool_contracts"))
+                .andExpect(jsonPath("$.data.sections[0].title").value("MCP 工具契约快照"))
+                .andExpect(jsonPath("$.data.sections[0].facts[0]").value("MCP 协议：REPOPILOT_MCP_CONTRACT_V1"))
+                .andExpect(jsonPath("$.data.sections[0].facts[1]").value("工具快照：2"))
+                .andExpect(jsonPath("$.data.sections[0].facts[2]").value("目录匹配：1/2"))
+                .andExpect(jsonPath("$.data.sections[0].facts[4]").value("安全规则：1"))
+                .andExpect(jsonPath("$.data.sections[0].facts[5]").value("目录工具总数：16"))
+                .andExpect(jsonPath("$.data.sections[0].highlights[0]").value(containsString("search_code：已匹配目录工具")))
+                .andExpect(jsonPath("$.data.sections[0].highlights[0]").value(containsString("分类：仓库读取")))
+                .andExpect(jsonPath("$.data.sections[0].highlights[0]").value(containsString("模式：READ")))
+                .andExpect(jsonPath("$.data.sections[0].highlights[0]").value(containsString("后端桥：backend:/api/internal/agent-worker/runs/{runId}/project/search")))
+                .andExpect(jsonPath("$.data.sections[0].highlights[0]").value(containsString("查询词会进入工具审计")))
+                .andExpect(jsonPath("$.data.sections[0].highlights[1]").value(containsString("load_run_context：目录未匹配")))
+                .andExpect(jsonPath("$.data.markdown").value(containsString("## MCP 工具契约快照")))
+                .andExpect(jsonPath("$.data.markdown").value(containsString("目录匹配：1/2")))
+                .andExpect(jsonPath("$.data.markdown").value(containsString("MCP 工具目录中未找到该工具")));
+    }
+
     private String register(String email) throws Exception {
         MvcResult result = mockMvc.perform(post("/api/auth/register")
                         .contentType(APPLICATION_JSON)

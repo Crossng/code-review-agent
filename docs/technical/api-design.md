@@ -749,7 +749,7 @@ GET /api/agent/tasks?projectId=1&status=WAITING_HUMAN_APPROVAL&taskType=FEATURE&
 }
 ```
 
-`sections` 当前覆盖 planner、retrieval、patch、patch safety、sandbox tests、automated review 和 human approval checkpoint。原始 step/model/tool 审计仍通过 steps、model-calls 和 tool-calls 接口查询；run report 面向演示、分享和快速排查。
+`sections` 当前覆盖 Worker 重试恢复、MCP 工具契约快照、planner、retrieval、patch、patch safety、sandbox tests、automated review 和 human approval checkpoint。原始 step/model/tool 审计仍通过 steps、model-calls 和 tool-calls 接口查询；run report 面向演示、分享和快速排查。
 
 ### Agent Run Report Snapshots
 

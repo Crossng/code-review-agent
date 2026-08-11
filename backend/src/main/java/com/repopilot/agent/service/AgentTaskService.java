@@ -691,6 +691,7 @@ public class AgentTaskService {
         List<AgentRunReportSectionResponse> sections = new ArrayList<>();
         addWorkerSection(sections, latestStepByName(steps, "agent_worker_start"));
         addRetrySection(sections, modelCalls, toolCalls);
+        addMcpToolContractSection(sections, toolCalls);
         addPlanSection(sections, latestStepByName(steps, "plan_task"));
         addRetrievalSection(sections, latestStepByName(steps, "retrieve_context"));
         addPatchSection(sections, latestStepByName(steps, "generate_patch"));
@@ -817,6 +818,96 @@ public class AgentTaskService {
 
     private List<JsonNode> retryAttempts(JsonNode node) {
         return array(node, "retryAttempts");
+    }
+
+    private void addMcpToolContractSection(
+            List<AgentRunReportSectionResponse> sections,
+            List<ToolCallLog> toolCalls
+    ) {
+        List<McpToolContractEvidence> evidence = new ArrayList<>();
+        for (ToolCallLog toolCall : toolCalls) {
+            JsonNode snapshot = jsonNode(toolCall.getMcpToolSnapshotJson());
+            String provider = text(snapshot, "provider", "");
+            if (provider.isBlank()) {
+                continue;
+            }
+            String originalToolName = text(snapshot, "toolName", toolCall.getToolName());
+            evidence.add(new McpToolContractEvidence(
+                    originalToolName,
+                    text(snapshot, "normalizedToolName", originalToolName),
+                    text(snapshot, "protocolVersion", "协议未知"),
+                    text(snapshot, "category", ""),
+                    text(snapshot, "accessMode", ""),
+                    text(snapshot, "backendBridge", ""),
+                    snapshot.path("toolFound").asBoolean(false),
+                    text(snapshot, "reason", ""),
+                    intValue(snapshot, "catalogToolCount", 0),
+                    array(snapshot, "arguments").size(),
+                    stringArray(snapshot, "safetyRules"),
+                    toolCall.getFinishedAt()
+            ));
+        }
+        if (evidence.isEmpty()) {
+            return;
+        }
+        long matchedTools = evidence.stream().filter(McpToolContractEvidence::toolFound).count();
+        long writeTools = evidence.stream()
+                .filter(item -> "WRITE".equalsIgnoreCase(item.accessMode()))
+                .count();
+        long safetyRuleCount = evidence.stream().mapToLong(item -> item.safetyRules().size()).sum();
+        int catalogToolCount = evidence.stream()
+                .mapToInt(McpToolContractEvidence::catalogToolCount)
+                .max()
+                .orElse(0);
+        String protocolVersion = evidence.stream()
+                .map(McpToolContractEvidence::protocolVersion)
+                .filter(value -> value != null && !value.isBlank())
+                .findFirst()
+                .orElse("协议未知");
+        Instant finishedAt = evidence.stream()
+                .map(McpToolContractEvidence::finishedAt)
+                .filter(value -> value != null)
+                .max(Instant::compareTo)
+                .orElse(null);
+        List<String> facts = compactList(
+                "MCP 协议：" + protocolVersion,
+                "工具快照：" + evidence.size(),
+                "目录匹配：" + matchedTools + "/" + evidence.size(),
+                "写型工具：" + writeTools,
+                "安全规则：" + safetyRuleCount,
+                catalogToolCount > 0 ? "目录工具总数：" + catalogToolCount : null
+        );
+        List<String> highlights = evidence.stream()
+                .limit(6)
+                .map(this::mcpToolContractText)
+                .toList();
+        sections.add(new AgentRunReportSectionResponse(
+                "mcp_tool_contracts",
+                "MCP 工具契约快照",
+                "mcp_tool_contract_snapshot",
+                AgentStepStatus.SUCCESS,
+                finishedAt,
+                "本次运行的工具调用已记录 MCP 工具目录快照，可追溯工具协议版本、后端 bridge、参数 schema 和安全规则。",
+                facts,
+                highlights
+        ));
+    }
+
+    private String mcpToolContractText(McpToolContractEvidence evidence) {
+        String subject = evidence.toolName();
+        if (!evidence.normalizedToolName().equals(evidence.toolName())) {
+            subject += " -> " + evidence.normalizedToolName();
+        }
+        String matched = evidence.toolFound() ? "已匹配目录工具" : "目录未匹配";
+        String category = evidence.category().isBlank() ? "" : "；分类：" + evidence.category();
+        String accessMode = evidence.accessMode().isBlank() ? "" : "；模式：" + evidence.accessMode();
+        String bridge = evidence.backendBridge().isBlank() ? "" : "；后端桥：" + evidence.backendBridge();
+        String arguments = evidence.argumentCount() > 0 ? "；参数：" + evidence.argumentCount() + " 个" : "";
+        String rules = evidence.safetyRules().isEmpty()
+                ? ""
+                : "；安全规则：" + summarizeList(evidence.safetyRules(), 2);
+        String reason = evidence.reason().isBlank() ? "" : "；原因：" + evidence.reason();
+        return subject + "：" + matched + category + accessMode + bridge + arguments + rules + reason;
     }
 
     private String firstRetryMessage(List<JsonNode> attempts) {
@@ -1197,6 +1288,22 @@ public class AgentTaskService {
             String status,
             int attemptCount,
             String firstFailure,
+            Instant finishedAt
+    ) {
+    }
+
+    private record McpToolContractEvidence(
+            String toolName,
+            String normalizedToolName,
+            String protocolVersion,
+            String category,
+            String accessMode,
+            String backendBridge,
+            boolean toolFound,
+            String reason,
+            int catalogToolCount,
+            int argumentCount,
+            List<String> safetyRules,
             Instant finishedAt
     ) {
     }

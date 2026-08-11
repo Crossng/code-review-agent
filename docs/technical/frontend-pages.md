@@ -90,7 +90,7 @@ Agent 执行页必须特别处理长任务状态：
 | `SymbolSummary` | 用中文标题、空状态和索引数量说明展示 Controller、Service、Mapper、Entity 数量 |
 | `ControllerApiList` | 用中文标签展示 Spring Controller 路由、HTTP 方法、参数来源、Service 与 Mapper/Repository 调用、风险分、鉴权/校验/参数边界风险提示、字段/参数级风险细节、风险等级计数、风险等级/风险码筛选、可复制风险视图/单路由链接、可复制/下载/保存由后端生成的当前可见 API Markdown 文档、最近 API 文档快照及快照复制/下载/删除/清空操作、请求/响应类型和源码位置；Markdown 内容仍由后端生成并保留工程原文 |
 | `AgentStepTimeline` | 以中文标题展示 Agent 状态机步骤和运行中状态 |
-| `AgentEvidencePanel` | 当前任务存在后端 run report 时优先渲染 report sections，用中文证据卡展示规划、检索、补丁、安全门、测试、审查、人工审批检查点以及 `Worker 重试恢复证据` 等后端诊断段落；没有 run report 时从 step JSON 中提取 planner、retriever、Coder、sandbox、review 和 approval checkpoint 证据；补丁证据展示 `generationMode`、`generationProvider` 和模型名；并支持复制、下载或保存后端生成的 Markdown run report；最近运行报告快照支持复制和下载 |
+| `AgentEvidencePanel` | 当前任务存在后端 run report 时优先渲染 report sections，用中文证据卡展示规划、检索、补丁、安全门、测试、审查、人工审批检查点以及 `Worker 重试恢复证据`、`MCP 工具契约快照` 等后端诊断段落；没有 run report 时从 step JSON 中提取 planner、retriever、Coder、sandbox、review 和 approval checkpoint 证据；补丁证据展示 `generationMode`、`generationProvider` 和模型名；并支持复制、下载或保存后端生成的 Markdown run report；最近运行报告快照支持复制和下载 |
 | `TaskFilterForm` | 用中文标签按项目、状态、类型和关键词筛选 `GET /api/agent/tasks` 结果，支持一键重置、显示任务数量和复制当前任务视图链接 |
 | `ToolCallTable` | 展示工具调用审计；优先使用 `ToolCallLogResponse.retryAudit`，并兼容旧 `output.retryAttemptCount`，在列表头和单条记录中标记 `已重试恢复`，展示失败尝试次数和首次失败摘要；有 `mcpToolSnapshotJson` 时展示 MCP 协议版本、目录匹配状态、backend bridge、参数数量和安全规则快照 |
 | `ModelCallTable` | 展示模型调用审计；优先使用 `ModelCallLogResponse.retryAudit`，并兼容旧 `response.retryAttemptCount`，在列表头和单条记录中标记 `已重试恢复`，展示失败尝试次数和首次失败摘要 |
