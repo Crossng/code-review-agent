@@ -180,23 +180,27 @@ RetrieverAgent 输出：
 
 ```json
 {
-  "files": [
-    {
-      "path": "src/main/java/.../UserController.java",
-      "reason": "包含 User 相关 API",
-      "symbols": ["UserController#listUsers"]
-    }
-  ],
-  "chunks": [
+  "query": "查询用户业务逻辑",
+  "retrievalMode": "HYBRID",
+  "retrievalModeLabel": "关键词 + 向量混合检索",
+  "embeddingStatus": "READY",
+  "embeddingProvider": "OPENAI_COMPATIBLE",
+  "embeddingModel": "text-embedding-model",
+  "results": [
     {
       "chunkId": 101,
-      "path": "src/main/java/.../UserService.java",
-      "score": 0.82,
-      "summary": "User 查询业务逻辑"
+      "filePath": "src/main/java/.../UserService.java",
+      "matchType": "HYBRID",
+      "keywordScore": 1.0,
+      "vectorScore": 0.91,
+      "combinedScore": 1.0,
+      "summary": "SERVICE com.example.UserService"
     }
   ]
 }
 ```
+
+`retrievalMode` 取 `KEYWORD`、`VECTOR`、`HYBRID` 或 `KEYWORD_FALLBACK`。混合排序对关键词候选和向量候选分别计算 reciprocal rank，再按 `REPOPILOT_EMBEDDING_KEYWORD_WEIGHT` 与 `REPOPILOT_EMBEDDING_VECTOR_WEIGHT` 融合；`vectorScore` 保留 cosine similarity 供排障。Spring Boot 本地 executor 的 `retrieve_context` step 还会记录 `retrievalModeByQuery` 和 `embeddingStatusByQuery`，让运行证据能解释每个 query 的实际召回路径。
 
 ## 8. 重试策略
 

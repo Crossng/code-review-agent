@@ -1447,9 +1447,13 @@ public class AgentTaskService {
         List<String> queries = candidateQueries(task);
         Map<Long, CodeSearchResultResponse> uniqueResults = new LinkedHashMap<>();
         Map<String, Integer> resultCountByQuery = new LinkedHashMap<>();
+        Map<String, String> retrievalModeByQuery = new LinkedHashMap<>();
+        Map<String, String> embeddingStatusByQuery = new LinkedHashMap<>();
         for (String query : queries) {
             CodeSearchResponse response = codeSearchService.search(task.getProject().getId(), query, 8);
             resultCountByQuery.put(query, response.results().size());
+            retrievalModeByQuery.put(query, response.retrievalMode());
+            embeddingStatusByQuery.put(query, response.embeddingStatus());
             for (CodeSearchResultResponse result : response.results()) {
                 uniqueResults.putIfAbsent(result.chunkId(), result);
             }
@@ -1461,7 +1465,7 @@ public class AgentTaskService {
         if (results.size() > 12) {
             results = results.subList(0, 12);
         }
-        return new RetrievalOutput(queries, resultCountByQuery, results);
+        return new RetrievalOutput(queries, resultCountByQuery, retrievalModeByQuery, embeddingStatusByQuery, results);
     }
 
     private List<String> candidateQueries(AgentTask task) {
@@ -1524,6 +1528,8 @@ public class AgentTaskService {
     private record RetrievalOutput(
             List<String> queries,
             Map<String, Integer> resultCountByQuery,
+            Map<String, String> retrievalModeByQuery,
+            Map<String, String> embeddingStatusByQuery,
             List<CodeSearchResultResponse> results
     ) {
     }
@@ -1531,6 +1537,8 @@ public class AgentTaskService {
     private record RetrievalAuditOutput(
             List<String> queries,
             Map<String, Integer> resultCountByQuery,
+            Map<String, String> retrievalModeByQuery,
+            Map<String, String> embeddingStatusByQuery,
             int uniqueResultCount,
             List<Long> chunkIds
     ) {
@@ -1539,6 +1547,8 @@ public class AgentTaskService {
             return new RetrievalAuditOutput(
                     output.queries(),
                     output.resultCountByQuery(),
+                    output.retrievalModeByQuery(),
+                    output.embeddingStatusByQuery(),
                     output.results().size(),
                     output.results().stream().map(CodeSearchResultResponse::chunkId).toList()
             );

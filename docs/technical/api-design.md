@@ -371,6 +371,64 @@ GET /api/projects?status=READY&query=demo-spring
 ]
 ```
 
+### POST `/projects/{id}/index`
+
+重新扫描项目工作区，生成 repository snapshot、文件、Java AST 符号和代码 chunk。默认 `REPOPILOT_EMBEDDING_MODE=disabled` 时不调用外部模型；向量配置就绪时，索引器会按 `REPOPILOT_EMBEDDING_BATCH_SIZE` 批量调用 OpenAI-compatible `/embeddings` 并写入 `code_embedding`。模型请求失败时 AST/chunk 索引仍成功，`embeddingStatus=FALLBACK`。
+
+响应中的向量字段：
+
+```json
+{
+  "projectId": 1,
+  "snapshotId": 12,
+  "fileCount": 6,
+  "javaFileCount": 5,
+  "symbolCount": 18,
+  "chunkCount": 20,
+  "embeddingCount": 20,
+  "embeddingStatus": "INDEXED",
+  "embeddingProvider": "OPENAI_COMPATIBLE",
+  "embeddingModel": "text-embedding-model",
+  "embeddingDimension": 1536,
+  "indexedAt": "2026-08-11T15:00:00Z"
+}
+```
+
+`embeddingStatus` 取 `DISABLED`、`NOT_READY`、`INDEXED` 或 `FALLBACK`。只有 `INDEXED` 表示当前索引周期已为 chunk 持久化向量。
+
+### GET `/projects/{id}/search`
+
+查询参数为必填 `query` 和可选 `limit`（默认 8，服务端上限 30）。接口始终执行关键词召回；当前模型的项目向量可用时，再用 cosine similarity 取向量候选并按配置权重执行 reciprocal rank fusion。
+
+```json
+{
+  "query": "查询用户业务逻辑",
+  "limit": 8,
+  "retrievalMode": "HYBRID",
+  "retrievalModeLabel": "关键词 + 向量混合检索",
+  "embeddingStatus": "READY",
+  "embeddingProvider": "OPENAI_COMPATIBLE",
+  "embeddingModel": "text-embedding-model",
+  "results": [
+    {
+      "chunkId": 101,
+      "filePath": "src/main/java/com/example/demo/user/UserService.java",
+      "chunkType": "CLASS",
+      "symbolType": "SERVICE",
+      "qualifiedName": "com.example.demo.user.UserService",
+      "matchType": "HYBRID",
+      "keywordScore": 1.0,
+      "vectorScore": 0.91,
+      "combinedScore": 1.0,
+      "summary": "SERVICE com.example.demo.user.UserService",
+      "preview": "public class UserService ..."
+    }
+  ]
+}
+```
+
+`retrievalMode` 取 `KEYWORD`、`VECTOR`、`HYBRID` 或 `KEYWORD_FALLBACK`；结果 `matchType` 取 `KEYWORD`、`VECTOR` 或 `HYBRID`。Embedding 配置缺失、请求失败、维度/模型不匹配或项目尚无对应向量时，接口不会报错中断 Agent，而是返回 `KEYWORD_FALLBACK` 和现有关键词结果。
+
 ### GET `/projects/{id}/controller-apis`
 
 从已 clone 的 Java/Spring 项目中解析 Controller 路由，不依赖数据库索引结果，适合项目详情页快速展示当前仓库暴露的 HTTP API。
@@ -515,9 +573,39 @@ fields are `null` when no filter is active.
 
 | 方法 | 路径 | 功能 |
 | --- | --- | --- |
+| `GET` | `/settings/embedding` | 当前代码向量与混合检索配置状态 |
 | `GET` | `/settings/coder` | 当前 Coder 模型配置状态 |
 | `GET` | `/settings/github` | 当前 GitHub 发布配置状态 |
 | `GET` | `/settings/sandbox` | 当前 Docker 沙箱运行时配置状态 |
+
+### GET `/settings/embedding`
+
+返回代码向量与混合检索的脱敏运行时配置。接口需要 JWT，不返回 API key 原文。
+
+```json
+{
+  "mode": "openai-compatible",
+  "provider": "OPENAI_COMPATIBLE",
+  "enabled": true,
+  "ready": true,
+  "embeddingAvailable": true,
+  "model": "text-embedding-model",
+  "apiBaseUrl": "http://127.0.0.1:11434/v1",
+  "apiKeyConfigured": false,
+  "apiKeyRequired": false,
+  "timeoutSeconds": 60,
+  "batchSize": 32,
+  "maxInputChars": 12000,
+  "keywordWeight": 0.45,
+  "vectorWeight": 0.55,
+  "minimumSimilarity": 0.2,
+  "fallbackMode": "KEYWORD",
+  "missingRequirements": [],
+  "supportedModes": ["disabled", "openai", "openai-compatible"]
+}
+```
+
+`disabled` 是默认模式：`ready=true` 表示关键词基线可运行，`embeddingAvailable=false` 表示不会调用向量模型。`openai` 要求 API key 和 model；`openai-compatible` 支持无鉴权的本地兼容端点，但仍要求 model。权重会归一化后返回，非法权重配置通过 `missingRequirements=["search-weights"]` 暴露。
 
 ### GET `/settings/coder`
 

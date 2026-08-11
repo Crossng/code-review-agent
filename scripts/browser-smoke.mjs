@@ -97,12 +97,26 @@ try {
   await demoReadiness.getByText("演示就绪", { exact: true }).waitFor();
   await demoReadiness.getByText("本地闭环演示", { exact: true }).waitFor();
   await demoReadiness.getByText("可演示").first().waitFor();
-  await demoReadiness.getByText("真实模型演示", { exact: true }).waitFor();
-  await demoReadiness.getByText("可选增强", { exact: true }).waitFor();
+  const embeddingReadiness = demoReadiness.locator(".demoReadinessItem").filter({ hasText: "代码混合检索" });
+  await embeddingReadiness.getByText("代码混合检索", { exact: true }).waitFor();
+  await embeddingReadiness.getByText("可选增强", { exact: true }).waitFor();
+  await embeddingReadiness.getByText("关键词检索可直接使用").waitFor();
+  const realCoderReadiness = demoReadiness.locator(".demoReadinessItem").filter({ hasText: "真实模型演示" });
+  await realCoderReadiness.getByText("真实模型演示", { exact: true }).waitFor();
+  await realCoderReadiness.getByText("可选增强", { exact: true }).waitFor();
   await demoReadiness.getByText("远端 GitHub PR", { exact: true }).waitFor();
   await demoReadiness.getByText("本地草稿", { exact: true }).waitFor();
   await demoReadiness.getByText("REPOPILOT_CODER_MODE=openai-compatible").waitFor();
+  await demoReadiness.getByText("REPOPILOT_EMBEDDING_MODE=openai-compatible").waitFor();
   await demoReadiness.getByText("REPOPILOT_GITHUB_ENABLED=true").waitFor();
+  const embeddingSettings = page.locator(".embeddingSettingsPanel");
+  await embeddingSettings.getByText("代码检索").waitFor();
+  await embeddingSettings.getByText("Embedding 与混合召回").waitFor();
+  await embeddingSettings.locator(".badge").filter({ hasText: /^NONE$/ }).waitFor();
+  await embeddingSettings.locator(".badge").filter({ hasText: /^KEYWORD READY$/ }).waitFor();
+  await embeddingSettings.getByText("关键词基线").waitFor();
+  await embeddingSettings.getByText("关键词权重").waitFor();
+  await embeddingSettings.getByText("向量权重").waitFor();
   const coderSettings = page.locator(".coderSettingsPanel");
   await coderSettings.getByText("Coder 配置").waitFor();
   await coderSettings.getByText("模型提供方状态").waitFor();
@@ -428,6 +442,9 @@ try {
 
   await insight.getByLabel("代码搜索").fill("UserService");
   await clickAndWaitForIdle(page, insight.getByRole("button", { name: "搜索" }));
+  await insight.getByText("关键词检索", { exact: true }).first().waitFor();
+  await insight.getByText("关键词命中", { exact: true }).first().waitFor();
+  await insight.getByText(/关键词 1\.000/).first().waitFor();
   await insight.getByText("class UserService").first().waitFor();
 
   const taskForm = page.locator("form").filter({ hasText: "创建任务" });

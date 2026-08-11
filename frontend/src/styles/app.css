@@ -1670,6 +1670,44 @@ textarea {
   background: #fbfdf9;
 }
 
+.searchRetrievalStatus {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(42, 122, 74, 0.28);
+  border-radius: 8px;
+  background: #f3f8f3;
+  padding: 10px 12px;
+}
+
+.searchRetrievalStatus > div,
+.retrievalScores {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.searchRetrievalStatus strong {
+  font-size: 0.86rem;
+}
+
+.searchRetrievalStatus > span,
+.retrievalScores span {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.retrievalScores {
+  margin: -3px 0 9px;
+}
+
+.retrievalScores span {
+  border-left: 2px solid var(--accent);
+  padding-left: 6px;
+}
+
 .searchResult p {
   margin: 0 0 10px;
   line-height: 1.45;
@@ -2388,6 +2426,7 @@ textarea {
   .metaGrid,
   .metaGrid.compact,
   .coderSettingsGrid,
+  .embeddingSettingsGrid,
   .githubSettingsGrid,
   .sandboxSettingsGrid,
   .mcpToolSettingsGrid,
@@ -2406,6 +2445,11 @@ textarea {
   .mcpArgumentRow,
   .searchBar > div {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .searchRetrievalStatus {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .symbolRow > * {

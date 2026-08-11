@@ -146,7 +146,10 @@ class ProjectControllerIntegrationTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.javaFileCount", greaterThan(0)))
                 .andExpect(jsonPath("$.data.symbolCount", greaterThan(0)))
-                .andExpect(jsonPath("$.data.chunkCount", greaterThan(0)));
+                .andExpect(jsonPath("$.data.chunkCount", greaterThan(0)))
+                .andExpect(jsonPath("$.data.embeddingCount").value(0))
+                .andExpect(jsonPath("$.data.embeddingStatus").value("DISABLED"))
+                .andExpect(jsonPath("$.data.embeddingProvider").value("NONE"));
 
         JsonNode files = data(mockMvc.perform(get("/api/projects/{id}/files", projectId)
                         .param("maxDepth", "10")
@@ -555,6 +558,9 @@ class ProjectControllerIntegrationTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.query").value("UserService"))
                 .andExpect(jsonPath("$.data.limit").value(5))
+                .andExpect(jsonPath("$.data.retrievalMode").value("KEYWORD"))
+                .andExpect(jsonPath("$.data.retrievalModeLabel").value("关键词检索"))
+                .andExpect(jsonPath("$.data.embeddingStatus").value("DISABLED"))
                 .andReturn());
         assertThat(search.path("results")).anySatisfy(result -> {
             assertThat(result.path("qualifiedName").asText()).isEqualTo("com.example.demo.user.UserService");

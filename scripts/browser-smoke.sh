@@ -16,19 +16,26 @@ backend_pid=""
 frontend_pid=""
 mcp_tool_server_pid=""
 
+stop_process_tree() {
+  local pid="${1:-}"
+  if [[ -z "$pid" ]]; then
+    return
+  fi
+
+  local child
+  while IFS= read -r child; do
+    if [[ -n "$child" ]]; then
+      stop_process_tree "$child"
+    fi
+  done < <(pgrep -P "$pid" 2>/dev/null || true)
+  kill "$pid" >/dev/null 2>&1 || true
+  wait "$pid" >/dev/null 2>&1 || true
+}
+
 cleanup() {
-  if [[ -n "$frontend_pid" ]]; then
-    kill "$frontend_pid" >/dev/null 2>&1 || true
-    wait "$frontend_pid" >/dev/null 2>&1 || true
-  fi
-  if [[ -n "$backend_pid" ]]; then
-    kill "$backend_pid" >/dev/null 2>&1 || true
-    wait "$backend_pid" >/dev/null 2>&1 || true
-  fi
-  if [[ -n "$mcp_tool_server_pid" ]]; then
-    kill "$mcp_tool_server_pid" >/dev/null 2>&1 || true
-    wait "$mcp_tool_server_pid" >/dev/null 2>&1 || true
-  fi
+  stop_process_tree "$frontend_pid"
+  stop_process_tree "$backend_pid"
+  stop_process_tree "$mcp_tool_server_pid"
   rm -rf "$ROOT_DIR/target/browser-smoke/workspace"
   cleanup_smoke_data || true
 }

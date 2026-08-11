@@ -50,7 +50,7 @@
 | 审批页 | `/agent/tasks/:id/approval` | Approve、Reject、Regenerate |
 | PR 结果页 | `/agent/tasks/:id/pull-request` | PR 链接、状态、标题、描述 |
 | 工具调用追踪页 | `/agent/runs/:runId/tool-calls` | tool call 输入输出、耗时、状态 |
-| 系统配置页 | `/settings` | 模型、GitHub、Docker、向量库配置；MVP 控制台先内嵌 Coder、GitHub 发布与 Sandbox 运行时只读状态 |
+| 系统配置页 | `/settings` | Embedding 混合检索、Coder、GitHub、Docker 与 MCP 工具目录的脱敏只读状态 |
 
 ## 3. 关键用户流程
 
@@ -99,7 +99,7 @@ Agent 执行页必须特别处理长任务状态：
 - 失败步骤展示错误。
 - 运行中任务通过 `GET /api/agent/tasks/{id}/stream` SSE 实时刷新状态、步骤、patch、测试和审计面板。
 - 日志流中断时显示 fallback 状态，并继续通过任务详情接口轮询。
-- 任务详情应把 `agent_step.inputJson`/`outputJson` 的稳定字段解析为 `AgentEvidencePanel`，在原始审计 JSON 之外展示计划摘要、检索命中、patch 生成结果、patch 安全门、沙箱测试结果、自动审查和人工审批 checkpoint。
+- 任务详情应把 `agent_step.inputJson`/`outputJson` 的稳定字段解析为 `AgentEvidencePanel`，在原始审计 JSON 之外展示计划摘要、检索命中、每个 query 的关键词/向量/混合/降级模式与 Embedding 状态、patch 生成结果、patch 安全门、沙箱测试结果、自动审查和人工审批 checkpoint。
 - 任务存在 current run 时，任务详情应通过 `GET /api/agent/tasks/{id}/run-report` 加载可复制/下载的中文 Markdown run report；没有 current run 时按钮禁用并保持空状态。任务详情还应通过 `GET /api/agent/tasks/{id}/run-report/snapshots?limit=5` 展示最近运行报告快照，可通过 `POST /api/agent/tasks/{id}/run-report/snapshots` 保存当前报告，并从历史快照复制或下载保存时的 Markdown。
 - 任务详情主链路的导航、状态卡、步骤时间线、Agent 证据、模型/工具审计、补丁、沙箱测试、人工审批和 PR 前置检查使用中文产品文案；运行报告 Markdown 的标题、段落、事实和重点使用中文，后端枚举、step name、recipe id、命令和路径保留工程原文，便于排查和对接 API。
 - 工作台概览、Agent 运行表现、最近任务活动、Coder 配置、GitHub 发布配置和沙箱运行时配置使用中文产品文案；配置枚举、provider、mode 和 readiness badge 保留工程原文，便于和环境变量、后端响应对应。
@@ -129,7 +129,8 @@ Agent 执行页必须特别处理长任务状态：
 | `PullRequestPreflightSummary` | 用中文标签展示 PR 发布前置检查、发布模式、本地草稿状态、远程 GitHub 状态和 blocker |
 | `ToolCallAuditPanel` | 展示工具调用输入、输出摘要、状态、耗时和 MCP 工具契约快照 |
 | `ModelCallAuditPanel` | 展示模型调用提示词、响应摘要、模型名、token 和耗时 |
-| `DemoReadinessPanel` | 用中文 checklist 汇总本地闭环演示、真实模型演示和远端 GitHub PR 演示是否就绪，展示缺失环境变量名但不展示任何密钥 |
+| `DemoReadinessPanel` | 用中文 checklist 汇总本地闭环、代码混合检索、MCP 工具目录、真实模型和远端 GitHub PR 是否就绪，展示缺失环境变量名但不展示任何密钥 |
+| `EmbeddingSettingsPanel` | 用中文标签展示 Embedding mode/provider/model、关键词与向量权重、批量大小、输入上限、最低相似度和关键词 fallback；只展示 key 是否配置，不展示原文 |
 | `CoderSettingsPanel` | 用中文标签展示当前 Coder mode、provider、model、API base URL、key 是否配置、fixture 是否配置、缺失配置项和支持模式；不展示任何密钥或 fixture 原文 |
 | `GitHubSettingsPanel` | 用中文标签展示当前 GitHub PR 发布模式、provider、API base URL、token 是否配置、远程发布是否启用和缺失配置项；不展示 token 原文 |
 | `SandboxSettingsPanel` | 用中文标签展示 Docker daemon、sandbox image、Maven cache、workspace root、timeout 和 readiness 检查；不启动测试容器 |

@@ -2,6 +2,21 @@
 
 后续放本地开发、索引、演示、清理脚本。MVP 阶段优先保持脚本短小、可读、可重复执行。
 
+## 代码向量混合检索 Smoke
+
+```bash
+./scripts/embedding-search-smoke.sh
+```
+
+该脚本不需要真实模型 token。它会启动 PostgreSQL/pgvector、本地 OpenAI-compatible Embedding stub 和独立端口 Spring Boot 后端，然后：
+
+- 创建临时用户和本地 demo Spring 项目，执行 clone 与 JavaParser AST/chunk 索引。
+- 断言每个 `code_chunk` 都有对应 `code_embedding`，并验证向量维度与索引响应。
+- 使用与源码没有关键词重合的中文查询，验证 `VECTOR` 语义召回能找到 `UserService`。
+- 使用 `UserService` 查询验证 `HYBRID` 排序及 keyword/vector/combined 分数。
+- 注入 Embedding HTTP 503，验证接口返回 `KEYWORD_FALLBACK` 且关键词结果仍可用。
+- 将脱敏证据写入 `output/embedding-search-smoke/last-run.json`，并清理临时用户、项目和 workspace。
+
 ## MCP 工具目录 Smoke
 
 ```bash

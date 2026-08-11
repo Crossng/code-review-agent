@@ -32,7 +32,7 @@ Web Frontend
 | Backend API | Spring Boot 3 | 鉴权、项目、任务、审批、PR、日志、配置，读取 MCP 工具目录脱敏状态和工具契约详情 |
 | Agent Worker | Python + LangGraph | 多 Agent 状态机、模型调用、计划执行、失败修复 |
 | MCP Tool Server | Spring Boot + Spring AI MCP | 当前提供工具目录、参数 schema、backend bridge、输入校验和安全规则，并被控制台配置区读取；后续暴露文件、AST、检索、Git、Maven、Docker、GitHub 工具 |
-| PostgreSQL | PostgreSQL + pgvector | 业务数据、代码索引、向量数据、日志数据 |
+| PostgreSQL | PostgreSQL + pgvector | 业务数据、代码索引、可变维度向量、cosine 相似度检索和日志数据 |
 | Redis | Redis | 任务锁、短期状态、异步队列、SSE 事件缓存 |
 | Docker Sandbox | Docker | 隔离执行补丁应用、编译、测试 |
 
@@ -75,7 +75,7 @@ sequenceDiagram
 | 用户与项目信息 | Backend API | PostgreSQL | 前端、Agent Worker |
 | 仓库快照 | Repository 模块 | PostgreSQL | Indexer、Agent |
 | Java 符号 | Indexer 模块 | PostgreSQL | RetrieverAgent、项目详情页 |
-| 代码 chunk | Indexer 模块 | PostgreSQL + pgvector | RetrieverAgent |
+| 代码 chunk 与 embedding | Indexer 模块 | PostgreSQL + pgvector | RetrieverAgent；关键词与向量结果经加权 RRF 混合排序，向量不可用时保留关键词基线 |
 | Agent 步骤 | Agent Worker | PostgreSQL | 前端日志页 |
 | 工具调用日志 | MCP Tool Server | PostgreSQL | 审计页、失败排查 |
 | diff | CoderAgent/MCP | PostgreSQL | diff 预览、审批、PR |

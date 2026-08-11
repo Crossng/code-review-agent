@@ -183,11 +183,20 @@ export type CodeSearchResult = {
   endLine: number | null;
   summary: string | null;
   preview: string;
+  matchType: "KEYWORD" | "VECTOR" | "HYBRID" | string;
+  keywordScore: number | null;
+  vectorScore: number | null;
+  combinedScore: number | null;
 };
 
 export type CodeSearchResponse = {
   query: string;
   limit: number;
+  retrievalMode: "KEYWORD" | "KEYWORD_FALLBACK" | "VECTOR" | "HYBRID" | string;
+  retrievalModeLabel: string;
+  embeddingStatus: string;
+  embeddingProvider: string | null;
+  embeddingModel: string | null;
   results: CodeSearchResult[];
 };
 
@@ -471,6 +480,27 @@ export type CoderSettings = {
   supportedModes: string[];
 };
 
+export type EmbeddingSettings = {
+  mode: string;
+  provider: string;
+  enabled: boolean;
+  ready: boolean;
+  embeddingAvailable: boolean;
+  model: string | null;
+  apiBaseUrl: string;
+  apiKeyConfigured: boolean;
+  apiKeyRequired: boolean;
+  timeoutSeconds: number;
+  batchSize: number;
+  maxInputChars: number;
+  keywordWeight: number;
+  vectorWeight: number;
+  minimumSimilarity: number;
+  fallbackMode: string;
+  missingRequirements: string[];
+  supportedModes: string[];
+};
+
 export type GitHubSettings = {
   provider: string;
   enabled: boolean;
@@ -637,6 +667,11 @@ export type ProjectIndexResponse = {
   javaFileCount: number;
   symbolCount: number;
   chunkCount: number;
+  embeddingCount: number;
+  embeddingStatus: string;
+  embeddingProvider: string;
+  embeddingModel: string | null;
+  embeddingDimension: number | null;
   indexedAt: string;
   message: string;
 };
@@ -969,6 +1004,10 @@ export function preparePullRequest(token: string, taskId: number): Promise<PullR
 
 export function getCoderSettings(token: string): Promise<CoderSettings> {
   return getJson<CoderSettings>("/settings/coder", token);
+}
+
+export function getEmbeddingSettings(token: string): Promise<EmbeddingSettings> {
+  return getJson<EmbeddingSettings>("/settings/embedding", token);
 }
 
 export function getGitHubSettings(token: string): Promise<GitHubSettings> {

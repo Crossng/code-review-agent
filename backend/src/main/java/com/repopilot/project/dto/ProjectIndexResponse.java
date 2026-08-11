@@ -9,6 +9,11 @@ public record ProjectIndexResponse(
         long javaFileCount,
         long symbolCount,
         long chunkCount,
+        long embeddingCount,
+        String embeddingStatus,
+        String embeddingProvider,
+        String embeddingModel,
+        Integer embeddingDimension,
         Instant indexedAt,
         String message
 ) {

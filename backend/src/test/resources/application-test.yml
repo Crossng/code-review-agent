@@ -3,6 +3,9 @@ spring:
     url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:repopilot}
     username: ${POSTGRES_USER:repopilot}
     password: ${POSTGRES_PASSWORD:repopilot}
+    hikari:
+      maximum-pool-size: 4
+      minimum-idle: 0
   flyway:
     enabled: true
   jpa:

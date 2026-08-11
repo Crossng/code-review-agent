@@ -19,6 +19,7 @@ import {
   DashboardActivityItem,
   DashboardRunMetrics,
   DashboardSummary,
+  EmbeddingSettings,
   GitHubSettings,
   McpToolAuditSnapshot,
   McpToolSettings,
@@ -56,6 +57,7 @@ import {
   getDashboardActivity,
   getDashboardRunMetrics,
   getDashboardSummary,
+  getEmbeddingSettings,
   getGitHubSettings,
   getMcpToolSettings,
   getPullRequestPreflight,
@@ -672,6 +674,7 @@ export function App() {
   const [runMetricsDays, setRunMetricsDays] = useState(initialRunMetricsDays);
   const [activityLimit, setActivityLimit] = useState(initialActivityLimit);
   const [coderSettings, setCoderSettings] = useState<CoderSettings | null>(null);
+  const [embeddingSettings, setEmbeddingSettings] = useState<EmbeddingSettings | null>(null);
   const [githubSettings, setGitHubSettings] = useState<GitHubSettings | null>(null);
   const [sandboxSettings, setSandboxSettings] = useState<SandboxSettings | null>(null);
   const [mcpToolSettings, setMcpToolSettings] = useState<McpToolSettings | null>(null);
@@ -732,6 +735,7 @@ export function App() {
       setDashboardRunMetrics(null);
       setDashboardActivity(null);
       setCoderSettings(null);
+      setEmbeddingSettings(null);
       setGitHubSettings(null);
       setSandboxSettings(null);
       setMcpToolSettings(null);
@@ -974,6 +978,7 @@ export function App() {
         nextTasks,
         [nextDashboardSummary, nextDashboardRunMetrics, nextDashboardActivity],
         nextCoderSettings,
+        nextEmbeddingSettings,
         nextGitHubSettings,
         nextSandboxSettings,
         nextMcpToolSettings
@@ -983,6 +988,7 @@ export function App() {
         listTasks(authToken, taskFilters),
         fetchDashboard(authToken),
         getCoderSettings(authToken),
+        getEmbeddingSettings(authToken),
         getGitHubSettings(authToken),
         getSandboxSettings(authToken),
         getMcpToolSettings(authToken)
@@ -994,6 +1000,7 @@ export function App() {
       setDashboardRunMetrics(nextDashboardRunMetrics);
       setDashboardActivity(nextDashboardActivity);
       setCoderSettings(nextCoderSettings);
+      setEmbeddingSettings(nextEmbeddingSettings);
       setGitHubSettings(nextGitHubSettings);
       setSandboxSettings(nextSandboxSettings);
       setMcpToolSettings(nextMcpToolSettings);
@@ -1803,10 +1810,12 @@ export function App() {
             <section className="settingsGrid" id="settings">
               <DemoReadinessPanel
                 coderSettings={coderSettings}
+                embeddingSettings={embeddingSettings}
                 githubSettings={githubSettings}
                 sandboxSettings={sandboxSettings}
                 mcpToolSettings={mcpToolSettings}
               />
+              <EmbeddingSettingsPanel settings={embeddingSettings} />
               <CoderSettingsPanel settings={coderSettings} />
               <GitHubSettingsPanel settings={githubSettings} />
               <SandboxSettingsPanel settings={sandboxSettings} />
@@ -2067,22 +2076,24 @@ type DemoReadinessItem = {
 
 function DemoReadinessPanel({
   coderSettings,
+  embeddingSettings,
   githubSettings,
   sandboxSettings,
   mcpToolSettings
 }: {
   coderSettings: CoderSettings | null;
+  embeddingSettings: EmbeddingSettings | null;
   githubSettings: GitHubSettings | null;
   sandboxSettings: SandboxSettings | null;
   mcpToolSettings: McpToolSettings | null;
 }) {
-  const items = demoReadinessItems(coderSettings, githubSettings, sandboxSettings, mcpToolSettings);
+  const items = demoReadinessItems(coderSettings, embeddingSettings, githubSettings, sandboxSettings, mcpToolSettings);
   return (
     <section className="panel demoReadinessPanel">
       <div className="panelHeader">
         <div>
           <p className="eyebrow">演示就绪</p>
-          <h2>本地闭环、工具目录、真实模型、远端 PR</h2>
+          <h2>本地闭环、混合检索、工具目录、真实模型、远端 PR</h2>
         </div>
         <Badge value={items.some((item) => item.status === "需要配置") ? "CHECK" : "READY"} />
       </div>
@@ -2108,16 +2119,17 @@ function DemoReadinessPanel({
 
 function demoReadinessItems(
   coderSettings: CoderSettings | null,
+  embeddingSettings: EmbeddingSettings | null,
   githubSettings: GitHubSettings | null,
   sandboxSettings: SandboxSettings | null,
   mcpToolSettings: McpToolSettings | null
 ): DemoReadinessItem[] {
-  if (coderSettings === null || githubSettings === null || sandboxSettings === null || mcpToolSettings === null) {
+  if (coderSettings === null || embeddingSettings === null || githubSettings === null || sandboxSettings === null || mcpToolSettings === null) {
     return [
       {
         title: "演示环境",
         status: "加载中",
-        summary: "正在读取 Coder、GitHub、Sandbox 和 MCP 工具目录配置。",
+        summary: "正在读取 Embedding、Coder、GitHub、Sandbox 和 MCP 工具目录配置。",
         details: ["配置接口会脱敏返回状态，不会暴露模型 key 或 GitHub token。"]
       }
     ];
@@ -2125,6 +2137,7 @@ function demoReadinessItems(
 
   const sandboxReady = sandboxSettings.ready;
   const mcpReady = mcpToolSettings.ready;
+  const embeddingReady = embeddingSettings.embeddingAvailable;
   const modelMode = coderSettings.mode.toLowerCase();
   const realCoderMode = modelMode === "openai" || modelMode === "openai-compatible";
   const realCoderReady = realCoderMode && coderSettings.ready;
@@ -2142,6 +2155,26 @@ function demoReadinessItems(
         `沙箱镜像：${sandboxSettings.dockerImage ?? "未配置"}`,
         githubSettings.localDraftMode ? "GitHub 远端发布关闭时仍会生成 DRAFT_READY 记录。" : "当前已启用远端 GitHub 发布。"
       ])
+    },
+    {
+      title: "代码混合检索",
+      status: embeddingReady ? "可演示" : embeddingSettings.enabled ? "需要配置" : "可选增强",
+      summary: embeddingReady
+        ? `已启用 ${embeddingSettings.model ?? "Embedding 模型"}，代码搜索会融合关键词与向量召回。`
+        : embeddingSettings.enabled
+          ? "向量模式已启用但配置不完整，搜索会自动退回关键词。"
+          : "关键词检索可直接使用；配置 Embedding 后会增加自然语言语义召回。",
+      details: embeddingReady
+        ? compactStrings([
+            `关键词权重：${formatPercent(embeddingSettings.keywordWeight)}`,
+            `向量权重：${formatPercent(embeddingSettings.vectorWeight)}`,
+            `最低相似度：${embeddingSettings.minimumSimilarity}`
+          ])
+        : compactStrings([
+            "设置 REPOPILOT_EMBEDDING_MODE=openai-compatible。",
+            "设置 REPOPILOT_EMBEDDING_MODEL 和兼容端点地址。",
+            `当前降级策略：${embeddingSettings.fallbackMode}`
+          ])
     },
     {
       title: "MCP 工具目录",
@@ -2202,6 +2235,58 @@ function demoReadinessItems(
           ])
     }
   ];
+}
+
+function EmbeddingSettingsPanel({ settings }: { settings: EmbeddingSettings | null }) {
+  const readinessLabel = settings === null
+    ? "Loading"
+    : settings.embeddingAvailable
+      ? "HYBRID READY"
+      : settings.ready
+        ? "KEYWORD READY"
+        : "NEEDS CONFIG";
+  return (
+    <section className="panel embeddingSettingsPanel">
+      <div className="panelHeader">
+        <div>
+          <p className="eyebrow">代码检索</p>
+          <h2>Embedding 与混合召回</h2>
+        </div>
+        <div className="headerBadges">
+          {settings ? <Badge value={settings.provider} /> : null}
+          <Badge value={readinessLabel} />
+        </div>
+      </div>
+      {settings === null ? (
+        <EmptyText text="正在加载代码向量配置。" />
+      ) : (
+        <>
+          <div className="metaGrid embeddingSettingsGrid">
+            <Meta label="模式" value={settings.mode} />
+            <Meta label="模型" value={settings.model ?? "未配置"} />
+            <Meta label="关键词权重" value={formatPercent(settings.keywordWeight)} />
+            <Meta label="向量权重" value={formatPercent(settings.vectorWeight)} />
+          </div>
+          <div className="settingsDetails">
+            <span className="paramChip"><strong>索引</strong> {settings.embeddingAvailable ? "批量向量化" : "关键词基线"}</span>
+            <span className="paramChip"><strong>批量</strong> {settings.batchSize} 条</span>
+            <span className="paramChip"><strong>输入上限</strong> {settings.maxInputChars} 字符</span>
+            <span className="paramChip"><strong>相似度门槛</strong> {settings.minimumSimilarity}</span>
+            <span className="paramChip"><strong>超时</strong> {settings.timeoutSeconds}s</span>
+            <span className="paramChip"><strong>降级</strong> {settings.fallbackMode}</span>
+          </div>
+          {settings.missingRequirements.length > 0 ? (
+            <div className="errorBox">
+              缺少向量配置：{settings.missingRequirements.join(", ")}
+            </div>
+          ) : null}
+          <p className="description compactDescription">
+            端点：{settings.apiBaseUrl}。API Key {settings.apiKeyConfigured ? "已配置" : settings.apiKeyRequired ? "未配置" : "本地兼容模式可选"}；密钥不会返回到界面。
+          </p>
+        </>
+      )}
+    </section>
+  );
 }
 
 function CoderSettingsPanel({ settings }: { settings: CoderSettings | null }) {
@@ -3218,21 +3303,43 @@ function ProjectInsightPanel({
           </form>
 
           <div className="searchResults">
-            {insight.search === null ? <EmptyText text="搜索后可查看已索引代码片段。" /> : insight.search.results.length === 0 ? (
-              <EmptyText text={`没有已索引片段匹配 “${insight.search.query}”。`} />
-            ) : insight.search.results.map((result) => (
-              <article className="searchResult" key={result.chunkId}>
-                <div className="sectionHeader">
+            {insight.search === null ? <EmptyText text="搜索后可查看已索引代码片段。" /> : (
+              <>
+                <div className="searchRetrievalStatus" role="status">
                   <div>
-                    <strong>{result.qualifiedName ?? result.symbolName ?? result.filePath}</strong>
-                    <span>{result.filePath}:{result.startLine ?? "?"}-{result.endLine ?? "?"}</span>
+                    <Badge value={insight.search.retrievalMode} />
+                    <strong>{insight.search.retrievalModeLabel}</strong>
                   </div>
-                  <Badge value={result.symbolType ?? result.chunkType} />
+                  <span>
+                    Embedding：{statusDisplay(insight.search.embeddingStatus)}
+                    {insight.search.embeddingModel ? ` · ${insight.search.embeddingModel}` : ""}
+                  </span>
                 </div>
-                {result.summary ? <p>{result.summary}</p> : null}
-                <pre className="codePreview">{result.preview}</pre>
-              </article>
-            ))}
+                {insight.search.results.length === 0 ? (
+                  <EmptyText text={`没有已索引片段匹配 “${insight.search.query}”。`} />
+                ) : insight.search.results.map((result) => (
+                  <article className="searchResult" key={result.chunkId}>
+                    <div className="sectionHeader">
+                      <div>
+                        <strong>{result.qualifiedName ?? result.symbolName ?? result.filePath}</strong>
+                        <span>{result.filePath}:{result.startLine ?? "?"}-{result.endLine ?? "?"}</span>
+                      </div>
+                      <div className="headerBadges">
+                        <Badge value={retrievalMatchLabel(result.matchType)} />
+                        <Badge value={result.symbolType ?? result.chunkType} />
+                      </div>
+                    </div>
+                    <div className="retrievalScores" aria-label="检索分数">
+                      {result.combinedScore === null ? null : <span>融合 {formatScore(result.combinedScore)}</span>}
+                      {result.keywordScore === null ? null : <span>关键词 {formatScore(result.keywordScore)}</span>}
+                      {result.vectorScore === null ? null : <span>向量 {formatScore(result.vectorScore)}</span>}
+                    </div>
+                    {result.summary ? <p>{result.summary}</p> : null}
+                    <pre className="codePreview">{result.preview}</pre>
+                  </article>
+                ))}
+              </>
+            )}
           </div>
         </>
       ) : <EmptyText text="创建或选择项目后可查看仓库结构。" />}
@@ -4014,6 +4121,12 @@ function agentEvidenceFromSteps(steps: AgentStep[]): AgentEvidenceItem[] {
     const results = objectArrayField(output, "results");
     const queries = stringArrayField(output, "queries");
     const counts = objectField(output, "resultCountByQuery");
+    const retrievalModes = objectField(output, "retrievalModeByQuery");
+    const embeddingStatuses = objectField(output, "embeddingStatusByQuery");
+    const retrievalMeta = [
+      ...(retrievalModes ? Object.entries(retrievalModes).slice(0, 3).map(([query, mode]) => `${query}: ${statusDisplay(String(mode))}`) : []),
+      ...(embeddingStatuses ? Object.entries(embeddingStatuses).slice(0, 1).map(([, status]) => `Embedding: ${statusDisplay(String(status))}`) : [])
+    ];
     items.push({
       key: "retrieval",
       label: "检索到的代码上下文",
@@ -4021,7 +4134,10 @@ function agentEvidenceFromSteps(steps: AgentStep[]): AgentEvidenceItem[] {
       status: retrievalStep.status,
       finishedAt: retrievalStep.finishedAt,
       summary: `通过 ${queries.length} 个检索词命中 ${results.length} 个去重代码片段。`,
-      meta: counts ? Object.entries(counts).slice(0, 4).map(([query, count]) => `${query}: ${String(count)}`) : [],
+      meta: [
+        ...(counts ? Object.entries(counts).slice(0, 3).map(([query, count]) => `${query}: ${String(count)} 条`) : []),
+        ...retrievalMeta
+      ].slice(0, 6),
       highlights: results.slice(0, 5).map((result) => {
         const filePath = stringField(result, "filePath") ?? "未知文件";
         const qualifiedName = stringField(result, "qualifiedName");
@@ -4399,6 +4515,23 @@ function formatSize(value: number) {
   return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function formatPercent(value: number) {
+  return `${Math.round(value * 100)}%`;
+}
+
+function formatScore(value: number) {
+  return value.toFixed(3);
+}
+
+function retrievalMatchLabel(value: string) {
+  const labels: Record<string, string> = {
+    KEYWORD: "关键词命中",
+    VECTOR: "向量命中",
+    HYBRID: "混合命中"
+  };
+  return labels[value] ?? value;
+}
+
 function parameterHint(parameter: { required: boolean; defaultValue: string | null }) {
   if (parameter.defaultValue !== null) return `默认 ${parameter.defaultValue}`;
   return parameter.required ? "必填" : "可选";
@@ -4440,7 +4573,14 @@ function statusDisplay(value: string) {
     PASSED: "测试通过",
     FAILED: "执行失败",
     DRAFT_READY: "本地草稿已就绪",
-    OPEN: "PR 已打开"
+    OPEN: "PR 已打开",
+    HYBRID: "混合检索",
+    VECTOR: "向量检索",
+    KEYWORD: "关键词检索",
+    KEYWORD_FALLBACK: "关键词降级",
+    DISABLED: "未启用",
+    NOT_READY: "配置未就绪",
+    NO_EMBEDDINGS: "暂无向量索引"
   };
   return labels[value] ?? value;
 }

@@ -16,6 +16,13 @@ public interface CodeChunkRepository extends JpaRepository<CodeChunk, Long> {
     long countByProjectId(Long projectId);
 
     @EntityGraph(attributePaths = {"codeFile", "symbol"})
+    List<CodeChunk> findByProjectIdOrderByIdAsc(Long projectId);
+
+    @EntityGraph(attributePaths = {"codeFile", "symbol"})
+    @Query("select chunk from CodeChunk chunk where chunk.id in :ids")
+    List<CodeChunk> findDetailedByIdIn(@Param("ids") List<Long> ids);
+
+    @EntityGraph(attributePaths = {"codeFile", "symbol"})
     @Query("""
             select chunk
             from CodeChunk chunk
@@ -35,4 +42,3 @@ public interface CodeChunkRepository extends JpaRepository<CodeChunk, Long> {
             """)
     List<CodeChunk> search(@Param("projectId") Long projectId, @Param("query") String query, Pageable pageable);
 }
-

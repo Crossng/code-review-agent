@@ -31,7 +31,7 @@ com.repopilot
 | `user` | 用户资料与凭据 | `User`, `UserService`, `UserRepository` |
 | `project` | GitHub 仓库接入与项目管理 | `Project`, `ProjectService`, `ProjectController` |
 | `repository` | clone、pull、branch、commit、工作区管理 | `RepositorySnapshot`, `GitService` |
-| `indexer` | AST 解析、代码切片、向量化 | `CodeFile`, `CodeSymbol`, `CodeChunk`, `IndexJob` |
+| `indexer` | AST 解析、代码切片、OpenAI-compatible 批量向量化、pgvector cosine 检索和关键词/向量混合排序 | `CodeFile`, `CodeSymbol`, `CodeChunk`, `CodeEmbeddingService`, `CodeSearchService` |
 | `agent` | Agent 任务、运行记录、状态机 | `AgentTask`, `AgentRun`, `AgentStep` |
 | `dashboard` | 当前用户工作区项目、任务、PR 聚合指标、最近 run 表现指标和跨项目活动流 | `DashboardController`, `DashboardSummaryService`, `DashboardSummaryResponse`, `DashboardRunMetricsResponse`, `DashboardActivityItemResponse` |
 | `tool` | MCP 工具封装和工具注册 | `ToolCallLog`, `ToolExecutionService` |
@@ -40,7 +40,7 @@ com.repopilot
 | `pullrequest` | PR 准备记录、本地分支/commit 物化、后续 GitHub PR 创建和状态同步 | `PullRequestRecord`, `PullRequestService`, `PullRequestGitService` |
 | `trace` | 模型调用、工具调用、步骤日志 | `ModelCallLog`, `TraceQueryService` |
 | `notification` | SSE 或 WebSocket 事件推送 | `AgentEvent`, `TaskStreamController` |
-| `settings` | 运行时配置只读可见性和脱敏状态 | `CoderSettingsController`, `GitHubSettingsController`, `SandboxSettingsController` |
+| `settings` | 运行时配置只读可见性和脱敏状态 | `EmbeddingSettingsController`, `CoderSettingsController`, `GitHubSettingsController`, `SandboxSettingsController` |
 | `config` | 模型、GitHub、Docker、向量库配置 | `ModelConfig`, `GitHubConfig`, `DockerConfig` |
 | `common` | 统一响应、异常、分页、审计字段 | `ApiResponse`, `ErrorCode`, `BaseEntity` |
 
@@ -140,6 +140,7 @@ CANCELLED
 - Agent Worker 可通过 `POST /api/internal/agent-worker/runs/{runId}/steps` 回写 step 证据，通过 `/tool-calls` 和 `/model-calls` 回写工具/模型调用审计，通过 `/patches` 回写生成的 patch draft，通过 `/patches/{patchId}/safety` 触发后端 diff 安全预检，通过 `/patches/{patchId}/sandbox-tests` 触发后端 sandbox apply/test，通过 `/patches/{patchId}/review` 触发后端规则化风险审查，通过 `/patches/{patchId}/approval-ready` 触发后端人工审批暂停点，通过 `/status` 回写 task/run 状态；内部 callback 由 `REPOPILOT_AGENT_WORKER_CALLBACK_TOKEN` 保护，step/status 成功落库后分别发布 `STEP_RECORDED`、`TASK_UPDATED`，并在进入审批暂停点或 `complete_stream=true` 时发布 `STREAM_COMPLETE`。patch draft 进入人工审批后仍必须等待用户 approve 才能创建 PR；approve 和 PR 准备继续走标准用户 JWT 接口，复用 `ApprovalService`、`PullRequestService` 和 `PullRequestGitService`，并保留 Worker patch 的 `WORKER_SAFE_PLANNING_DRAFT` / `AGENT_WORKER` / `worker-retrieval-plan-v1` 生成元数据。
 - Worker primary 下，后端会拒绝已终止 run/task 的 late callback 覆盖：`patches`、`safety`、`sandbox-tests`、`review`、`approval-ready` 和非幂等 `/status` 请求在 run 已 `SUCCESS`/`FAILED`/`CANCELLED` 或 task 已 `DONE`/`CANCELLED`/失败态时返回 `409 AGENT_WORKER_RUN_TERMINATED`，避免取消后继续生成 patch 或进入审批。
 - Agent Worker 可通过 `GET /api/internal/agent-worker/runs/{runId}/context`、`/project/files`、`/project/file`、`/project/search` 和 `/project/symbols` 读取 run 作用域内的任务上下文、文件树、文件内容、代码检索结果和符号；后端按 run 反查 task/project，`read_file` 拒绝越权路径和 `.git` 内部路径，作为正式 MCP Tool Server 拆出前的内部工具桥。
+- 代码检索默认使用关键词基线。配置 `REPOPILOT_EMBEDDING_MODE=openai` 或 `openai-compatible`、模型和端点后，项目索引会按批次调用 `/embeddings` 并把结果保存到 `code_embedding`；查询时以加权 reciprocal rank fusion 融合关键词与 cosine 向量排序。模型配置未就绪、HTTP 失败或当前模型尚无已存向量时，检索返回 `KEYWORD_FALLBACK` 并继续提供关键词结果，不阻断 Agent 主链路。
 - 配置 `REPOPILOT_AGENT_WORKER_CALLBACK_TOKEN` 后，Python Worker 的 `/runs/{runId}/start` 会通过 LangGraph 优先的 Worker 图执行器后台执行 `load_task_context`、`ensure_index`、确定性 `plan_task`、`retrieve_context` 和 `generate_patch`，节点实现按职责拆在 `app/graph/nodes/` 下；执行器通过内部工具桥读取上下文、确认索引信号、检索代码、读取关键文件预览，自动通过 `/tool-calls` 回写每次工具读取的 SUCCESS/FAILED 审计摘要，并通过 `/model-calls` 与 `/patches` 回写 `WORKER_SAFE_PLANNING_DRAFT` 补丁草稿，再通过 `/steps` 回写 SUCCESS 证据；patch draft 成功持久化后会调用 `/patches/{patchId}/safety`，由后端复用 `PatchDiffSafetyService` 记录 `validate_patch_safety` step；安全通过后会继续调用 `/patches/{patchId}/sandbox-tests`，由后端复用 `SandboxTestService` 记录 `prepare_sandbox`、`apply_patch`、`run_maven_test` tool audit，以及 `apply_patch`、`run_tests` step 和 `test_run`；沙箱测试通过后会调用 `/patches/{patchId}/review`，由后端复用 `PatchRiskReviewService` 和 `ModelCallLogService` 记录规则化风险审查 model audit 与 `review_patch` step；风险审查通过后会调用 `/patches/{patchId}/approval-ready`，后端要求同一 patch 已有成功 `review_patch` step，随后写入 `waiting_human_approval` PENDING step，把 task 标为 `WAITING_HUMAN_APPROVAL`、run 标为 `SUCCESS` 并关闭 SSE stream；未配置 token 时 `/start` 只返回启动契约。
 - 同一个项目同一时间 MVP 只允许一个写入型 Agent 任务运行，避免工作区冲突。
 

@@ -43,8 +43,8 @@ GitHub 仓库接入
 
 - `docker-compose.yml`：PostgreSQL + pgvector、Redis。
 - `backend/`：Spring Boot、Flyway、JPA、JWT 鉴权、项目 API、Agent 任务 API。
-- `backend/`：已包含 Git 克隆工作区管理和 JavaParser AST 符号索引。
-- `backend/`：配置区可读取 Coder、GitHub、Sandbox 和 MCP 工具目录的脱敏状态及工具详情，工具调用审计会记录 MCP 契约快照。
+- `backend/`：已包含 Git 克隆工作区管理、JavaParser AST 符号索引、代码切片、OpenAI-compatible 批量 Embedding、pgvector cosine 查询和关键词/向量混合召回。
+- `backend/`：配置区可读取 Embedding、Coder、GitHub、Sandbox 和 MCP 工具目录的脱敏状态及工具详情，工具调用审计会记录 MCP 契约快照。
 - `agent-worker/`：FastAPI Worker 契约和 MVP graph node 清单。
 - `mcp-tool-server/`：Spring Boot 工具目录与参数校验服务，输出中文工具契约和安全规则。
 - `frontend/`：Vite React 中文工程工作台，按执行链路、快速发起、任务现场、仓库、代码洞察、运行数据和系统配置组织完整闭环，包含 MCP 工具目录详情和工具契约审计快照。
@@ -97,5 +97,6 @@ mvn -Dmaven.repo.local=../.m2 spring-boot:run
 - `agent-worker`: Python 语法编译检查
 - 后端真实 API 流：注册、登录、创建项目、创建 Agent 任务、启动 run、查询 step
 - `./scripts/mcp-tool-server-smoke.sh`：验证 MCP 工具目录、路径安全校验和写型工具人工审批门
+- `./scripts/embedding-search-smoke.sh`：用本地 Embedding stub 和真实 PostgreSQL pgvector 验证向量写库、纯语义召回、混合排序和关键词降级
 - `McpToolSettingsControllerIntegrationTest`：验证后端配置接口读取 MCP 健康检查、工具目录和工具详情，并只返回脱敏状态
 - `./scripts/remote-github-pr-smoke.sh`：无真实 GitHub token 时验证远端 PR push、head/base 查重和 422 后对账恢复

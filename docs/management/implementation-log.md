@@ -4231,6 +4231,41 @@ Python Agent Worker 从“所有初始节点和 helper 都堆在 `initial_nodes.
 - 在安装完整 `agent-worker` 依赖的运行环境中补充一次 `graph_engine=LANGGRAPH` 的真实依赖 smoke 证据。
 - 开始把确定性 planning/patch 节点替换为可配置的模型驱动节点，同时继续复用现有审计和安全后置门。
 
+## 2026-08-11, Slice 132 - 代码向量混合检索版
+
+代码检索从“只按路径、符号和源码文本匹配”推进为“关键词基线 + 可选 Embedding + pgvector cosine + 加权 RRF 混合排序”：默认不配置模型也能直接运行；启用 OpenAI-compatible Embedding 后，项目索引会批量生成代码向量，自然语言查询可召回没有字面重叠的代码；模型失败时 API 和 Agent 都保留关键词结果并明确标注降级状态。
+
+### Added
+
+- 新增 Flyway `V18__code_embedding.sql`，按 chunk、项目、provider、model、维度和内容哈希持久化可变维度 `vector`，并为项目/模型检索条件建立索引。
+- 新增脱敏的 `EmbeddingConfiguration`、OpenAI-compatible `/embeddings` 客户端、响应顺序/数量/维度/有限数校验，以及可配置批大小、输入截断、超时、相似度阈值和检索权重。
+- 项目索引在代码切片落库后按批生成 Embedding；禁用或配置不完整时不读取全部 chunk，provider 失败返回 `FALLBACK` 且不破坏已完成的 AST/关键词索引。
+- `CodeSearchService` 同时获取关键词与向量候选，使用加权 reciprocal rank fusion 排序，返回 `KEYWORD`、`VECTOR`、`HYBRID` 或 `KEYWORD_FALLBACK` 模式，以及每条结果的来源、关键词分、向量相似度和综合分。
+- `GET /api/settings/embedding` 提供不含密钥明文的模式、就绪状态、模型、端点、批大小、权重、阈值和缺失条件；项目索引 API 同步返回向量数量、状态、模型与维度。
+- Agent `retrieve_context` 的步骤输出和工具审计快照新增每个 query 的检索模式与 Embedding 状态，运行现场可以区分真实混合召回和关键词降级。
+- 中文工作台新增代码检索配置面板、演示就绪状态、搜索模式说明、结果来源与评分；移动端把检索状态改为单列，避免窄屏挤压。
+- 新增 `ConfiguredEmbeddingModelClientTest`、真实 PostgreSQL pgvector 的 `CodeSearchServiceIntegrationTest`、Embedding 配置接口集成测试，以及 `embedding-search-smoke` 本地模型替身。
+- Browser smoke 覆盖默认关键词基线、Embedding 配置面板、搜索模式/来源/评分，并修复 macOS Bash 3.2 下重复状态定位和 Maven/Vite 子进程递归清理。
+- README、API、数据库、后端模块、Agent workflow、前端页面、架构、脚本手册和验收清单同步混合检索契约。
+
+### Verified
+
+- `mvn -q -Dmaven.repo.local=../.m2 test` passes in `backend`; Flyway validates 18 migrations，新增模型客户端 4 个、pgvector 检索 3 个和配置接口 2 个场景均为零失败。
+- `mvn -q -Dmaven.repo.local=../.m2 test` passes in `mcp-tool-server`.
+- `PYTHONPATH=. python3 -m unittest discover -s tests` passes 25 tests in `agent-worker`.
+- `npm run build` passes in `frontend`.
+- 所有 `scripts/*.sh` 通过 `bash -n`，所有 `scripts/*.mjs` 通过 `node --check`。
+- `./scripts/embedding-search-smoke.sh` 在真实 PostgreSQL/pgvector 上写入 20 个 chunk 和 20 个三维向量，验证 `VECTOR / READY` 自然语言召回、`HYBRID / READY` 混合排序，以及模型返回 503 后的 `KEYWORD_FALLBACK / FAILED`。
+- `./scripts/browser-smoke.sh` passes the full registration, settings, project, index, code search, Agent, sandbox, approval and local PR workflow；桌面、全页和 390px 移动端截图均已人工检查。
+- Browser smoke 退出后端口 `8080`、`8090`、`8095`、`5173` 与 `18082` 全部空闲，临时 browser/embedding 用户均为 0；PostgreSQL 和 Redis 保持 healthy。
+- `git diff --check` passes，密钥扫描只命中既有测试夹具中的假 Authorization 值。
+
+### Next
+
+- 使用 `content_sha256` 做增量向量复用，把大仓库的模型调用移出长事务并补充批次重试/进度展示。
+- 为固定模型维度提供 HNSW/IVFFlat 索引策略；当前先用精确 cosine 查询保持多种本地和云端模型维度兼容。
+- 建立自然语言代码检索评测集，持续比较关键词、纯向量与混合排序的召回率和首条命中率。
+
 ## 2026-08-11, Slice 131 - 中文工程工作台视觉重构版
 
 前端从“所有功能纵向堆叠的控制台”重构为以执行路径为中心的中文工程工作台：首屏先展示任务到 PR 的受控链路，再提供仓库接入和任务创建；任务现场、代码洞察、运行数据与系统配置按操作优先级展开。视觉采用克制的石墨黑、纸白和安全绿，并同步补齐键盘、表单、破坏性操作与移动端布局约束。

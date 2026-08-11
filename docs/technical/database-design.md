@@ -119,10 +119,16 @@ MVP 使用 PostgreSQL 作为主数据库，并启用 pgvector 存储代码向量
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `id` | bigint | 主键 |
-| `chunk_id` | bigint | chunk ID |
-| `embedding_model` | varchar(100) | 向量模型 |
-| `embedding` | vector | 向量 |
+| `chunk_id` | bigint | chunk ID，chunk 删除时级联删除 |
+| `project_id` | bigint | 项目 ID，项目删除时级联删除 |
+| `embedding_provider` | varchar(100) | 向量提供方，例如 `OPENAI_COMPATIBLE` |
+| `embedding_model` | varchar(255) | 向量模型 |
+| `embedding_dimension` | int | 向量维度，用于查询时拒绝跨维度比较 |
+| `content_sha256` | varchar(64) | 实际送入模型的规范化 chunk 输入哈希 |
+| `embedding` | vector | pgvector 向量；使用无固定 typmod 以兼容不同模型维度 |
 | `created_at` | timestamp | 创建时间 |
+
+`(chunk_id, embedding_provider, embedding_model)` 唯一。仓库重新索引时旧 `code_chunk` 会被删除，关联向量通过外键同步清理。相似度查询按 `project_id + provider + model + dimension` 隔离，使用 pgvector cosine distance 精确排序；MVP 数据规模下暂不建立固定维度 HNSW，避免把部署绑定到单一模型维度。
 
 ### `agent_task`
 
@@ -295,7 +301,7 @@ MVP 使用 PostgreSQL 作为主数据库，并启用 pgvector 存储代码向量
 | `code_file` | `(project_id, path)`, `(snapshot_id)` |
 | `code_symbol` | `(project_id, symbol_type)`, `(qualified_name)` |
 | `code_chunk` | `(project_id, code_file_id)` |
-| `code_embedding` | vector 相似度索引 |
+| `code_embedding` | `(project_id, embedding_provider, embedding_model, embedding_dimension)`；MVP 使用精确 cosine 排序 |
 | `agent_task` | `(project_id, status)`, `(user_id, created_at)` |
 | `agent_step` | `(agent_run_id, started_at)` |
 | `test_run` | `(agent_run_id, created_at)`, `(patch_id, created_at)`, `(status)` |

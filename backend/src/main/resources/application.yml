@@ -48,6 +48,17 @@ repopilot:
     instruction-role: ${REPOPILOT_CODER_INSTRUCTION_ROLE:developer}
     organization: ${REPOPILOT_CODER_ORGANIZATION:}
     project: ${REPOPILOT_CODER_PROJECT:}
+  embedding:
+    mode: ${REPOPILOT_EMBEDDING_MODE:disabled}
+    api-base-url: ${REPOPILOT_EMBEDDING_API_BASE_URL:https://api.openai.com/v1}
+    api-key: ${REPOPILOT_EMBEDDING_API_KEY:${OPENAI_API_KEY:}}
+    model: ${REPOPILOT_EMBEDDING_MODEL:}
+    timeout-seconds: ${REPOPILOT_EMBEDDING_TIMEOUT_SECONDS:60}
+    batch-size: ${REPOPILOT_EMBEDDING_BATCH_SIZE:32}
+    max-input-chars: ${REPOPILOT_EMBEDDING_MAX_INPUT_CHARS:12000}
+    keyword-weight: ${REPOPILOT_EMBEDDING_KEYWORD_WEIGHT:0.45}
+    vector-weight: ${REPOPILOT_EMBEDDING_VECTOR_WEIGHT:0.55}
+    minimum-similarity: ${REPOPILOT_EMBEDDING_MINIMUM_SIMILARITY:0.20}
   github:
     enabled: ${REPOPILOT_GITHUB_ENABLED:false}
     api-base-url: ${REPOPILOT_GITHUB_API_BASE_URL:https://api.github.com}

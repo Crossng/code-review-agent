@@ -15,10 +15,54 @@ public record CodeSearchResultResponse(
         Integer startLine,
         Integer endLine,
         String summary,
-        String preview
+        String preview,
+        String matchType,
+        Double keywordScore,
+        Double vectorScore,
+        Double combinedScore
 ) {
 
+    public CodeSearchResultResponse(
+            Long chunkId,
+            String filePath,
+            CodeChunkType chunkType,
+            CodeSymbolType symbolType,
+            String symbolName,
+            String qualifiedName,
+            Integer startLine,
+            Integer endLine,
+            String summary,
+            String preview
+    ) {
+        this(
+                chunkId,
+                filePath,
+                chunkType,
+                symbolType,
+                symbolName,
+                qualifiedName,
+                startLine,
+                endLine,
+                summary,
+                preview,
+                "KEYWORD",
+                1.0,
+                null,
+                1.0
+        );
+    }
+
     public static CodeSearchResultResponse from(CodeChunk chunk) {
+        return from(chunk, "KEYWORD", 1.0, null, 1.0);
+    }
+
+    public static CodeSearchResultResponse from(
+            CodeChunk chunk,
+            String matchType,
+            Double keywordScore,
+            Double vectorScore,
+            Double combinedScore
+    ) {
         CodeSymbol symbol = chunk.getSymbol();
         return new CodeSearchResultResponse(
                 chunk.getId(),
@@ -30,7 +74,11 @@ public record CodeSearchResultResponse(
                 chunk.getStartLine(),
                 chunk.getEndLine(),
                 chunk.getSummary(),
-                preview(chunk.getContent())
+                preview(chunk.getContent()),
+                matchType,
+                keywordScore,
+                vectorScore,
+                combinedScore
         );
     }
 

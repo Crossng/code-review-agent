@@ -157,8 +157,13 @@ public class ProjectService {
                 result.javaFileCount(),
                 result.symbolCount(),
                 result.chunkCount(),
+                result.embeddingCount(),
+                result.embeddingStatus(),
+                result.embeddingProvider(),
+                result.embeddingModel(),
+                result.embeddingDimension(),
                 indexedAt,
-                "Repository indexed with JavaParser AST symbol extraction"
+                "仓库索引完成：已生成 JavaParser AST 符号与代码切片；向量状态 " + result.embeddingStatus()
         );
     }
 

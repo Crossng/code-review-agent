@@ -31,6 +31,7 @@ import com.repopilot.indexer.domain.CodeFile;
 import com.repopilot.indexer.domain.CodeFileLanguage;
 import com.repopilot.indexer.domain.CodeSymbol;
 import com.repopilot.indexer.domain.CodeSymbolType;
+import com.repopilot.indexer.embedding.CodeEmbeddingService;
 import com.repopilot.indexer.repository.CodeChunkRepository;
 import com.repopilot.indexer.repository.CodeFileRepository;
 import com.repopilot.indexer.repository.CodeSymbolRepository;
@@ -52,6 +53,7 @@ public class CodeIndexService {
     private final CodeChunkRepository codeChunkRepository;
     private final CodeFileRepository codeFileRepository;
     private final CodeSymbolRepository codeSymbolRepository;
+    private final CodeEmbeddingService codeEmbeddingService;
     private final ObjectMapper objectMapper;
     private final JavaParser javaParser;
 
@@ -61,6 +63,7 @@ public class CodeIndexService {
             CodeChunkRepository codeChunkRepository,
             CodeFileRepository codeFileRepository,
             CodeSymbolRepository codeSymbolRepository,
+            CodeEmbeddingService codeEmbeddingService,
             ObjectMapper objectMapper
     ) {
         this.projectRepository = projectRepository;
@@ -68,6 +71,7 @@ public class CodeIndexService {
         this.codeChunkRepository = codeChunkRepository;
         this.codeFileRepository = codeFileRepository;
         this.codeSymbolRepository = codeSymbolRepository;
+        this.codeEmbeddingService = codeEmbeddingService;
         this.objectMapper = objectMapper;
         ParserConfiguration parserConfiguration = new ParserConfiguration()
                 .setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_17);
@@ -106,9 +110,25 @@ public class CodeIndexService {
 
         project.markIndexed(Instant.now());
         projectRepository.save(project);
+        codeChunkRepository.flush();
         long chunkCount = codeChunkRepository.countByProjectId(project.getId());
+        CodeEmbeddingService.IndexingResult embeddingResult = codeEmbeddingService.indexProject(
+                project.getId(),
+                () -> codeChunkRepository.findByProjectIdOrderByIdAsc(project.getId())
+        );
 
-        return new IndexResult(snapshot.getId(), files.size(), javaFiles.size(), symbolCount, chunkCount);
+        return new IndexResult(
+                snapshot.getId(),
+                files.size(),
+                javaFiles.size(),
+                symbolCount,
+                chunkCount,
+                embeddingResult.embeddingCount(),
+                embeddingResult.status(),
+                embeddingResult.provider(),
+                embeddingResult.model(),
+                embeddingResult.dimension()
+        );
     }
 
     @Transactional(readOnly = true)
@@ -413,6 +433,17 @@ public class CodeIndexService {
         return Path.of(project.getLocalPath()).toAbsolutePath().normalize();
     }
 
-    public record IndexResult(Long snapshotId, int fileCount, int javaFileCount, int symbolCount, long chunkCount) {
+    public record IndexResult(
+            Long snapshotId,
+            int fileCount,
+            int javaFileCount,
+            int symbolCount,
+            long chunkCount,
+            long embeddingCount,
+            String embeddingStatus,
+            String embeddingProvider,
+            String embeddingModel,
+            Integer embeddingDimension
+    ) {
     }
 }
