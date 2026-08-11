@@ -73,6 +73,7 @@
 | AC-011h28 | Agent Worker 业务闭环 smoke 可验证 | `./scripts/agent-worker-business-smoke.sh` 启动 PostgreSQL/Redis、真实 Spring Boot 后端、真实 FastAPI Worker 和本地 OpenAI-compatible Coder 模型 stub；脚本创建临时用户、两个本地 demo Spring 项目场景并分别执行 clone/index，再通过标准后端 `/api/agent/tasks/{taskId}/run` 启动任务，验证每个场景的 `agent_worker_start.output.execution_mode=WORKER_PRIMARY` 且当前任务只产生 1 个 Worker patch；模型 stub 默认让第一个 Coder 请求先返回一次 HTTP 429，再恢复返回 `GET /api/users/summary` raw diff，验证 Worker Coder 自动重试恢复，且标准模型审计 API 返回结构化 `retryAudit.attemptCount=1`、`recovered=true` 和首次失败摘要；验证第一个 run report 包含 `Worker 重试恢复证据` section、`重试失败尝试：1`、`恢复调用：1/1`、`模型 generate_patch` 和 `HTTP 429` Markdown 证据；第二个业务场景返回 `GET /api/users/names` raw diff，并断言没有 retryAudit 和 run report 重试误报；验证两个场景的 patch 均为 `generationMode=LLM_CODER_DRAFT`、`generationProvider=OPENAI_COMPATIBLE`、`generationModel=gpt-worker-business-smoke`，模型调用写入 token usage 且不泄漏 API key，工具读取审计包含 context/files/search/read_file，后置门写入 `validate_patch_safety`、`apply_patch`、`run_tests`、`review_patch` 和 `waiting_human_approval` 证据；随后用标准用户 JWT 分别审批 Worker patch，调用 PR preflight 和 `/pull-request`，验证本地 `DRAFT_READY` target branch/commit 草稿可准备；证据写入 `output/agent-worker-business-smoke/last-run.json` 的 `scenarioCount=2` 和 `scenarios` 列表，并清理临时业务数据 |
 | AC-011h29 | Worker primary 失败与取消保护可验证 | Worker 图节点抛错时，`run_initial_nodes_safely` 会回写当前 step `FAILED`，随后通过 `/api/internal/agent-worker/runs/{runId}/status` 把任务标为 `FAILED_PATCH_GENERATION`、run 标为 `FAILED` 并 `complete_stream=true`；`generate_patch` 后置门中 diff 安全预检、沙箱应用、Maven 测试或 review 未通过时，会按类型回写 `FAILED_PATCH_GENERATION` 或 `FAILED_TEST`；后端对已终止 run/task 的 late Worker callback 进行保护，`patches`、`safety`、`sandbox-tests`、`review`、`approval-ready` 和非幂等 `/status` 请求返回 `409 AGENT_WORKER_RUN_TERMINATED`，防止用户取消后的 Worker 继续生成 patch 或把任务推进到审批态；`AgentWorkerCallbackControllerIntegrationTest` 覆盖取消后拒绝状态覆盖和 patch 写入，`agent-worker/tests/test_initial_graph_builder.py` 覆盖节点异常失败回写，`agent-worker/tests/test_patch_model_node.py` 覆盖 safety gate 失败时 `/status` 失败收口 |
 | AC-011h30 | Worker primary 可恢复重试语义可验证 | Python Worker 提供 `REPOPILOT_WORKER_RETRY_MAX_ATTEMPTS` 和 `REPOPILOT_WORKER_RETRY_BACKOFF_SECONDS`，仅对 OpenAI-compatible Planner/Coder 模型调用和后端只读工具 GET 请求执行有限重试；HTTP `408/425/429/5xx`、网络错误和超时视为可恢复，HTTP `400/401/403/404/409`、模型输出契约错误、diff parser 错误、安全预检失败、沙箱应用失败、Maven 测试失败和风险审查失败不自动重试；`record_step`、`record_model_call`、`record_patch`、`update_status` 和 approval-ready 等写型 callback 不透明重试，避免重复落库或重复推进审批；`agent-worker/tests/test_worker_model_client.py` 覆盖 429 后重试成功和 400 不重试，`agent-worker/tests/test_backend_api_client.py` 覆盖只读工具 503 后重试成功以及写 step callback 503 不重试；`./scripts/agent-worker-planner-smoke.sh` 在真实 FastAPI Worker 链路中注入一次后端 `/context` 503 和一次 Planner 模型 429，验证 `retryEvidence.contextGetCount=2`、`plannerRequestCount=2` 且后续 step/patch/approval 仍成功；`./scripts/agent-worker-coder-model-smoke.sh` 注入一次 Coder 模型 429，验证 `retryEvidence.coderRequestCount=2` 且恢复后的 `LLM_CODER_DRAFT` 继续通过 safety/sandbox/review/approval-ready |
+| AC-011h31 | MCP 工具目录服务可验证 | `mcp-tool-server` 是独立 Spring Boot 服务，`GET /api/mcp/tools` 返回 `RepoPilot MCP 工具目录服务`、`REPOPILOT_MCP_CONTRACT_V1` 和不少于 16 个工具定义，覆盖 `list_project_files`、`read_file`、`search_code`、`run_maven_test`、`create_pull_request` 等 MVP 工具；`GET /api/mcp/tools/{toolName}` 可读取单个工具中文标题、分类、访问模式、审计要求、审批要求、backend bridge 和安全规则；`POST /api/mcp/tools/{toolName}/validate` 会规范化相对路径、拒绝绝对路径/`..`/`.git`，拒绝未知参数和错误类型，校验 `limit`、`maxDepth` 整数边界，并要求写型工具提供 `approvedByHuman=true`，否则返回 `NEEDS_HUMAN_APPROVAL`；`McpToolRegistryServiceTest`、`McpToolControllerIntegrationTest` 和 `./scripts/mcp-tool-server-smoke.sh` 覆盖工具目录、路径安全、类型/未知参数/边界校验和写型工具审批门，smoke 证据写入 `output/mcp-tool-server-smoke/last-run.json` |
 | AC-011i | 工作台概览指标可见 | `GET /api/dashboard/summary` 需要鉴权，只统计当前用户项目、任务和 PR 记录；返回项目总数/READY/FAILED，任务总数/CREATED/运行中/待审批/DONE/失败/CANCELLED，PR 总数/`DRAFT_READY`/`OPEN`/`FAILED`；控制台展示 `DashboardSummaryPanel`，登录后显示空工作区指标，项目索引完成后更新项目 ready 计数，任务到达人工审批点后更新 waiting approval 计数 |
 | AC-011j | Agent 运行表现指标可见 | `GET /api/dashboard/run-metrics` 需要鉴权，只统计当前用户最近 1-30 天 `agent_run`；默认 7 天窗口返回 run 总数、成功/失败/取消/运行中数量、完成 run 数、平均耗时、成功率和每日趋势；控制台展示 `DashboardRunMetricsPanel`，登录后显示 0 runs，首个任务到达人工审批点后显示 runs=1、success rate=100% |
 | AC-011k | 跨项目活动流可见 | `GET /api/dashboard/activity` 需要鉴权，只统计当前用户任务下最近 `agent_step`，按完成/开始时间倒序返回，支持 `limit` 且不返回 step input/output JSON；控制台展示 `DashboardActivityPanel`，登录后显示无活动，首个任务到达人工审批点后显示 `waiting_human_approval` 活动 |
@@ -85,42 +86,43 @@
 | AC-011r | Agent 运行指标窗口可切换 | `DashboardRunMetricsPanel` 提供 7/14/30 天窗口选择；切换到 14 天时前端请求 `GET /api/dashboard/run-metrics?days=14` 并更新面板为 `Last 14 days`；URL 写入 `runMetricsDays=14`，刷新后选择器和指标窗口恢复 |
 | AC-011s | 活动流数量窗口可切换 | `DashboardActivityPanel` 提供 10/25/50 条数量选择；切换到 25 条时前端请求 `GET /api/dashboard/activity?limit=25` 并更新面板为 `0 of latest 25 events` 或对应活动数量；URL 写入 `activityLimit=25`，刷新后选择器和活动窗口恢复 |
 | AC-011t | 工作台概览链接可复制 | `DashboardSummaryPanel` 提供 `Copy overview link`；点击后通过剪贴板写入当前控制台 URL，包含当前 `runMetricsDays`、`activityLimit` 和 `#overview` 锚点，并显示可访问的复制状态提示 |
-| AC-012 | 全链路可演示 | `./scripts/agent-worker-smoke.sh` 可先验证 Python Agent Worker 契约；`./scripts/agent-worker-callback-smoke.sh` 可验证 Python Agent Worker 到后端 step/tool/model/patch/status 回写 client 契约；`./scripts/agent-worker-tool-smoke.sh` 可验证 Python Agent Worker 到后端 run-scoped 工具读取 client 契约；`./scripts/agent-worker-node-smoke.sh` 可验证 Worker 图执行器骨架、`ensure_index`、初始与检索节点执行、自动 tool call audit、`generate_patch` model call audit、`WORKER_SAFE_PLANNING_DRAFT` patch draft、step 回写、safety callback、sandbox callback、review callback 和 approval-ready callback；`./scripts/agent-worker-planner-smoke.sh` 可验证真实 FastAPI Worker 在 OpenAI-compatible stub 下执行 `plan_task` Planner 模型摘要、model call audit、token usage、只读工具/Planner 模型 retry audit 和密钥不落审计契约；`./scripts/agent-worker-coder-smoke.sh` 可验证 Worker Coder fixture raw diff 解析为 `LLM_CODER_DRAFT` 并继续通过 safety、sandbox、review 和 approval-ready 后置门；`./scripts/agent-worker-coder-model-smoke.sh` 可验证真实 FastAPI Worker 在 OpenAI-compatible stub 下执行 `generate_patch` Coder 模型 raw diff、model call audit、token usage、Coder 模型 retry audit、密钥不落审计、`LLM_CODER_DRAFT` patch 回写和后置门契约；`./scripts/agent-worker-business-smoke.sh` 可验证 Worker Coder 在真实后端和 demo Spring 仓库里生成 Java 业务 diff、从一次 Coder 模型 429 自动恢复、标准审计 API 返回结构化 `retryAudit`、run report 返回 `Worker 重试恢复证据`、通过沙箱、进入人工审批、审批后准备本地 `DRAFT_READY` PR 草稿；`./scripts/real-token-demo-check.sh` 可完成演示环境体检，并生成脱敏 JSON 证据和中文 Markdown 操作手册；有真实模型 token 时，`./scripts/real-coder-demo.sh` 可验证真实 `OPENAI_COMPATIBLE` Coder 到沙箱测试和人工审批暂停点的 API 级链路；无真实 GitHub token 时，`./scripts/remote-github-pr-smoke.sh` 可用本地 GitHub API stub 和 bare Git origin 验证远端 PR 发布主路径；有 GitHub token 和可丢弃 demo 仓库时，`./scripts/real-github-pr-demo.sh` 可验证真实远端分支 push 和 GitHub PR 创建；`./scripts/browser-smoke.sh` 从登录后的工作台概览、Agent run performance 7/14/30 天窗口切换与 URL 恢复、Recent task activity 10/25/50 条数量切换与 URL 恢复、overview 链接复制、演示就绪总览、Coder、GitHub 发布与 Sandbox 配置脱敏状态开始，继续完成仓库接入、项目搜索/状态筛选、项目视图 URL 恢复、项目视图链接复制、Controller API 风险视图、Controller API Markdown 文档复制和 `.md` 下载、代码检索、任务搜索/状态筛选、任务视图 URL 恢复、任务视图链接复制、Agent evidence、run report 复制和 `.md` 下载、运行报告快照保存/复制/下载，并注入临时 retry audit 验证 `Worker 重试恢复证据`、工具调用审计和模型调用审计的 `已重试恢复` 展示；随后验证真实分页 patch、`changedFiles` 摘要、`validate_patch_safety` 预检、自动风险审查、沙箱测试、Regenerate 新版本校验、PR preflight blocker/ready 状态、人工审批和本地 `DRAFT_READY` PR 准备记录；随后创建 User id 参数校验任务并验证真实 guard patch、测试覆盖和沙箱测试通过；再创建 User count API 任务并验证 `SPRING_USER_COUNT_RECIPE`、真实 count patch、`changedFiles` 和沙箱测试通过；最后创建 User create API 任务并验证 `SPRING_USER_CREATE_RECIPE`、真实 create patch、DTO 文件、`changedFiles` 和沙箱测试通过 |
+| AC-012 | 全链路可演示 | `./scripts/mcp-tool-server-smoke.sh` 可验证独立 MCP 工具目录、路径安全校验和写型工具人工审批门；`./scripts/agent-worker-smoke.sh` 可先验证 Python Agent Worker 契约；`./scripts/agent-worker-callback-smoke.sh` 可验证 Python Agent Worker 到后端 step/tool/model/patch/status 回写 client 契约；`./scripts/agent-worker-tool-smoke.sh` 可验证 Python Agent Worker 到后端 run-scoped 工具读取 client 契约；`./scripts/agent-worker-node-smoke.sh` 可验证 Worker 图执行器骨架、`ensure_index`、初始与检索节点执行、自动 tool call audit、`generate_patch` model call audit、`WORKER_SAFE_PLANNING_DRAFT` patch draft、step 回写、safety callback、sandbox callback、review callback 和 approval-ready callback；`./scripts/agent-worker-planner-smoke.sh` 可验证真实 FastAPI Worker 在 OpenAI-compatible stub 下执行 `plan_task` Planner 模型摘要、model call audit、token usage、只读工具/Planner 模型 retry audit 和密钥不落审计契约；`./scripts/agent-worker-coder-smoke.sh` 可验证 Worker Coder fixture raw diff 解析为 `LLM_CODER_DRAFT` 并继续通过 safety、sandbox、review 和 approval-ready 后置门；`./scripts/agent-worker-coder-model-smoke.sh` 可验证真实 FastAPI Worker 在 OpenAI-compatible stub 下执行 `generate_patch` Coder 模型 raw diff、model call audit、token usage、Coder 模型 retry audit、密钥不落审计、`LLM_CODER_DRAFT` patch 回写和后置门契约；`./scripts/agent-worker-business-smoke.sh` 可验证 Worker Coder 在真实后端和 demo Spring 仓库里生成 Java 业务 diff、从一次 Coder 模型 429 自动恢复、标准审计 API 返回结构化 `retryAudit`、run report 返回 `Worker 重试恢复证据`、通过沙箱、进入人工审批、审批后准备本地 `DRAFT_READY` PR 草稿；`./scripts/real-token-demo-check.sh` 可完成演示环境体检，并生成脱敏 JSON 证据和中文 Markdown 操作手册；有真实模型 token 时，`./scripts/real-coder-demo.sh` 可验证真实 `OPENAI_COMPATIBLE` Coder 到沙箱测试和人工审批暂停点的 API 级链路；无真实 GitHub token 时，`./scripts/remote-github-pr-smoke.sh` 可用本地 GitHub API stub 和 bare Git origin 验证远端 PR 发布主路径；有 GitHub token 和可丢弃 demo 仓库时，`./scripts/real-github-pr-demo.sh` 可验证真实远端分支 push 和 GitHub PR 创建；`./scripts/browser-smoke.sh` 从登录后的工作台概览、Agent run performance 7/14/30 天窗口切换与 URL 恢复、Recent task activity 10/25/50 条数量切换与 URL 恢复、overview 链接复制、演示就绪总览、Coder、GitHub 发布与 Sandbox 配置脱敏状态开始，继续完成仓库接入、项目搜索/状态筛选、项目视图 URL 恢复、项目视图链接复制、Controller API 风险视图、Controller API Markdown 文档复制和 `.md` 下载、代码检索、任务搜索/状态筛选、任务视图 URL 恢复、任务视图链接复制、Agent evidence、run report 复制和 `.md` 下载、运行报告快照保存/复制/下载，并注入临时 retry audit 验证 `Worker 重试恢复证据`、工具调用审计和模型调用审计的 `已重试恢复` 展示；随后验证真实分页 patch、`changedFiles` 摘要、`validate_patch_safety` 预检、自动风险审查、沙箱测试、Regenerate 新版本校验、PR preflight blocker/ready 状态、人工审批和本地 `DRAFT_READY` PR 准备记录；随后创建 User id 参数校验任务并验证真实 guard patch、测试覆盖和沙箱测试通过；再创建 User count API 任务并验证 `SPRING_USER_COUNT_RECIPE`、真实 count patch、`changedFiles` 和沙箱测试通过；最后创建 User create API 任务并验证 `SPRING_USER_CREATE_RECIPE`、真实 create patch、DTO 文件、`changedFiles` 和沙箱测试通过 |
 
 ## 3. Demo 验收脚本
 
-1. 运行 `./scripts/agent-worker-smoke.sh` 验证 Python Agent Worker 契约。
-2. 运行 `./scripts/agent-worker-callback-smoke.sh` 验证 Python Agent Worker step/tool/model/patch/status 回写 client 契约。
-3. 运行 `./scripts/agent-worker-tool-smoke.sh` 验证 Python Agent Worker 工具读取 client 契约。
-4. 运行 `./scripts/agent-worker-node-smoke.sh` 验证 Python Agent Worker 图执行器骨架、`ensure_index`、初始与检索节点执行、自动 tool call audit、`generate_patch` model call audit、`WORKER_SAFE_PLANNING_DRAFT` patch draft、step 回写、safety、sandbox、review 和 approval-ready callback 契约。
-5. 运行 `./scripts/agent-worker-planner-smoke.sh` 验证 Python Agent Worker 在 OpenAI-compatible stub 下的 Planner 模型摘要、model call audit、token usage 和密钥不落审计契约。
-6. 运行 `./scripts/agent-worker-coder-smoke.sh` 验证 Python Agent Worker Coder fixture raw diff 解析、`LLM_CODER_DRAFT` patch 回写和后置门契约。
-7. 运行 `./scripts/agent-worker-coder-model-smoke.sh` 验证 Python Agent Worker 在 OpenAI-compatible stub 下的 Coder 模型 raw diff、`LLM_CODER_DRAFT` patch 回写和后置门契约。
-8. 运行 `./scripts/agent-worker-business-smoke.sh` 验证 Worker Coder 在真实后端和 demo Spring 仓库中的双 Java 业务 diff、一次 Coder 模型 429 重试恢复、结构化 `retryAudit`、审批和本地 PR 草稿闭环。
-9. 运行 `./scripts/real-token-demo-check.sh` 检查本地闭环、真实模型和远端 GitHub PR 演示前置项，确认 `output/real-token-demo-check/last-run.json` 和 `last-run.md` 已生成；正式真实 token 演示前使用 `--strict`。
-10. 有真实模型 token 时，运行 `./scripts/real-coder-demo.sh` 展示真实 `OPENAI_COMPATIBLE` Coder 从模型调用到沙箱测试和人工审批暂停点的 API 级端到端链路。
-11. 无真实 GitHub token 时，运行 `./scripts/remote-github-pr-smoke.sh` 用本地 GitHub API stub 和 bare Git origin 验证远端 PR 发布主路径。
-12. 有 GitHub token 和可丢弃 demo 仓库时，运行 `./scripts/real-github-pr-demo.sh` 展示真实远端分支 push 和 GitHub PR 创建。
-13. 启动 Docker Compose。
-14. 注册并登录。
-15. 查看工作台概览、Agent run performance、Recent task activity、Coder、GitHub 发布与 Sandbox 配置状态，确认空工作区计数、run 计数/成功率、空活动流、mode、provider、ready、model/key/token、Docker、Maven cache 和 workspace 配置状态可见且无密钥明文。
-16. 添加 Spring Boot 示例仓库。
-17. Clone 成功后，使用项目搜索和 `READY` 状态筛选仓库行，确认 URL 写入 `projectStatus`、`projectQuery` 和 `projectId`，刷新页面后恢复筛选和 Repository insight 项目选择，复制当前项目视图链接并确认剪贴板 URL 包含项目筛选和 `projectId`，然后重置项目筛选。
-18. 触发索引。
-19. 创建任务：“给 User 模块新增分页查询接口”。
-20. 使用任务搜索筛选分页任务，确认 URL 写入 `taskQuery` 和 `taskId`，刷新页面后恢复任务筛选和任务详情；任务到审批点后按 `WAITING_HUMAN_APPROVAL` 状态筛选，再次刷新确认 `taskStatus`、`taskQuery` 和任务详情恢复，复制当前任务视图链接并确认剪贴板 URL 包含任务筛选和 `taskId`，然后重置任务筛选。
-21. 观察 Agent 步骤、Agent evidence 和日志流，复制、下载并保存当前 run report Markdown，再从运行报告快照复制和下载历史报告。
-22. 查看相关代码检索结果。
-23. 查看新增 `GET /api/users/page`、Service/Mapper 分页逻辑和 `UserServiceTest` 的 diff。
-24. 查看 Maven 测试日志。
-25. 查看 PR preflight，确认未审批 blocker。
-26. 点击 Approve。
-27. 查看 PR preflight，确认本地 branch/commit 可准备且远程 GitHub 状态可解释。
-28. 准备 PR，展示本地 target branch、commit、标题和描述。
-29. 再创建任务：“修复 User id 参数校验 bug”，查看 guard、`UserServiceTest` 和 Maven 测试结果。
-30. 再创建任务：“新增 User count API”，查看 `GET /api/users/count`、`countUsers`、`countAll`、`UserServiceTest` 和 Maven 测试结果。
-31. 再创建任务：“新增 User create API”，查看 `POST /api/users`、`CreateUserRequest`、`createUser`、`save`、`UserServiceTest` 和 Maven 测试结果。
-32. 在启用 GitHub 发布的环境中创建 GitHub PR，并打开 PR 链接展示标题、描述和修改文件。
+1. 运行 `./scripts/mcp-tool-server-smoke.sh` 验证独立 MCP 工具目录、路径安全校验和写型工具人工审批门。
+2. 运行 `./scripts/agent-worker-smoke.sh` 验证 Python Agent Worker 契约。
+3. 运行 `./scripts/agent-worker-callback-smoke.sh` 验证 Python Agent Worker step/tool/model/patch/status 回写 client 契约。
+4. 运行 `./scripts/agent-worker-tool-smoke.sh` 验证 Python Agent Worker 工具读取 client 契约。
+5. 运行 `./scripts/agent-worker-node-smoke.sh` 验证 Python Agent Worker 图执行器骨架、`ensure_index`、初始与检索节点执行、自动 tool call audit、`generate_patch` model call audit、`WORKER_SAFE_PLANNING_DRAFT` patch draft、step 回写、safety、sandbox、review 和 approval-ready callback 契约。
+6. 运行 `./scripts/agent-worker-planner-smoke.sh` 验证 Python Agent Worker 在 OpenAI-compatible stub 下的 Planner 模型摘要、model call audit、token usage 和密钥不落审计契约。
+7. 运行 `./scripts/agent-worker-coder-smoke.sh` 验证 Python Agent Worker Coder fixture raw diff 解析、`LLM_CODER_DRAFT` patch 回写和后置门契约。
+8. 运行 `./scripts/agent-worker-coder-model-smoke.sh` 验证 Python Agent Worker 在 OpenAI-compatible stub 下的 Coder 模型 raw diff、`LLM_CODER_DRAFT` patch 回写和后置门契约。
+9. 运行 `./scripts/agent-worker-business-smoke.sh` 验证 Worker Coder 在真实后端和 demo Spring 仓库中的双 Java 业务 diff、一次 Coder 模型 429 重试恢复、结构化 `retryAudit`、审批和本地 PR 草稿闭环。
+10. 运行 `./scripts/real-token-demo-check.sh` 检查本地闭环、真实模型和远端 GitHub PR 演示前置项，确认 `output/real-token-demo-check/last-run.json` 和 `last-run.md` 已生成；正式真实 token 演示前使用 `--strict`。
+11. 有真实模型 token 时，运行 `./scripts/real-coder-demo.sh` 展示真实 `OPENAI_COMPATIBLE` Coder 从模型调用到沙箱测试和人工审批暂停点的 API 级端到端链路。
+12. 无真实 GitHub token 时，运行 `./scripts/remote-github-pr-smoke.sh` 用本地 GitHub API stub 和 bare Git origin 验证远端 PR 发布主路径。
+13. 有 GitHub token 和可丢弃 demo 仓库时，运行 `./scripts/real-github-pr-demo.sh` 展示真实远端分支 push 和 GitHub PR 创建。
+14. 启动 Docker Compose。
+15. 注册并登录。
+16. 查看工作台概览、Agent run performance、Recent task activity、Coder、GitHub 发布与 Sandbox 配置状态，确认空工作区计数、run 计数/成功率、空活动流、mode、provider、ready、model/key/token、Docker、Maven cache 和 workspace 配置状态可见且无密钥明文。
+17. 添加 Spring Boot 示例仓库。
+18. Clone 成功后，使用项目搜索和 `READY` 状态筛选仓库行，确认 URL 写入 `projectStatus`、`projectQuery` 和 `projectId`，刷新页面后恢复筛选和 Repository insight 项目选择，复制当前项目视图链接并确认剪贴板 URL 包含项目筛选和 `projectId`，然后重置项目筛选。
+19. 触发索引。
+20. 创建任务：“给 User 模块新增分页查询接口”。
+21. 使用任务搜索筛选分页任务，确认 URL 写入 `taskQuery` 和 `taskId`，刷新页面后恢复任务筛选和任务详情；任务到审批点后按 `WAITING_HUMAN_APPROVAL` 状态筛选，再次刷新确认 `taskStatus`、`taskQuery` 和任务详情恢复，复制当前任务视图链接并确认剪贴板 URL 包含任务筛选和 `taskId`，然后重置任务筛选。
+22. 观察 Agent 步骤、Agent evidence 和日志流，复制、下载并保存当前 run report Markdown，再从运行报告快照复制和下载历史报告。
+23. 查看相关代码检索结果。
+24. 查看新增 `GET /api/users/page`、Service/Mapper 分页逻辑和 `UserServiceTest` 的 diff。
+25. 查看 Maven 测试日志。
+26. 查看 PR preflight，确认未审批 blocker。
+27. 点击 Approve。
+28. 查看 PR preflight，确认本地 branch/commit 可准备且远程 GitHub 状态可解释。
+29. 准备 PR，展示本地 target branch、commit、标题和描述。
+30. 再创建任务：“修复 User id 参数校验 bug”，查看 guard、`UserServiceTest` 和 Maven 测试结果。
+31. 再创建任务：“新增 User count API”，查看 `GET /api/users/count`、`countUsers`、`countAll`、`UserServiceTest` 和 Maven 测试结果。
+32. 再创建任务：“新增 User create API”，查看 `POST /api/users`、`CreateUserRequest`、`createUser`、`save`、`UserServiceTest` 和 Maven 测试结果。
+33. 在启用 GitHub 发布的环境中创建 GitHub PR，并打开 PR 链接展示标题、描述和修改文件。
 
 ## 4. 风险验收
 

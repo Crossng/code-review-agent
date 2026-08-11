@@ -2,7 +2,21 @@
 
 ## 1. 工具层目标
 
-MCP Tool Server 把 RepoPilot 的工程能力封装成 Agent 可调用的工具。所有工具必须可审计、可限权、可复现。MVP 中工具先由 Spring Boot 内部 HTTP 工具桥提供，Agent Worker 使用 `X-RepoPilot-Worker-Token` 访问 run-scoped 工具接口；等工具清单稳定后，再拆成 Spring AI MCP Server。
+MCP Tool Server 把 RepoPilot 的工程能力封装成 Agent 可调用的工具。所有工具必须可审计、可限权、可复现。MVP 中工具执行仍由 Spring Boot 内部 HTTP 工具桥提供，Agent Worker 使用 `X-RepoPilot-Worker-Token` 访问 run-scoped 工具接口；独立 `mcp-tool-server` 当前先提供工具目录、输入 schema、安全规则和参数校验，作为后续接入 Spring AI MCP Server 传输层前的稳定契约。
+
+当前可运行入口：
+
+```text
+GET  /api/mcp/tools
+GET  /api/mcp/tools/{toolName}
+POST /api/mcp/tools/{toolName}/validate
+```
+
+本地 smoke：
+
+```bash
+./scripts/mcp-tool-server-smoke.sh
+```
 
 ## 2. 工具分类
 
@@ -77,6 +91,14 @@ GET /api/internal/agent-worker/runs/{runId}/project/files?maxDepth=6
 GET /api/internal/agent-worker/runs/{runId}/project/file?path=src/main/java/com/example/UserController.java
 ```
 
+独立工具目录校验：
+
+```text
+POST /api/mcp/tools/read_file/validate
+```
+
+校验会规范化反斜杠路径，拒绝绝对路径、`..` 路径穿越和 `.git` 内部路径，并按工具声明拒绝未知参数与错误类型。
+
 ### `search_code`
 
 用途：根据关键词或向量检索代码 chunk。
@@ -99,6 +121,8 @@ GET /api/internal/agent-worker/runs/{runId}/project/file?path=src/main/java/com/
 ```text
 GET /api/internal/agent-worker/runs/{runId}/project/search?query=User%20Controller&limit=8
 ```
+
+独立工具目录校验会要求 `limit` 是 `1` 到 `20` 之间的整数，且只接受工具声明中的参数名。
 
 输出：
 
@@ -218,6 +242,8 @@ GET /api/internal/agent-worker/runs/{runId}/project/symbols?type=CONTROLLER
   "base": "main"
 }
 ```
+
+独立工具目录会把 `create_pull_request` 标记为写型工具，默认要求 `approvedByHuman=true`；缺少审批确认时，`/validate` 返回 `NEEDS_HUMAN_APPROVAL`。
 
 ## 4. 工具调用审计
 

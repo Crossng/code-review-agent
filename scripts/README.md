@@ -2,6 +2,23 @@
 
 后续放本地开发、索引、演示、清理脚本。MVP 阶段优先保持脚本短小、可读、可重复执行。
 
+## MCP 工具目录 Smoke
+
+```bash
+./scripts/mcp-tool-server-smoke.sh
+```
+
+该脚本用于验证独立 `mcp-tool-server` 的可运行工具目录契约。它会：
+
+- 临时启动 Spring Boot `mcp-tool-server`。
+- 验证 `GET /actuator/health` 返回 `UP`。
+- 验证 `GET /api/mcp/tools` 返回 `RepoPilot MCP 工具目录服务`、协议版本 `REPOPILOT_MCP_CONTRACT_V1` 和至少 16 个工具。
+- 验证工具目录包含 `list_project_files`、`read_file`、`search_code`、`run_maven_test` 和 `create_pull_request`。
+- 验证 `read_file` 合法相对路径会规范化反斜杠，`../secret.txt` 会被阻止。
+- 验证 `search_code` 会拒绝错误参数类型、未知参数和越界 `limit`。
+- 验证 `create_pull_request` 缺少 `approvedByHuman=true` 时返回 `NEEDS_HUMAN_APPROVAL`。
+- 将证据写入 `output/mcp-tool-server-smoke/last-run.json`。
+
 ## Agent Worker Smoke
 
 ```bash

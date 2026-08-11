@@ -26,7 +26,7 @@ repopilot/
 | `backend/` | Spring Boot 主平台 | 是 |
 | `agent-worker/` | Python LangGraph Worker | 是 |
 | `frontend/` | Web 控制台 | 是 |
-| `mcp-tool-server/` | Spring AI MCP 工具服务，可先与 backend 合并，后续拆出 | 是 |
+| `mcp-tool-server/` | 独立工具目录与参数校验服务，后续接入 Spring AI MCP 传输层 | 是 |
 | `scripts/` | 开发、索引、演示、清理脚本 | 是 |
 | `examples/` | Demo 仓库配置、示例任务、演示数据 | 是 |
 | `workspace/` | 本地运行工作区，放 clone 仓库和 run 临时目录，不提交 Git | 是 |
@@ -121,19 +121,15 @@ Frontend 约定：
 ```text
 mcp-tool-server/
 ├── pom.xml
-└── src/main/java/com/repopilot/toolserver/
-    ├── ToolServerApplication.java
-    ├── file/
-    ├── javaast/
-    ├── search/
-    ├── git/
-    ├── maven/
-    ├── docker/
-    ├── github/
-    └── audit/
+├── src/main/java/com/repopilot/toolserver/
+│   ├── ToolServerApplication.java
+│   ├── common/
+│   └── tool/
+├── src/main/resources/application.yml
+└── src/test/java/com/repopilot/toolserver/
 ```
 
-MVP 可以先把工具服务放在 `backend/tool` 中，等工具数量稳定后再拆成独立 `mcp-tool-server/`。
+当前独立服务先提供工具目录、输入 schema、安全规则和参数校验；工具执行仍复用 `backend` 与 Agent Worker 内部工具桥。等工具契约稳定后，再在该模块内接入 Spring AI MCP Server 传输层，并按 `file/`、`javaast/`、`search/`、`git/`、`maven/`、`docker/`、`github/` 和 `audit/` 拆分真实工具实现。
 
 ## 7. Workspace 约定
 

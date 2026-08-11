@@ -45,6 +45,7 @@ GitHub 仓库接入
 - `backend/`：Spring Boot、Flyway、JPA、JWT 鉴权、项目 API、Agent 任务 API。
 - `backend/`：已包含 Git 克隆工作区管理和 JavaParser AST 符号索引。
 - `agent-worker/`：FastAPI Worker 契约和 MVP graph node 清单。
+- `mcp-tool-server/`：Spring Boot 工具目录与参数校验服务，输出中文工具契约和安全规则。
 - `frontend/`：Vite React 控制台第一屏。
 - `scripts/`：覆盖本地闭环、Worker、真实 Coder、远端 PR 本地替身和真实 GitHub PR 的中文 smoke/演示脚本。
 
@@ -77,6 +78,13 @@ npm run dev
 curl http://127.0.0.1:8080/actuator/health
 ```
 
+运行 MCP 工具目录服务：
+
+```bash
+cd mcp-tool-server
+mvn -Dmaven.repo.local=../.m2 spring-boot:run
+```
+
 ## 已验证
 
 - `docker compose config`
@@ -85,4 +93,5 @@ curl http://127.0.0.1:8080/actuator/health
 - `frontend`: `npm run build`
 - `agent-worker`: Python 语法编译检查
 - 后端真实 API 流：注册、登录、创建项目、创建 Agent 任务、启动 run、查询 step
+- `./scripts/mcp-tool-server-smoke.sh`：验证 MCP 工具目录、路径安全校验和写型工具人工审批门
 - `./scripts/remote-github-pr-smoke.sh`：无真实 GitHub token 时验证远端 PR push + API 主路径

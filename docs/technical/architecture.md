@@ -31,7 +31,7 @@ Web Frontend
 | Web 前端 | React 或 Vue 3 | 项目管理、任务创建、日志流、diff 预览、审批 |
 | Backend API | Spring Boot 3 | 鉴权、项目、任务、审批、PR、日志、配置 |
 | Agent Worker | Python + LangGraph | 多 Agent 状态机、模型调用、计划执行、失败修复 |
-| MCP Tool Server | Spring Boot + Spring AI MCP | 暴露文件、AST、检索、Git、Maven、Docker、GitHub 工具 |
+| MCP Tool Server | Spring Boot + Spring AI MCP | 当前提供工具目录、输入校验和安全规则，后续暴露文件、AST、检索、Git、Maven、Docker、GitHub 工具 |
 | PostgreSQL | PostgreSQL + pgvector | 业务数据、代码索引、向量数据、日志数据 |
 | Redis | Redis | 任务锁、短期状态、异步队列、SSE 事件缓存 |
 | Docker Sandbox | Docker | 隔离执行补丁应用、编译、测试 |
@@ -112,4 +112,3 @@ docker-compose
 | ADR-003 | diff 优先于直接改文件 | 便于审查、回滚和 PR 自动化 |
 | ADR-004 | 测试必须在沙箱执行 | 避免不可信代码污染宿主环境 |
 | ADR-005 | Agent 步骤持久化 | 支持长任务恢复、日志追踪和面试展示 |
-

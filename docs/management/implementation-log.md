@@ -4231,6 +4231,38 @@ Python Agent Worker 从“所有初始节点和 helper 都堆在 `initial_nodes.
 - 在安装完整 `agent-worker` 依赖的运行环境中补充一次 `graph_engine=LANGGRAPH` 的真实依赖 smoke 证据。
 - 开始把确定性 planning/patch 节点替换为可配置的模型驱动节点，同时继续复用现有审计和安全后置门。
 
+## 2026-08-11, Slice 121 - MCP工具目录服务版
+
+MCP Tool Server 从占位目录推进到可独立启动的 Spring Boot 工具目录服务：这一版先固化 RepoPilot 工具清单、输入 schema、安全规则和参数校验，不迁移现有执行链路；Agent Worker 当前仍通过 backend 内部工具桥读取 run-scoped 工具，后续再把真实执行能力接入 Spring AI MCP Server 传输层。
+
+### Added
+
+- 新增 `mcp-tool-server/pom.xml`、`ToolServerApplication` 和 `application.yml`，默认端口 `8095`，支持 `MCP_TOOL_SERVER_PORT` 覆盖。
+- 新增 `GET /api/mcp/tools`、`GET /api/mcp/tools/{toolName}` 和 `POST /api/mcp/tools/{toolName}/validate`。
+- 工具目录返回中文服务名 `RepoPilot MCP 工具目录服务`、协议版本 `REPOPILOT_MCP_CONTRACT_V1` 和 17 个工具定义。
+- 工具定义覆盖仓库读取、Java 结构分析、Patch、构建测试、Git/GitHub 和审计辅助工具，包括 `list_project_files`、`read_file`、`search_code`、`run_maven_test` 和 `create_pull_request`。
+- 参数校验会规范化相对路径，拒绝绝对路径、`..` 路径穿越和 `.git` 内部路径，拒绝未知参数和错误类型，校验 `limit`、`maxDepth` 整数范围，并为写型工具增加 `approvedByHuman=true` 人工审批门。
+- 新增 `McpToolRegistryServiceTest` 和 `McpToolControllerIntegrationTest`，覆盖工具目录、单工具查询、路径安全、参数类型、未知参数、搜索 limit、maxDepth 和未知工具中文错误。
+- 新增 `./scripts/mcp-tool-server-smoke.sh` 与 `.mjs`，临时启动 MCP 工具目录服务并验证目录、路径安全、参数契约和写型工具审批门，证据写入 `output/mcp-tool-server-smoke/last-run.json`。
+- `mcp-tool-server/README.md`、根 README、脚本 README、MCP 工具设计、仓库结构、架构文档和验收清单同步当前服务边界。
+
+### Verified
+
+- `mvn -q -Dmaven.repo.local=../.m2 test` passes in `mcp-tool-server`.
+- `./scripts/mcp-tool-server-smoke.sh` passes with `toolCount=17`, `read_file` path normalization, unsafe path `BLOCKED`, invalid `search_code` arguments `BLOCKED`, and `create_pull_request` `NEEDS_HUMAN_APPROVAL`.
+- `rg --files scripts -g '*.sh' | xargs bash -n` passes.
+- `rg --files scripts -g '*.mjs' | xargs -n1 node --check` passes.
+- `docker compose up -d postgres redis`, `docker compose exec -T postgres pg_isready -U repopilot -d repopilot`, and `docker compose exec -T redis redis-cli ping` pass before backend verification.
+- `mvn -q -Dmaven.repo.local=../.m2 test` passes in `backend`.
+- `PYTHONPATH=. python3 -m unittest discover -s tests` passes in `agent-worker`.
+- `npm run build` passes in `frontend`.
+- `git diff --check` passes.
+
+### Next
+
+- 将 MCP 工具目录接入前端配置/工具管理视图，展示工具可用性、安全规则和调用边界。
+- 在保持现有 backend run-scoped 工具桥稳定的前提下，继续探索 Spring AI MCP Server 传输层接入。
+
 ## 2026-07-20, Slice 120 - 远端PR本地替身发布验证版
 
 远端 GitHub PR 发布链路从服务层单测推进到可重复的 API 级 smoke：无需真实 GitHub token，脚本会启动真实 Spring Boot 后端、本地 bare Git origin 和本地 GitHub PR API stub，完整穿过 clone/index、Agent 任务、recipe patch、沙箱测试、人工审批、PR preflight、分支 push 和 PR 创建接口。
