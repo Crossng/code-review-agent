@@ -11,6 +11,7 @@
 | 远端 PR 本地替身 | `./scripts/remote-github-pr-smoke.sh` | 无真实 GitHub token 时验证远端 PR push + API 主路径 |
 | 真实 GitHub PR | `./scripts/real-github-pr-demo.sh` | 有 GitHub token 和可丢弃 demo 仓库时验证远端 push 与 PR 创建 |
 | Worker Coder 业务闭环 | `./scripts/agent-worker-business-smoke.sh` | 无真实 token 时验证 Python Worker 主链路、双业务 diff、retry audit 和本地 PR 草稿 |
+| Worker 真实 Coder | `./scripts/agent-worker-real-coder-demo.sh` | 有 OpenAI-compatible Worker Coder 模型 key 时验证 Python Worker primary 的真实模型 diff 到人工审批暂停点 |
 
 ## 2. 演示前体检
 
@@ -57,7 +58,30 @@ export REPOPILOT_CODER_MODEL=...
 - patch 应为 `LLM_CODER_DRAFT / OPENAI_COMPATIBLE`
 - 沙箱测试应为 `PASSED`
 
-## 4. 远端 PR 本地替身 Smoke
+## 4. Worker 真实 Coder 演示
+
+如果要演示 Python Agent Worker 作为主执行链路，而不是 Spring Boot 本地 executor，可以配置 Worker Coder 的真实模型环境变量：
+
+```bash
+export REPOPILOT_WORKER_CODER_MODEL_MODE=openai-compatible
+export REPOPILOT_WORKER_CODER_MODEL_API_KEY=...
+export REPOPILOT_WORKER_CODER_MODEL_NAME=...
+
+./scripts/real-token-demo-check.sh --strict
+./scripts/agent-worker-real-coder-demo.sh
+```
+
+成功后查看：
+
+- `output/agent-worker-real-coder-demo/last-run.json`
+- `agent_worker_start.execution_mode` 应为 `WORKER_PRIMARY`
+- patch 应为 `LLM_CODER_DRAFT / OPENAI_COMPATIBLE`
+- 任务状态应进入 `WAITING_HUMAN_APPROVAL`
+- 沙箱测试应为 `PASSED`
+
+该脚本只要求模型新增 `.repopilot/worker-real-coder-demo-note.md`，不会要求真实模型直接改 Java 业务代码；更复杂的 Java 业务闭环先用 `./scripts/agent-worker-business-smoke.sh` 的本地 stub 双场景稳定回归。
+
+## 5. 远端 PR 本地替身 Smoke
 
 正式创建真实 PR 前，可以先跑一遍无 token 的本地替身 smoke。它不会访问 github.com，而是用本地 bare Git 仓库模拟 origin，用本地 HTTP server 模拟 GitHub PR API。
 
@@ -75,7 +99,7 @@ export REPOPILOT_CODER_MODEL=...
 
 该 smoke 会清理临时业务数据、workspace 和 Git 替身仓库；证据文件保留脱敏摘要，便于回归留档。
 
-## 5. 真实 GitHub PR 演示
+## 6. 真实 GitHub PR 演示
 
 远端 PR 演示会真实 push 分支并创建 PR。请只使用可丢弃的公开演示仓库，且仓库结构应与 `examples/demo-spring-repo` 一致。
 
@@ -97,7 +121,7 @@ export REPOPILOT_GITHUB_TOKEN=...
 
 脚本会清理 RepoPilot 本地临时数据，但不会关闭远端 PR 或删除远端分支，方便演示留档。演示结束后由操作者手动关闭 PR、删除远端分支。
 
-## 6. 安全约束
+## 7. 安全约束
 
 - 体检和演示证据只记录 key/token 是否配置，不记录密钥明文。
 - 不打印 Authorization header。
@@ -106,12 +130,13 @@ export REPOPILOT_GITHUB_TOKEN=...
 - 远端 PR 脚本必须显式设置 `REPOPILOT_REAL_GITHUB_PR_CONFIRM=create-pr`。
 - 私有 GitHub 仓库的 clone 阶段不注入 token，需要本机 Git 已具备读取凭据。
 
-## 7. 常见失败
+## 8. 常见失败
 
 | 现象 | 处理 |
 | --- | --- |
 | Docker daemon 不可访问 | 启动 Docker Desktop，再运行 `./scripts/real-token-demo-check.sh --start-deps` |
 | strict 提示真实模型未就绪 | 补齐 `REPOPILOT_CODER_MODE=openai-compatible`、模型 key 和 `REPOPILOT_CODER_MODEL` |
+| strict 提示 Worker Coder 未就绪 | 补齐 `REPOPILOT_WORKER_CODER_MODEL_MODE=openai-compatible`、Worker Coder 模型 key 和 `REPOPILOT_WORKER_CODER_MODEL_NAME` |
 | strict 提示远端 PR 未就绪 | 补齐确认开关、GitHub demo repo URL、`REPOPILOT_GITHUB_ENABLED=true` 和 GitHub token |
 | `remote-github-pr-smoke.sh` clone 失败 | 查看 `target/remote-github-pr-smoke/logs/backend.log`，确认本地 Git `insteadOf` 映射没有被异常全局配置覆盖 |
 | `real-github-pr-demo.sh` clone 失败 | 确认 demo 仓库存在、默认分支正确，本机 Git 对该仓库有读取权限 |

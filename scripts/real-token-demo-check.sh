@@ -270,6 +270,8 @@ write_artifacts() {
   REPOPILOT_STRICT_FAILURES="$strict_failures" \
   REPOPILOT_DOCKER_READY="$docker_ready" \
   REPOPILOT_CODER_READY="$coder_ready" \
+  REPOPILOT_WORKER_PLANNER_READY="$worker_planner_ready" \
+  REPOPILOT_WORKER_CODER_READY="$worker_coder_ready" \
   REPOPILOT_GITHUB_READY="$github_ready" \
     node <<'NODE'
 const fs = require("node:fs");
@@ -294,6 +296,8 @@ summary.strictPassed = process.env.REPOPILOT_CHECK_MODE !== "strict" || summary.
 const readiness = {
   dockerReady: readBool(process.env.REPOPILOT_DOCKER_READY),
   realCoderReady: readBool(process.env.REPOPILOT_CODER_READY),
+  workerPlannerRealModelReady: readBool(process.env.REPOPILOT_WORKER_PLANNER_READY),
+  workerCoderRealModelReady: readBool(process.env.REPOPILOT_WORKER_CODER_READY),
   remoteGithubPrReady: readBool(process.env.REPOPILOT_GITHUB_READY)
 };
 
@@ -309,6 +313,18 @@ const recommendedCommands = [
     readiness: readiness.realCoderReady
       ? "当前真实 Coder 配置就绪。"
       : "需要配置 REPOPILOT_CODER_MODE=openai-compatible、模型 key 和 REPOPILOT_CODER_MODEL。"
+  },
+  {
+    name: "Worker Coder 本地业务闭环",
+    command: "./scripts/agent-worker-business-smoke.sh",
+    readiness: "无需真实 token，验证 Python Worker 主链路、双业务 diff、retry audit、沙箱、审批和本地 PR 草稿。"
+  },
+  {
+    name: "Worker Coder 真实模型演示",
+    command: "./scripts/agent-worker-real-coder-demo.sh",
+    readiness: readiness.workerCoderRealModelReady
+      ? "当前 Worker Coder 真实模型配置就绪。"
+      : "需要配置 REPOPILOT_WORKER_CODER_MODEL_MODE=openai-compatible、Worker Coder 模型 key 和 REPOPILOT_WORKER_CODER_MODEL_NAME。"
   },
   {
     name: "真实 GitHub PR 演示",
@@ -381,6 +397,9 @@ lines.push(
   "export REPOPILOT_CODER_MODE=openai-compatible",
   "export REPOPILOT_CODER_API_KEY=...",
   "export REPOPILOT_CODER_MODEL=...",
+  "export REPOPILOT_WORKER_CODER_MODEL_MODE=openai-compatible",
+  "export REPOPILOT_WORKER_CODER_MODEL_API_KEY=...",
+  "export REPOPILOT_WORKER_CODER_MODEL_NAME=...",
   "export REPOPILOT_GITHUB_ENABLED=true",
   "export REPOPILOT_GITHUB_TOKEN=...",
   "export REPOPILOT_REAL_GITHUB_PR_CONFIRM=create-pr",
@@ -549,23 +568,49 @@ section "Worker 模型"
 pass "Worker Planner stub" "./scripts/agent-worker-planner-smoke.sh 可验证本地 OpenAI-compatible stub 链路"
 pass "Worker Coder stub" "./scripts/agent-worker-coder-model-smoke.sh 可验证本地 OpenAI-compatible stub 链路"
 
+worker_planner_mode="${REPOPILOT_WORKER_MODEL_MODE:-disabled}"
+worker_planner_base_url="${REPOPILOT_WORKER_MODEL_API_BASE_URL:-https://api.openai.com/v1}"
+worker_planner_model="${REPOPILOT_WORKER_MODEL_NAME:-}"
+worker_planner_tokens="${REPOPILOT_WORKER_MODEL_MAX_COMPLETION_TOKENS:-1200}"
+worker_planner_key_ready=false
+worker_planner_ready=false
+if configured_any "REPOPILOT_WORKER_MODEL_API_KEY" "OPENAI_API_KEY"; then
+  worker_planner_key_ready=true
+fi
+if is_real_coder_mode "$worker_planner_mode" && [ "$worker_planner_key_ready" = true ] && [ -n "$worker_planner_model" ]; then
+  worker_planner_ready=true
+fi
+
+worker_coder_mode="${REPOPILOT_WORKER_CODER_MODEL_MODE:-disabled}"
+worker_coder_base_url="${REPOPILOT_WORKER_CODER_MODEL_API_BASE_URL:-https://api.openai.com/v1}"
+worker_coder_model="${REPOPILOT_WORKER_CODER_MODEL_NAME:-}"
+worker_coder_tokens="${REPOPILOT_WORKER_CODER_MODEL_MAX_COMPLETION_TOKENS:-4096}"
+worker_coder_key_ready=false
+worker_coder_ready=false
+if configured_any "REPOPILOT_WORKER_CODER_MODEL_API_KEY" "OPENAI_API_KEY"; then
+  worker_coder_key_ready=true
+fi
+if is_real_coder_mode "$worker_coder_mode" && [ "$worker_coder_key_ready" = true ] && [ -n "$worker_coder_model" ]; then
+  worker_coder_ready=true
+fi
+
 worker_model_status \
   "Worker Planner" \
-  "${REPOPILOT_WORKER_MODEL_MODE:-disabled}" \
-  "${REPOPILOT_WORKER_MODEL_API_BASE_URL:-https://api.openai.com/v1}" \
-  "${REPOPILOT_WORKER_MODEL_NAME:-}" \
+  "$worker_planner_mode" \
+  "$worker_planner_base_url" \
+  "$worker_planner_model" \
   "REPOPILOT_WORKER_MODEL_API_KEY" \
   "REPOPILOT_WORKER_MODEL_FIXTURE_RESPONSE" \
-  "${REPOPILOT_WORKER_MODEL_MAX_COMPLETION_TOKENS:-1200}"
+  "$worker_planner_tokens"
 
 worker_model_status \
   "Worker Coder" \
-  "${REPOPILOT_WORKER_CODER_MODEL_MODE:-disabled}" \
-  "${REPOPILOT_WORKER_CODER_MODEL_API_BASE_URL:-https://api.openai.com/v1}" \
-  "${REPOPILOT_WORKER_CODER_MODEL_NAME:-}" \
+  "$worker_coder_mode" \
+  "$worker_coder_base_url" \
+  "$worker_coder_model" \
   "REPOPILOT_WORKER_CODER_MODEL_API_KEY" \
   "REPOPILOT_WORKER_CODER_MODEL_FIXTURE_RESPONSE" \
-  "${REPOPILOT_WORKER_CODER_MODEL_MAX_COMPLETION_TOKENS:-4096}"
+  "$worker_coder_tokens"
 
 section "远端 GitHub PR"
 github_enabled="${REPOPILOT_GITHUB_ENABLED:-false}"
@@ -665,6 +710,8 @@ cat <<'EOF'
   export REPOPILOT_WORKER_CODER_MODEL_MODE=openai-compatible
   export REPOPILOT_WORKER_CODER_MODEL_API_KEY=...
   export REPOPILOT_WORKER_CODER_MODEL_NAME=...
+  ./scripts/agent-worker-business-smoke.sh
+  ./scripts/agent-worker-real-coder-demo.sh
 EOF
 
 section "结果"

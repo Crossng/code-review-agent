@@ -4231,6 +4231,46 @@ Python Agent Worker 从“所有初始节点和 helper 都堆在 `initial_nodes.
 - 在安装完整 `agent-worker` 依赖的运行环境中补充一次 `graph_engine=LANGGRAPH` 的真实依赖 smoke 证据。
 - 开始把确定性 planning/patch 节点替换为可配置的模型驱动节点，同时继续复用现有审计和安全后置门。
 
+## 2026-08-11, Slice 129 - Worker真实Coder演示入口版
+
+Worker Coder 从“本地 stub 双业务场景可验证”继续推进到“真实 token 环境有独立演示入口”：新增脚本会启动真实后端和真实 FastAPI Worker，把后端执行模式切到 `WORKER_PRIMARY`，让 Worker Coder 使用真实 OpenAI-compatible 配置生成一个最小 `.repopilot/` 说明文件 diff，再验证模型审计、工具审计、安全预检、沙箱测试、风险审查和人工审批暂停点。
+
+### Added
+
+- 新增 `./scripts/agent-worker-real-coder-demo.sh`，在缺少 `REPOPILOT_WORKER_CODER_MODEL_MODE=openai-compatible`、Worker Coder 模型 key 或模型名时直接返回非 0 并给出中文缺项提示。
+- 新增 `./scripts/agent-worker-real-coder-demo.mjs`，按独立端口启动真实 Spring Boot 后端和真实 FastAPI Worker，使用本地 demo Spring 仓库创建任务并等待 `WAITING_HUMAN_APPROVAL`。
+- Worker 真实 Coder 演示任务只要求模型新增 `.repopilot/worker-real-coder-demo-note.md`，避免真实模型演示阶段直接修改 Java 业务代码导致波动。
+- 脚本断言 `agent_worker_start.execution_mode=WORKER_PRIMARY`、`LLM_CODER_DRAFT / OPENAI_COMPATIBLE` patch、成功 `generate_patch` model call、run-scoped 工具审计、diff 安全预检、Docker 沙箱 `mvn -q test`、风险审查和人工审批暂停点。
+- `real-token-demo-check.sh` 的 JSON/Markdown readiness 新增 `workerPlannerRealModelReady` 和 `workerCoderRealModelReady`，并推荐 Worker Coder 本地业务 smoke 与真实模型演示命令。
+- `.env.example`、脚本 README、真实 token 演示手册、Agent workflow 和验收清单同步 Worker 真实 Coder 演示入口。
+
+### Verified
+
+- `docker compose up -d postgres redis` passes.
+- `docker compose exec -T postgres pg_isready -U repopilot -d repopilot` passes.
+- `docker compose exec -T redis redis-cli ping` passes.
+- `npm run build` passes in `frontend`.
+- `mvn -q -Dmaven.repo.local=../.m2 test` passes in `backend`.
+- `mvn -q -Dmaven.repo.local=../.m2 test` passes in `mcp-tool-server`.
+- `PYTHONPATH=. python3 -m unittest discover -s tests` passes in `agent-worker`.
+- `rg --files scripts -g '*.sh' | xargs bash -n` passes.
+- `rg --files scripts -g '*.mjs' | xargs -n1 node --check` passes.
+- `./scripts/agent-worker-real-coder-demo.sh --help` passes and prints Chinese usage.
+- `env -u REPOPILOT_WORKER_CODER_MODEL_API_KEY -u OPENAI_API_KEY REPOPILOT_WORKER_CODER_MODEL_MODE=disabled REPOPILOT_WORKER_CODER_MODEL_NAME= ./scripts/agent-worker-real-coder-demo.sh` exits 2 with missing Worker Coder mode/key/model guidance.
+- `./scripts/real-token-demo-check.sh` passes in default mode and writes `workerPlannerRealModelReady=false`, `workerCoderRealModelReady=false`, plus Worker Coder local/real recommended commands.
+- `REPOPILOT_CODER_MODE=openai-compatible REPOPILOT_CODER_API_KEY=dummy REPOPILOT_CODER_MODEL=gpt-demo REPOPILOT_GITHUB_ENABLED=true REPOPILOT_GITHUB_TOKEN=dummy REPOPILOT_REAL_GITHUB_PR_CONFIRM=create-pr REPOPILOT_REAL_GITHUB_PR_REPO_URL=https://github.com/example/demo-repo.git REPOPILOT_WORKER_CODER_MODEL_MODE=openai-compatible REPOPILOT_WORKER_CODER_MODEL_API_KEY=dummy REPOPILOT_WORKER_CODER_MODEL_NAME=gpt-worker-coder-demo ./scripts/real-token-demo-check.sh --strict` passes and reports Worker Coder real model readiness.
+- `./scripts/mcp-tool-server-smoke.sh` passes.
+- `./scripts/agent-worker-coder-model-smoke.sh` passes with `OPENAI_COMPATIBLE / gpt-worker-coder-smoke` and `LLM_CODER_DRAFT`.
+- `./scripts/agent-worker-real-coder-demo.sh` passes against a local OpenAI-compatible Chat Completions stub with `WORKER_PRIMARY`, `LLM_CODER_DRAFT / OPENAI_COMPATIBLE`, token usage `110`, 14 tool calls, sandbox test `PASSED`, and task status `WAITING_HUMAN_APPROVAL`; evidence: `output/agent-worker-real-coder-demo/last-run.json`.
+- Cleanup leaves `0` `agent-worker-real-coder-demo-%` users and an empty `target/agent-worker-real-coder-demo/workspace`.
+- `git diff --check` passes.
+- Ports `8080`, `8090` and `8095` are free after smoke runs.
+
+### Next
+
+- 在真实 Worker Coder token 环境中运行 `./scripts/agent-worker-real-coder-demo.sh`，留存 `LLM_CODER_DRAFT / OPENAI_COMPATIBLE`、token usage、沙箱测试和人工审批暂停点证据。
+- 继续推进真实远端 GitHub PR 发布演示和 Worker Coder 真实业务 diff 稳定性。
+
 ## 2026-08-11, Slice 128 - 浏览器冒烟本机兜底版
 
 浏览器 smoke 从“依赖 Playwright 下载 Chromium”改成“优先复用本机浏览器”：本地存在 Chrome/Chromium/Edge 时直接用系统浏览器执行 Playwright，避免 CDN 下载失败阻断本地端到端验证；这次也补跑通过了包含 MCP 工具目录视图链接恢复的完整 browser smoke。

@@ -30,6 +30,7 @@
 ./scripts/agent-worker-coder-smoke.sh
 ./scripts/agent-worker-coder-model-smoke.sh
 ./scripts/agent-worker-business-smoke.sh
+./scripts/agent-worker-real-coder-demo.sh
 ```
 
 `agent-worker-smoke.sh` 用于验证 Python Agent Worker 的最小服务契约。它会：
@@ -115,6 +116,15 @@
 - 使用标准用户 JWT 分别审批 Worker patch，随后调用 PR preflight 和 `/pull-request`，验证本地 `DRAFT_READY` 分支/commit 草稿可准备。
 - 将双场景证据写入 `output/agent-worker-business-smoke/last-run.json`，并清理本次临时业务数据和 workspace。
 
+`agent-worker-real-coder-demo.sh` 用于有真实 Worker Coder 模型 token 时跑一条安全端到端演示。它会：
+
+- 要求 `REPOPILOT_WORKER_CODER_MODEL_MODE=openai-compatible`、`REPOPILOT_WORKER_CODER_MODEL_API_KEY`/`OPENAI_API_KEY` 和 `REPOPILOT_WORKER_CODER_MODEL_NAME` 配置齐全，否则直接提示缺项。
+- 启动 PostgreSQL/Redis、独立端口的真实 Spring Boot 后端和真实 FastAPI Worker，并强制后端进入 `WORKER_PRIMARY`。
+- 注册临时用户，创建本地 `examples/demo-spring-repo` 项目，执行 clone 和 index。
+- 创建一个最小安全任务，要求真实 Worker Coder 只新增 `.repopilot/worker-real-coder-demo-note.md`。
+- 等待任务进入 `WAITING_HUMAN_APPROVAL`，验证 `LLM_CODER_DRAFT`、`OPENAI_COMPATIBLE`、成功模型调用审计、run-scoped 工具审计、diff 安全预检、Docker 沙箱 `mvn -q test`、风险审查和人工审批暂停点。
+- 将脱敏证据写入 `output/agent-worker-real-coder-demo/last-run.json`，并清理本次临时业务数据和 workspace。
+
 ## Real Token Demo Check
 
 ```bash
@@ -130,7 +140,7 @@
 - 远端 GitHub PR 所需的 `REPOPILOT_REAL_GITHUB_PR_CONFIRM=create-pr`、`REPOPILOT_REAL_GITHUB_PR_REPO_URL`、`REPOPILOT_GITHUB_ENABLED=true` 和 `REPOPILOT_GITHUB_TOKEN`/`GITHUB_TOKEN`。
 - 后端和前端端口是否已有进程监听。
 
-脚本会把脱敏体检证据写入 `output/real-token-demo-check/last-run.json`，并生成一份可直接照着走的中文 Markdown 手册 `output/real-token-demo-check/last-run.md`。脚本只展示密钥是否配置，不打印 GitHub token、模型 key 或 Authorization header。Worker Planner/Coder 默认关闭时只提示可选增强；如果显式切到 `fixture` 或 `openai-compatible` 但缺少对应 fixture/model/key，`--strict` 会失败。正式演示前可使用严格模式：
+脚本会把脱敏体检证据写入 `output/real-token-demo-check/last-run.json`，并生成一份可直接照着走的中文 Markdown 手册 `output/real-token-demo-check/last-run.md`；证据会包含 `workerPlannerRealModelReady`、`workerCoderRealModelReady`，并推荐 `agent-worker-business-smoke.sh` 与 `agent-worker-real-coder-demo.sh`。脚本只展示密钥是否配置，不打印 GitHub token、模型 key 或 Authorization header。Worker Planner/Coder 默认关闭时只提示可选增强；如果显式切到 `fixture` 或 `openai-compatible` 但缺少对应 fixture/model/key，`--strict` 会失败。正式演示前可使用严格模式：
 
 ```bash
 ./scripts/real-token-demo-check.sh --strict
