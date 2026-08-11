@@ -8,7 +8,7 @@ if str(AGENT_WORKER_ROOT) not in sys.path:
     sys.path.insert(0, str(AGENT_WORKER_ROOT))
 
 from app.clients.model_client import WorkerModelResult  # noqa: E402
-from app.graph.nodes.planning import plan_task, retrieve_context  # noqa: E402
+from app.graph.nodes.planning import deterministic_plan, plan_task, retrieve_context  # noqa: E402
 from app.schemas import AgentRunStartRequest  # noqa: E402
 
 
@@ -158,6 +158,13 @@ class PlanningModelNodeTest(unittest.TestCase):
         self.assertEqual(len(model_client.prompts), 1)
         self.assertEqual(model_client.prompts[0]["stepName"], "plan_task")
         self.assertEqual(model_client.prompts[0]["prompt"]["task"]["title"], "新增 User 分页接口")
+        task_type_policy = model_client.prompts[0]["prompt"]["taskTypePolicy"]
+        self.assertEqual(task_type_policy["label"], "功能开发")
+        self.assertEqual(
+            task_type_policy["planningFocus"],
+            "确认新增能力涉及的 Controller、Service、Mapper、Entity 和测试边界。",
+        )
+        self.assertIn("Docker", task_type_policy["validationStrategy"])
         self.assertEqual(len(backend.model_calls), 1)
         model_call = backend.model_calls[0]["modelCall"]
         self.assertEqual(model_call.step_name, "plan_task")
@@ -173,7 +180,27 @@ class PlanningModelNodeTest(unittest.TestCase):
         step_output = backend.steps[0]["step"].output
         assert step_output is not None
         self.assertIn("UserService", step_output["modelPlanText"])
-        self.assertEqual(step_output["testStrategy"], "生成补丁后先执行 diff 安全预检，再在 Docker 沙箱运行 mvn -q test。")
+        self.assertEqual(step_output["taskTypeLabel"], "功能开发")
+        self.assertEqual(step_output["steps"][1]["title"], "梳理需求边界与现有调用链")
+        self.assertEqual(step_output["testStrategy"], "覆盖正向、边界和失败场景，并在 Docker 沙箱运行 mvn -q test。")
+
+    def test_deterministic_plan_uses_distinct_semantics_for_every_task_type(self):
+        expectations = {
+            "FEATURE": ("功能开发", "梳理需求边界与现有调用链"),
+            "BUGFIX": ("缺陷修复", "复现问题并定位根因"),
+            "REVIEW": ("代码审查", "审查风险路径与测试缺口"),
+            "DOC": ("文档维护", "核对实现与文档事实"),
+        }
+
+        for task_type, (label, analysis_title) in expectations.items():
+            context = dict(loaded_context()["context"], taskType=task_type)
+            output = deterministic_plan(context, loaded_context(), ["UserService"], [])
+
+            with self.subTest(task_type=task_type):
+                self.assertEqual(output["taskType"], task_type)
+                self.assertEqual(output["taskTypeLabel"], label)
+                self.assertEqual(output["steps"][1]["title"], analysis_title)
+                self.assertIn("Docker", output["testStrategy"])
 
     def test_plan_task_parses_structured_model_plan_and_records_token_usage(self):
         backend = FakeBackend()

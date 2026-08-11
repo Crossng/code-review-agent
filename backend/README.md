@@ -2,6 +2,10 @@
 
 RepoPilot 的 Spring Boot 主平台，负责鉴权、仓库工作区、Java AST/代码索引、混合检索、Agent 状态机、补丁、Docker 沙箱、审批、PR 和审计数据。
 
+## Agent 任务类型
+
+`POST /api/agent/tasks` 支持 `FEATURE`、`BUGFIX`、`REVIEW`、`DOC`。本地 Planner 会在 `plan_task` 输出中记录 `taskType`、中文 `taskTypeLabel`、`planningFocus`、类型化步骤和 `testStrategy`：功能任务关注需求边界，缺陷任务关注复现与根因，审查任务关注风险和测试缺口，文档任务关注实现事实。类型不会绕过 diff 安全预检、Docker Maven 测试、风险审查或人工审批。
+
 ## 代码检索
 
 默认 `REPOPILOT_EMBEDDING_MODE=disabled`，系统直接使用关键词检索，不需要外部密钥。启用 OpenAI-compatible Embedding 后，项目索引会把 chunk 批量向量化并保存到 PostgreSQL `code_embedding.embedding vector`，搜索会融合关键词与 cosine 向量候选。

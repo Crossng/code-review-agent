@@ -3,6 +3,7 @@ import { FormEvent, useEffect, useId, useMemo, useState } from "react";
 import {
   AgentStep,
   AgentTask,
+  AgentTaskType,
   AgentRunReport,
   AgentRunReportSnapshot,
   AgentRunReportSnapshotSummary,
@@ -214,7 +215,29 @@ const taskStatusOptions = [
   "CANCELLED"
 ];
 const taskStatusSet = new Set(["ALL", ...taskStatusOptions]);
-const taskTypeOptions = ["FEATURE", "BUGFIX", "REVIEW", "DOC"];
+const taskTypeOptions: AgentTaskType[] = ["FEATURE", "BUGFIX", "REVIEW", "DOC"];
+const taskTypeProfiles: Record<AgentTaskType, { label: string; shortLabel: string; description: string }> = {
+  FEATURE: {
+    label: "功能开发",
+    shortLabel: "功能",
+    description: "新增接口、能力或业务流程，优先覆盖正向与边界场景。"
+  },
+  BUGFIX: {
+    label: "缺陷修复",
+    shortLabel: "修复",
+    description: "先定位复现条件与根因，再用回归测试锁定修复。"
+  },
+  REVIEW: {
+    label: "代码审查",
+    shortLabel: "审查",
+    description: "聚焦风险、测试缺口和最小修复建议，保留审计证据。"
+  },
+  DOC: {
+    label: "文档维护",
+    shortLabel: "文档",
+    description: "核对实现事实，更新接口、运维或开发说明。"
+  }
+};
 const taskTypeSet = new Set(["ALL", ...taskTypeOptions]);
 const projectFilterStatusParam = "projectStatus";
 const projectFilterQueryParam = "projectQuery";
@@ -293,7 +316,7 @@ function initialTaskFilters(): TaskFilters {
   return {
     projectId: positiveIntegerParam(params, taskFilterProjectParam),
     status: taskStatusSet.has(requestedStatus) ? requestedStatus : "ALL",
-    taskType: taskTypeSet.has(requestedType) ? requestedType : "ALL",
+    taskType: taskTypeSet.has(requestedType) ? requestedType as AgentTaskType | "ALL" : "ALL",
     query: requestedQuery
   };
 }
@@ -687,6 +710,7 @@ export function App() {
   const [repoUrl, setRepoUrl] = useState("file:///Users/crossng/Desktop/ai-agent/examples/demo-spring-repo");
   const [defaultBranch, setDefaultBranch] = useState("main");
   const [taskProjectId, setTaskProjectId] = useState<number | "">("");
+  const [taskType, setTaskType] = useState<AgentTaskType>("FEATURE");
   const [taskTitle, setTaskTitle] = useState("新增 User 分页查询接口");
   const [taskDescription, setTaskDescription] = useState("为 User 模块新增分页查询接口，并保持现有工程风格。");
   const [projectFilters, setProjectFilters] = useState<ProjectFilters>(initialProjectFilters);
@@ -1177,7 +1201,7 @@ export function App() {
     await withBusy("正在创建任务", async () => {
       const task = await createTask(token, {
         projectId: Number(taskProjectId),
-        taskType: "FEATURE",
+        taskType,
         title: taskTitle,
         description: taskDescription
       });
@@ -1190,7 +1214,7 @@ export function App() {
       setDashboardSummary(nextDashboardSummary);
       setDashboardRunMetrics(nextDashboardRunMetrics);
       setDashboardActivity(nextDashboardActivity);
-      setMessage(`任务 #${task.id} 已创建。`);
+      setMessage(`已创建${taskTypeProfiles[task.taskType].label}任务 #${task.id}（${task.taskType}）。`);
     });
   }
 
@@ -1449,7 +1473,7 @@ export function App() {
                     <p className="eyebrow">Agent 任务</p>
                     <h2>创建任务</h2>
                   </div>
-                  <span className="pill">FEATURE</span>
+                  <span className="pill">{taskTypeProfiles[taskType].label} · {taskType}</span>
                 </div>
                 <label className="fieldLabel" htmlFor="projectSelect">项目</label>
                 <select
@@ -1465,6 +1489,33 @@ export function App() {
                     </option>
                   ))}
                 </select>
+                <fieldset className="taskTypeFieldset" aria-describedby="taskTypeDescription">
+                  <legend className="fieldLabel">任务类型</legend>
+                  <div className="taskTypeSegmented">
+                    {taskTypeOptions.map((option) => {
+                      const profile = taskTypeProfiles[option];
+                      return (
+                        <label className="taskTypeOption" data-selected={taskType === option} key={option}>
+                          <input
+                            type="radio"
+                            name="task-type"
+                            value={option}
+                            checked={taskType === option}
+                            onChange={() => setTaskType(option)}
+                          />
+                          <span className="taskTypeOptionBody">
+                            <strong>{profile.shortLabel}</strong>
+                            <code>{option}</code>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <p className="taskTypeDescription" id="taskTypeDescription" aria-live="polite">
+                    <strong>{taskTypeProfiles[taskType].label}</strong>
+                    <span>{taskTypeProfiles[taskType].description}</span>
+                  </p>
+                </fieldset>
                 <TextField label="标题" name="task-title" value={taskTitle} onChange={setTaskTitle} spellCheck />
                 <label className="fieldLabel" htmlFor="taskDescription">任务描述</label>
                 <textarea
@@ -1589,11 +1640,14 @@ export function App() {
                     name="task-type-filter"
                     aria-label="任务类型筛选"
                     value={taskFilters.taskType ?? "ALL"}
-                    onChange={(event) => setTaskFilters((current) => ({ ...current, taskType: event.target.value }))}
+                    onChange={(event) => setTaskFilters((current) => ({
+                      ...current,
+                      taskType: event.target.value as AgentTaskType | "ALL"
+                    }))}
                   >
                     <option value="ALL">全部类型</option>
                     {taskTypeOptions.map((taskType) => (
-                      <option value={taskType} key={taskType}>{taskType}</option>
+                      <option value={taskType} key={taskType}>{taskTypeDisplay(taskType)}</option>
                     ))}
                   </select>
                   <TextField
@@ -1625,6 +1679,9 @@ export function App() {
                     >
                       <span>#{task.id}</span>
                       <strong>{task.title}</strong>
+                      <span className="taskListType">
+                        {taskTypeProfiles[task.taskType].label}<code>{task.taskType}</code>
+                      </span>
                       <Badge value={task.status} />
                     </button>
                   ))}
@@ -3390,7 +3447,7 @@ function TaskSummary({
           <div className="metaGrid">
             <Meta label="项目" value={project ? `#${project.id} ${project.repoFullName}` : `#${task.projectId}`} />
             <Meta label="运行" value={task.currentRunId === null ? "未运行" : `#${task.currentRunId}`} />
-            <Meta label="类型" value={task.taskType} />
+            <Meta label="类型" value={taskTypeDisplay(task.taskType)} />
             <Meta label="创建时间" value={formatDate(task.createdAt)} />
           </div>
           <div className="buttonRow">
@@ -4098,6 +4155,14 @@ function agentEvidenceFromSteps(steps: AgentStep[]): AgentEvidenceItem[] {
     const output = parseJsonObject(planStep.outputJson);
     const planSteps = objectArrayField(output, "steps");
     const searchQueries = stringArrayField(output, "searchQueries");
+    const plannedTaskType = stringField(output, "taskType");
+    const plannedTaskTypeLabel = stringField(output, "taskTypeLabel");
+    const planningFocus = stringField(output, "planningFocus");
+    const planMeta = [
+      plannedTaskType ? `${plannedTaskTypeLabel ?? taskTypeLabel(plannedTaskType)} · ${plannedTaskType}` : null,
+      planningFocus,
+      searchQueries.length > 0 ? `检索词：${summarizeList(searchQueries, 3)}` : null
+    ].filter((value): value is string => value !== null);
     items.push({
       key: "plan",
       label: "任务规划",
@@ -4105,7 +4170,7 @@ function agentEvidenceFromSteps(steps: AgentStep[]): AgentEvidenceItem[] {
       status: planStep.status,
       finishedAt: planStep.finishedAt,
       summary: stringField(output, "summary") ?? "Planner 已生成实现计划。",
-      meta: searchQueries.length > 0 ? [`检索词：${summarizeList(searchQueries, 3)}`] : [],
+      meta: planMeta,
       highlights: planSteps.slice(0, 5).map((step, index) => {
         const order = numberField(step, "order") ?? index + 1;
         const title = stringField(step, "title") ?? "计划步骤";
@@ -4521,6 +4586,17 @@ function formatPercent(value: number) {
 
 function formatScore(value: number) {
   return value.toFixed(3);
+}
+
+function taskTypeLabel(value: string) {
+  return taskTypeSet.has(value) && value !== "ALL"
+    ? taskTypeProfiles[value as AgentTaskType].label
+    : value;
+}
+
+function taskTypeDisplay(value: string) {
+  const label = taskTypeLabel(value);
+  return label === value ? value : `${label} · ${value}`;
 }
 
 function retrievalMatchLabel(value: string) {

@@ -188,6 +188,8 @@ The Spring Boot backend stores these records in the existing tool/model call aud
 
 `plan_task` 已接入 `WorkerModelClient`。默认配置保持保守：只生成确定性计划，不调用模型，也不会多写 model call audit。需要验证模型路径时，可以使用 fixture 模式；需要真实 Planner 摘要时，可以切到 OpenAI-compatible Chat Completions 接口：
 
+确定性计划和模型 prompt 都携带任务类型策略。`FEATURE`、`BUGFIX`、`REVIEW`、`DOC` 分别使用功能边界、缺陷根因、审查风险和文档事实导向的中文计划，并在 step output 中记录 `taskType`、`taskTypeLabel`、`planningFocus` 与类型化 `testStrategy`；未知或缺失类型仅为兼容旧调用回退到 `FEATURE`。
+
 ```bash
 export REPOPILOT_WORKER_MODEL_MODE=fixture
 export REPOPILOT_WORKER_MODEL_PROVIDER=WORKER_FIXTURE

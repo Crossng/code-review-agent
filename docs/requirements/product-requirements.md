@@ -48,7 +48,7 @@ RepoPilot 是一个面向 Java/Spring Boot 仓库的 AI 软件工程 Agent 平�
 | PRD-F-004 | AST 解析 | 系统解析 Java 类、方法、字段、注解和包路径，生成结构化符号索引 | P0 |
 | PRD-F-005 | 代码切片 | 系统按类、方法和文件上下文生成代码 chunk，用于检索和 Agent 上下文构建 | P0 |
 | PRD-F-006 | 向量检索 | 系统支持根据自然语言任务检索相关代码 chunk 和符号 | P0 |
-| PRD-F-007 | Agent 任务 | 用户可创建 FEATURE、BUGFIX、REVIEW、DOC 类型的 Agent 任务；同一项目写入型任务必须互斥，避免多个 run 同时修改同一工作区 | P0 |
+| PRD-F-007 | Agent 任务 | 用户可在中文工作台创建 `FEATURE`、`BUGFIX`、`REVIEW`、`DOC` 四类任务，创建、筛选、列表和详情同时展示中文语义与工程枚举；Spring Boot 与 Python Worker Planner 根据类型分别采用功能边界、缺陷根因、审查风险或文档事实导向的计划，但都保留 diff 安全预检、Docker 沙箱测试、风险审查和人工审批；同一项目写入型任务必须互斥，避免多个 run 同时修改同一工作区 | P0 |
 | PRD-F-008 | 任务规划 | PlannerAgent 输出步骤化修改计划，计划必须可在 UI 中查看 | P0 |
 | PRD-F-009 | 上下文检索 | RetrieverAgent 输出相关文件、类、方法和理由 | P0 |
 | PRD-F-010 | diff 生成 | CoderAgent 生成 unified diff，默认不直接覆盖原文件；当前 MVP 已支持 Spring Coder recipe catalog，包含分页接口、User id 参数校验、User count API 和 User create API 四条 recipe，并持久化 `generationMode`；未命中时默认保留 `SAFE_PLANNING_FALLBACK`，生成带检索候选文件、符号、行号、编辑顺序和验证门槛的安全 Coder plan diff；可配置 Coder model client 已接入，`fixture` 模式会先解析 raw response，`openai-compatible` 模式会调用 Chat Completions 兼容接口生成 raw response；两者都仅接受 raw unified diff 或单个 diff 代码块并生成 `LLM_CODER_DRAFT` | P0 |

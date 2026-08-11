@@ -1428,18 +1428,22 @@ public class AgentTaskService {
 
     private PlanOutput plan(AgentTask task) {
         List<String> queries = candidateQueries(task);
+        AgentTaskType taskType = task.getTaskType();
         List<PlanStep> steps = List.of(
                 new PlanStep(1, "加载任务和项目上下文", "将本次运行绑定到项目 #" + task.getProject().getId()),
-                new PlanStep(2, "检索仓库上下文", "使用 " + queries + " 检索已索引代码片段"),
-                new PlanStep(3, "生成 Spring 感知的 unified diff", "优先评估内置 Spring Coder recipe，再回退到基于检索上下文的安全 Coder 计划"),
+                new PlanStep(2, taskType.analysisTitle(), taskType.analysisReason() + " 检索词：" + queries),
+                new PlanStep(3, taskType.changeTitle(), taskType.changeReason()),
                 new PlanStep(4, "校验补丁安全性", "沙箱应用前拒绝不安全 diff 路径"),
-                new PlanStep(5, "运行 Maven 验证", "在 Docker 沙箱应用 diff 并执行 mvn test")
+                new PlanStep(5, "执行类型对应验证", taskType.validationStrategy())
         );
         return new PlanOutput(
-                "为任务准备实现上下文：" + task.getTitle(),
+                taskType.name(),
+                taskType.displayName(),
+                taskType.analysisReason(),
+                taskType.displayName() + "任务已进入工程规划：" + task.getTitle(),
                 steps,
                 queries,
-                "生成补丁前优先使用检索到的 Controller/Service/Mapper/Entity 代码片段。"
+                taskType.validationStrategy()
         );
     }
 
@@ -1519,7 +1523,15 @@ public class AgentTaskService {
         }
     }
 
-    private record PlanOutput(String summary, List<PlanStep> steps, List<String> searchQueries, String testStrategy) {
+    private record PlanOutput(
+            String taskType,
+            String taskTypeLabel,
+            String planningFocus,
+            String summary,
+            List<PlanStep> steps,
+            List<String> searchQueries,
+            String testStrategy
+    ) {
     }
 
     private record PlanStep(int order, String title, String reason) {

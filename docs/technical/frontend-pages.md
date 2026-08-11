@@ -71,6 +71,7 @@
 ```text
 项目详情
   -> 创建任务
+  -> 选择功能开发 / 缺陷修复 / 代码审查 / 文档维护
   -> 输入任务描述
   -> 启动任务
   -> 查看执行页
@@ -79,6 +80,8 @@
   -> 审批
   -> 创建 PR
 ```
+
+任务创建区使用原生 radio 语义承载四类任务，中文标签旁保留 `FEATURE`、`BUGFIX`、`REVIEW`、`DOC` 工程枚举，并随选择展示对应的规划重点。桌面端保持一行四项，390px 移动端折为 2×2；任务列表、详情、筛选项和创建成功提示使用同一套中文映射，URL 中仍保存稳定枚举值。
 
 ## 4. 页面状态
 
@@ -143,6 +146,7 @@ Agent 执行页必须特别处理长任务状态：
 - patch 未审批时创建 PR 按钮禁用。
 - PR 准备按钮应以 `GET /api/tasks/{id}/pull-request/preflight` 返回的 `canPrepare` 为准；PR 面板展示 `PASS`、`PENDING`、`BLOCKED`、`WARN` 检查项，以及未审批、测试未过、GitHub token 缺失等 blocker；任务或 PR 记录处于远端发布失败状态时，按钮文案切换为“重试发布 PR”，PR 面板解释 token、push 或 GitHub API 失败原因并保留原始错误。
 - 任务运行中禁止重复启动同一任务。
+- 创建任务时必须显式提交当前选择的 `taskType`，不能由前端固定为 `FEATURE`；四类任务都应可通过键盘切换，并显示功能边界、缺陷根因、审查风险或文档事实导向的中文说明。
 - 项目列表筛选应通过 `GET /api/projects` 的 `status` 和 `query` 查询参数执行；筛选表单点击 `应用筛选` 后请求后端，`重置` 清空筛选并重新加载项目行。控制台应保留完整项目列表用于创建任务、任务筛选和任务详情项目名展示，避免项目列表筛选影响任务操作上下文。
 - 项目视图应通过应用 URL query 恢复当前项目列表筛选和洞察项目：`projectStatus` 对应项目 API 的 `status`，`projectQuery` 对应项目 API 的 `query`，`projectId` 对应 Repository insight 当前项目。URL 同步应保留 Controller API 风险筛选参数和 hash。
 - 项目筛选表单应提供 `复制项目视图链接` 操作，将当前项目筛选和 `projectId` 写入剪贴板，并通过 `aria-live` 状态提示复制成功或不可用。

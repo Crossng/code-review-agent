@@ -92,6 +92,9 @@ PlannerAgent 输出必须是结构化 JSON：
 
 ```json
 {
+  "taskType": "FEATURE",
+  "taskTypeLabel": "功能开发",
+  "planningFocus": "确认新增能力涉及的 Controller、Service、Mapper、Entity 和测试边界。",
   "summary": "新增 User 分页查询接口",
   "steps": [
     {
@@ -101,10 +104,22 @@ PlannerAgent 输出必须是结构化 JSON：
       "expectedFiles": ["UserController.java", "UserService.java"]
     }
   ],
+  "searchQueries": ["User 分页", "UserService"],
   "risks": ["可能需要新增分页 DTO"],
-  "testStrategy": "运行 mvn test，并补充 Controller 单元测试"
+  "testStrategy": "覆盖正向、边界和失败场景，并在 Docker 沙箱运行 mvn -q test。"
 }
 ```
+
+Spring Boot 本地执行器与 Python Worker 的确定性 Planner 使用相同的任务类型语义：
+
+| 类型 | 中文语义 | 计划重点 | 变化策略 |
+| --- | --- | --- | --- |
+| `FEATURE` | 功能开发 | 梳理需求边界与现有调用链 | 实现最小功能闭环，覆盖正向、边界和失败场景 |
+| `BUGFIX` | 缺陷修复 | 复现问题并定位根因 | 修复根因并补回归测试 |
+| `REVIEW` | 代码审查 | 审查风险路径与测试缺口 | 形成审查结论；有证据时才生成最小修复补丁 |
+| `DOC` | 文档维护 | 核对实现与文档事实 | 只更新与实现直接相关的说明、示例和操作步骤 |
+
+类型只改变 Planner 的分析重点、修改意图和验证说明，不放宽执行边界。四类任务都继续经过 `generate_patch`、diff 安全预检、Docker Maven 测试、风险审查和人工审批；Worker 模型 prompt 会携带同一份 `taskTypePolicy`，模型建议不能覆盖这些后置门。
 
 ## 6.1 Worker Planner 模型客户端模式
 
@@ -112,7 +127,7 @@ Python Worker 的 `plan_task` 现在先保留确定性计划作为安全默认�
 
 | 模式 | 行为 |
 | --- | --- |
-| `disabled` | 默认模式，不调用模型，`plan_task` 只输出确定性 `summary`、`steps`、`searchQueries`、`searchResults` 和 `testStrategy` |
+| `disabled` | 默认模式，不调用模型，`plan_task` 只输出确定性 `taskType`、`taskTypeLabel`、`planningFocus`、`summary`、`steps`、`searchQueries`、`searchResults` 和 `testStrategy` |
 | `fixture` | 使用 `REPOPILOT_WORKER_MODEL_FIXTURE_RESPONSE` 作为模型计划输出；JSON 会解析为 `modelPlan`，纯文本会兼容为 `modelPlanText`；同时写入 `modelProvider`、`modelName` 和 `plan_task` model call audit |
 | `openai` / `openai-compatible` | 调用 `${REPOPILOT_WORKER_MODEL_API_BASE_URL}/chat/completions`，使用 `REPOPILOT_WORKER_MODEL_API_KEY`/`OPENAI_API_KEY` 和 `REPOPILOT_WORKER_MODEL_NAME` 生成结构化中文 Planner 建议，再写入 `plan_task` step output 和 model call audit |
 

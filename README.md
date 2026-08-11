@@ -43,11 +43,12 @@ GitHub 仓库接入
 
 - `docker-compose.yml`：PostgreSQL + pgvector、Redis。
 - `backend/`：Spring Boot、Flyway、JPA、JWT 鉴权、项目 API、Agent 任务 API。
+- `backend/` 与 `agent-worker/`：`FEATURE`、`BUGFIX`、`REVIEW`、`DOC` 四类任务采用类型感知的中文 Planner 计划，并共用安全预检、Docker 测试、审查和审批门。
 - `backend/`：已包含 Git 克隆工作区管理、JavaParser AST 符号索引、代码切片、OpenAI-compatible 批量 Embedding、pgvector cosine 查询和关键词/向量混合召回。
 - `backend/`：配置区可读取 Embedding、Coder、GitHub、Sandbox 和 MCP 工具目录的脱敏状态及工具详情，工具调用审计会记录 MCP 契约快照。
 - `agent-worker/`：FastAPI Worker 契约和 MVP graph node 清单。
 - `mcp-tool-server/`：Spring Boot 工具目录与参数校验服务，输出中文工具契约和安全规则。
-- `frontend/`：Vite React 中文工程工作台，按执行链路、快速发起、任务现场、仓库、代码洞察、运行数据和系统配置组织完整闭环，包含 MCP 工具目录详情和工具契约审计快照。
+- `frontend/`：Vite React 中文工程工作台，按执行链路、快速发起、任务现场、仓库、代码洞察、运行数据和系统配置组织完整闭环；任务创建支持四类中文任务切换，列表、筛选、详情和规划证据保留稳定工程枚举。
 - `scripts/`：覆盖本地闭环、Worker、真实 Coder、远端 PR 本地替身和真实 GitHub PR 的中文 smoke/演示脚本。
 
 ## 本地启动

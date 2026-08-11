@@ -16,6 +16,40 @@ SEARCH_PREVIEW_CHARS = 500
 MODEL_PLAN_PREVIEW_CHARS = 2000
 MAX_MODEL_PLAN_STEPS = 5
 MAX_MODEL_SEARCH_QUERIES = 5
+TASK_TYPE_PROFILES = {
+    "FEATURE": {
+        "label": "功能开发",
+        "analysisTitle": "梳理需求边界与现有调用链",
+        "analysisReason": "确认新增能力涉及的 Controller、Service、Mapper、Entity 和测试边界。",
+        "changeTitle": "实现最小功能闭环",
+        "changeReason": "让接口、业务逻辑、持久层和测试按现有工程风格一起演进。",
+        "validationStrategy": "覆盖正向、边界和失败场景，并在 Docker 沙箱运行 mvn -q test。",
+    },
+    "BUGFIX": {
+        "label": "缺陷修复",
+        "analysisTitle": "复现问题并定位根因",
+        "analysisReason": "优先检索失败入口、异常路径、相关实现和既有测试，避免只修表面症状。",
+        "changeTitle": "修复根因并补回归测试",
+        "changeReason": "保持改动最小，同时用失败场景对应的测试锁定行为。",
+        "validationStrategy": "先验证原失败场景，再覆盖相邻边界，并在 Docker 沙箱运行 mvn -q test。",
+    },
+    "REVIEW": {
+        "label": "代码审查",
+        "analysisTitle": "审查风险路径与测试缺口",
+        "analysisReason": "围绕鉴权、参数校验、SQL、兼容性和测试证据定位可复核风险。",
+        "changeTitle": "形成审查结论或最小修复补丁",
+        "changeReason": "有明确证据时只修改必要位置，否则保留可审计的审查计划。",
+        "validationStrategy": "逐项核对风险证据；若生成补丁，仍执行安全预检和 Docker Maven 测试。",
+    },
+    "DOC": {
+        "label": "文档维护",
+        "analysisTitle": "核对实现与文档事实",
+        "analysisReason": "沿接口、配置、命令和源码定位权威事实，避免文档与实现漂移。",
+        "changeTitle": "更新最小必要文档",
+        "changeReason": "只修改与当前实现直接相关的说明、示例、链接和操作步骤。",
+        "validationStrategy": "检查链接、命令和示例；仍在 Docker 沙箱运行 mvn -q test 防止夹带回归。",
+    },
+}
 
 
 def plan_task(
@@ -94,6 +128,7 @@ def build_plan_model_prompt(
     deterministic_output: dict[str, Any],
 ) -> dict[str, Any]:
     index_source = loaded_context.get("indexStatus") or loaded_context.get("loadOutput", {})
+    profile = task_type_profile(context.get("taskType"))
     return {
         "role": "PlannerAgent",
         "language": "zh-CN",
@@ -106,6 +141,12 @@ def build_plan_model_prompt(
             "description": context.get("description"),
             "userRequest": request.user_request,
             "repoFullName": context.get("repoFullName"),
+        },
+        "taskTypePolicy": {
+            "label": profile["label"],
+            "planningFocus": profile["analysisReason"],
+            "changeIntent": profile["changeReason"],
+            "validationStrategy": profile["validationStrategy"],
         },
         "index": {
             "fileCount": index_source.get("fileCount"),
@@ -308,11 +349,16 @@ def deterministic_plan(
     search_summaries: list[dict[str, Any]],
 ) -> dict[str, Any]:
     repo = context.get("repoFullName") or f"project#{context.get('projectId')}"
+    task_type = str(context.get("taskType") or "FEATURE").upper()
+    profile = task_type_profile(task_type)
     sample_file_paths = [file["path"] for file in loaded_context.get("loadOutput", {}).get("sampleFiles", [])]
     controller_files = [path for path in sample_file_paths if "Controller" in path][:3]
     expected_files = controller_files or sample_file_paths[:3]
     return {
-        "summary": f"Worker 已为 {repo} 准备实现计划：{context.get('title')}",
+        "taskType": task_type,
+        "taskTypeLabel": profile["label"],
+        "planningFocus": profile["analysisReason"],
+        "summary": f"Worker 已为 {repo} 准备{profile['label']}计划：{context.get('title')}",
         "steps": [
             {
                 "order": 1,
@@ -322,14 +368,14 @@ def deterministic_plan(
             },
             {
                 "order": 2,
-                "title": "定位相关 Controller/Service/Mapper 代码",
-                "reason": "先沿现有 Spring 分层风格寻找最小修改点。",
+                "title": profile["analysisTitle"],
+                "reason": profile["analysisReason"],
                 "expectedFiles": expected_files,
             },
             {
                 "order": 3,
-                "title": "生成最小 unified diff",
-                "reason": "优先保持接口、业务逻辑和测试一起演进。",
+                "title": profile["changeTitle"],
+                "reason": profile["changeReason"],
                 "expectedFiles": expected_files,
             },
             {
@@ -347,8 +393,13 @@ def deterministic_plan(
         ],
         "searchQueries": queries,
         "searchResults": search_summaries,
-        "testStrategy": "生成补丁后先执行 diff 安全预检，再在 Docker 沙箱运行 mvn -q test。",
+        "testStrategy": profile["validationStrategy"],
     }
+
+
+def task_type_profile(value: Any) -> dict[str, str]:
+    task_type = str(value or "FEATURE").upper()
+    return TASK_TYPE_PROFILES.get(task_type, TASK_TYPE_PROFILES["FEATURE"])
 
 
 def retrieval_queries(

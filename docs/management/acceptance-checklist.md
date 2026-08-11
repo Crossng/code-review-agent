@@ -83,6 +83,7 @@
 | AC-011h38 | GitHub PR 外部幂等对账可验证 | 远端发布在 push 后先调用 GitHub `GET /repos/{owner}/{repo}/pulls?state=open&head={owner}:{targetBranch}&base={baseBranch}&per_page=1`；命中时不再 POST，并记录 `REMOTE_REUSED_EXISTING`；未命中才创建 PR 并记录 `REMOTE_CREATED`；创建返回 422/5xx 或出现网络响应异常时再次查询，命中则记录 `REMOTE_RECONCILED`，仍未命中才进入 `FAILED / REMOTE_FAILED`；`pull_request_record.publish_outcome`、标准 PR API 和中文控制台展示发布结果；`GitHubPullRequestServiceTest` 覆盖 201、新调用前复用、422 后恢复、损坏响应后恢复和 422 无匹配仍失败，`./scripts/remote-github-pr-smoke.sh` 覆盖真实后端、bare origin 与 `GET -> POST(422) -> GET` 对账闭环 |
 | AC-011h39 | 中文工程工作台可用且响应式 | 前端按“当前执行链路 -> 快速发起 -> 仓库工作区 -> Agent 执行现场 -> 代码洞察 -> 运行数据 -> 系统配置”组织信息；执行链路用中文主状态和工程枚举原文同时表达任务、补丁、沙箱测试和 PR；文档使用 `zh-CN`，提供跳到主要内容、可见 `focus-visible`、`aria-current`、`aria-live`、稳定表单 `name`/`type`/`autocomplete` 和 reduced-motion 处理；删除或清空接口文档快照前显示确认；`./scripts/browser-smoke.sh` 完整业务闭环通过，并生成 1440×1100 桌面首屏、全页和 390×844 移动端首屏，移动端断言页面无横向溢出，失败时输出元素与容器宽度诊断 |
 | AC-011h40 | 代码向量混合检索可配置且可运行验证 | `GET /api/settings/embedding` 需要用户 JWT，返回 mode/provider/enabled/ready/embeddingAvailable、模型、脱敏 key 状态、批量大小、输入上限、关键词/向量权重、最低相似度、fallback 和缺失项，不返回 API key；控制台 `EmbeddingSettingsPanel` 展示关键词基线或混合检索就绪状态，代码搜索展示检索模式、Embedding 状态、召回来源和分数，演示就绪总览包含代码混合检索；`ConfiguredEmbeddingModelClientTest` 覆盖 OpenAI-compatible 请求、无 key 本地端点、乱序响应重排和错误响应；`CodeSearchServiceIntegrationTest` 使用真实 PostgreSQL vector 运算验证无关键词重合的语义召回、混合结果和 HTTP 失败降级；`./scripts/embedding-search-smoke.sh` 对 demo 仓库验证 20/20 chunk 向量写库、`VECTOR`、`HYBRID`、`KEYWORD_FALLBACK`，证据写入 `output/embedding-search-smoke/last-run.json` |
+| AC-011h41 | 四类中文 Agent 任务可创建且类型化规划 | 前端 `AgentTaskType` 严格限定 `FEATURE`、`BUGFIX`、`REVIEW`、`DOC`，创建区使用带原生 radio 语义的中文分段控件，选择时展示功能边界、缺陷根因、审查风险或文档事实说明；桌面为四列，390px 移动端为 2×2，列表、筛选、详情、成功提示和 Planner 证据同时展示中文语义与稳定枚举；Spring Boot 与 Python Worker 的 `plan_task` 都输出 `taskType`、`taskTypeLabel`、`planningFocus`、类型化步骤与 `testStrategy`，Worker 模型 prompt 同步携带 `taskTypePolicy`，四类任务均保留 diff 安全预检、Docker 测试、风险审查和人工审批；`AgentTaskControllerIntegrationTest` 覆盖四类 API 创建，`AgentTaskTypeTest` 与 Worker planning tests 固定类型语义；`./scripts/browser-smoke.sh` 覆盖四类切换、`FEATURE` 筛选/URL 恢复、`BUGFIX` 真实任务与两类规划证据，并生成移动端任务类型聚焦截图 |
 | AC-011i | 工作台概览指标可见 | `GET /api/dashboard/summary` 需要鉴权，只统计当前用户项目、任务和 PR 记录；返回项目总数/READY/FAILED，任务总数/CREATED/运行中/待审批/DONE/失败/CANCELLED，PR 总数/`DRAFT_READY`/`OPEN`/`FAILED`；控制台展示 `DashboardSummaryPanel`，登录后显示空工作区指标，项目索引完成后更新项目 ready 计数，任务到达人工审批点后更新 waiting approval 计数 |
 | AC-011j | Agent 运行表现指标可见 | `GET /api/dashboard/run-metrics` 需要鉴权，只统计当前用户最近 1-30 天 `agent_run`；默认 7 天窗口返回 run 总数、成功/失败/取消/运行中数量、完成 run 数、平均耗时、成功率和每日趋势；控制台展示 `DashboardRunMetricsPanel`，登录后显示 0 runs，首个任务到达人工审批点后显示 runs=1、success rate=100% |
 | AC-011k | 跨项目活动流可见 | `GET /api/dashboard/activity` 需要鉴权，只统计当前用户任务下最近 `agent_step`，按完成/开始时间倒序返回，支持 `limit` 且不返回 step input/output JSON；控制台展示 `DashboardActivityPanel`，登录后显示无活动，首个任务到达人工审批点后显示 `waiting_human_approval` 活动 |
@@ -119,7 +120,7 @@
 18. 添加 Spring Boot 示例仓库。
 19. Clone 成功后，使用项目搜索和 `READY` 状态筛选仓库行，确认 URL 写入 `projectStatus`、`projectQuery` 和 `projectId`，刷新页面后恢复筛选和 Repository insight 项目选择，复制当前项目视图链接并确认剪贴板 URL 包含项目筛选和 `projectId`，然后重置项目筛选。
 20. 触发索引。
-21. 创建任务：“给 User 模块新增分页查询接口”。
+21. 在任务类型中选择“功能开发（FEATURE）”，创建任务：“给 User 模块新增分页查询接口”。
 22. 使用任务搜索筛选分页任务，确认 URL 写入 `taskQuery` 和 `taskId`，刷新页面后恢复任务筛选和任务详情；任务到审批点后按 `WAITING_HUMAN_APPROVAL` 状态筛选，再次刷新确认 `taskStatus`、`taskQuery` 和任务详情恢复，复制当前任务视图链接并确认剪贴板 URL 包含任务筛选和 `taskId`，然后重置任务筛选。
 23. 观察 Agent 步骤、Agent evidence 和日志流，复制、下载并保存当前 run report Markdown，再从运行报告快照复制和下载历史报告。
 24. 查看相关代码检索结果。
@@ -129,9 +130,9 @@
 28. 点击 Approve。
 29. 查看 PR preflight，确认本地 branch/commit 可准备且远程 GitHub 状态可解释。
 30. 准备 PR，展示本地 target branch、commit、标题和描述。
-31. 再创建任务：“修复 User id 参数校验 bug”，查看 guard、`UserServiceTest` 和 Maven 测试结果。
-32. 再创建任务：“新增 User count API”，查看 `GET /api/users/count`、`countUsers`、`countAll`、`UserServiceTest` 和 Maven 测试结果。
-33. 再创建任务：“新增 User create API”，查看 `POST /api/users`、`CreateUserRequest`、`createUser`、`save`、`UserServiceTest` 和 Maven 测试结果。
+31. 切换为“缺陷修复（BUGFIX）”并创建任务：“修复 User id 参数校验 bug”，确认 Planner 展示“复现问题并定位根因”，再查看 guard、`UserServiceTest` 和 Maven 测试结果。
+32. 切回“功能开发（FEATURE）”并创建任务：“新增 User count API”，查看 `GET /api/users/count`、`countUsers`、`countAll`、`UserServiceTest` 和 Maven 测试结果。
+33. 保持“功能开发（FEATURE）”并创建任务：“新增 User create API”，查看 `POST /api/users`、`CreateUserRequest`、`createUser`、`save`、`UserServiceTest` 和 Maven 测试结果。
 34. 在启用 GitHub 发布的环境中创建 GitHub PR，并打开 PR 链接展示标题、描述和修改文件。
 
 ## 4. 风险验收

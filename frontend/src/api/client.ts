@@ -200,10 +200,12 @@ export type CodeSearchResponse = {
   results: CodeSearchResult[];
 };
 
+export type AgentTaskType = "FEATURE" | "BUGFIX" | "REVIEW" | "DOC";
+
 export type AgentTask = {
   id: number;
   projectId: number;
-  taskType: string;
+  taskType: AgentTaskType;
   title: string;
   description: string;
   status: string;
@@ -214,7 +216,7 @@ export type AgentTask = {
 export type TaskFilters = {
   projectId?: number | "";
   status?: string;
-  taskType?: string;
+  taskType?: AgentTaskType | "ALL";
   query?: string;
 };
 
@@ -860,7 +862,7 @@ export function getTask(token: string, taskId: number): Promise<AgentTask> {
 
 export function createTask(
   token: string,
-  body: { projectId: number; taskType: string; title: string; description: string }
+  body: { projectId: number; taskType: AgentTaskType; title: string; description: string }
 ): Promise<AgentTask> {
   return postJson<AgentTask, typeof body>("/agent/tasks", body, token);
 }

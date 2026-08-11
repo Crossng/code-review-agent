@@ -159,6 +159,35 @@ class AgentTaskControllerIntegrationTest {
     }
 
     @Test
+    void createTaskPreservesEverySupportedTaskType() throws Exception {
+        String ownerToken = register(ownerEmail);
+        User owner = userRepository.findByEmail(ownerEmail).orElseThrow();
+        Project project = project(owner, "owner/task-types", ProjectStatus.READY);
+
+        for (AgentTaskType taskType : AgentTaskType.values()) {
+            mockMvc.perform(post("/api/agent/tasks")
+                            .header(AUTHORIZATION, bearer(ownerToken))
+                            .contentType(APPLICATION_JSON)
+                            .content(json(Map.of(
+                                    "projectId", project.getId(),
+                                    "taskType", taskType.name(),
+                                    "title", taskType.displayName() + "任务",
+                                    "description", "验证 " + taskType.name() + " 类型创建契约。"
+                            ))))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true))
+                    .andExpect(jsonPath("$.data.projectId").value(project.getId()))
+                    .andExpect(jsonPath("$.data.taskType").value(taskType.name()))
+                    .andExpect(jsonPath("$.data.status").value("CREATED"));
+        }
+
+        mockMvc.perform(get("/api/agent/tasks")
+                        .header(AUTHORIZATION, bearer(ownerToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(4));
+    }
+
+    @Test
     void runReportSummarizesCurrentRunStepEvidenceAndIsOwnerScoped() throws Exception {
         String ownerToken = register(ownerEmail);
         String otherToken = register(otherEmail);

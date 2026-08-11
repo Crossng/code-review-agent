@@ -880,6 +880,103 @@ h2 {
   font-weight: 800;
 }
 
+.taskTypeFieldset {
+  border: 0;
+  margin: 14px 0 0;
+  min-width: 0;
+  padding: 0;
+}
+
+.taskTypeFieldset > .fieldLabel {
+  margin: 0 0 6px;
+  padding: 0;
+}
+
+.taskTypeSegmented {
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: hidden;
+}
+
+.taskTypeOption {
+  border-right: 1px solid var(--line);
+  cursor: pointer;
+  min-width: 0;
+  position: relative;
+}
+
+.taskTypeOption:last-child {
+  border-right: 0;
+}
+
+.taskTypeOption input {
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  width: 1px;
+}
+
+.taskTypeOptionBody {
+  align-items: center;
+  background: var(--paper);
+  display: grid;
+  gap: 2px;
+  justify-items: center;
+  min-height: 54px;
+  padding: 7px 5px;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.taskTypeOptionBody strong {
+  font-size: 0.8rem;
+}
+
+.taskTypeOptionBody code {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.62rem;
+}
+
+.taskTypeOption:hover .taskTypeOptionBody {
+  background: var(--paper-strong);
+}
+
+.taskTypeOption[data-selected="true"] .taskTypeOptionBody {
+  background: #e7f5ee;
+  color: var(--accent-strong);
+  box-shadow: inset 0 -3px 0 var(--accent);
+}
+
+.taskTypeOption[data-selected="true"] code {
+  color: var(--accent-strong);
+}
+
+.taskTypeOption input:focus-visible + .taskTypeOptionBody {
+  outline: 3px solid rgba(40, 104, 215, 0.34);
+  outline-offset: -3px;
+}
+
+.taskTypeDescription {
+  border-left: 2px solid var(--accent);
+  display: grid;
+  gap: 2px;
+  margin: 8px 0 0;
+  padding-left: 9px;
+}
+
+.taskTypeDescription strong {
+  font-size: 0.78rem;
+}
+
+.taskTypeDescription span {
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
 input,
 select,
 textarea {
@@ -1911,6 +2008,19 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+.taskListItem .taskListType {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  grid-column: 2;
+}
+
+.taskListType code {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.66rem;
+}
+
 .taskListItem .badge {
   grid-column: 2;
   justify-self: start;
@@ -2450,6 +2560,18 @@ textarea {
   .searchRetrievalStatus {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .taskTypeSegmented {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .taskTypeOption:nth-child(2) {
+    border-right: 0;
+  }
+
+  .taskTypeOption:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--line);
   }
 
   .symbolRow > * {

@@ -727,9 +727,13 @@ fields are `null` when no filter is active.
 ```json
 {
   "id": 1001,
+  "projectId": 1,
+  "taskType": "FEATURE",
   "status": "CREATED"
 }
 ```
+
+`taskType` 必须是 `FEATURE`、`BUGFIX`、`REVIEW` 或 `DOC`。服务端按原枚举持久化并在创建、列表和详情响应中原样返回；Planner 会把该值转换为对应的中文语义、规划重点和验证策略，未知值由请求参数校验拒绝。
 
 ### GET `/agent/tasks`
 

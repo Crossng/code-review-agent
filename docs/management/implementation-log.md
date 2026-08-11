@@ -4231,6 +4231,40 @@ Python Agent Worker 从“所有初始节点和 helper 都堆在 `initial_nodes.
 - 在安装完整 `agent-worker` 依赖的运行环境中补充一次 `graph_engine=LANGGRAPH` 的真实依赖 smoke 证据。
 - 开始把确定性 planning/patch 节点替换为可配置的模型驱动节点，同时继续复用现有审计和安全后置门。
 
+## 2026-08-11, Slice 133 - 中文多类型Agent任务版
+
+Agent 任务从“后端枚举已存在、前端始终固定创建 FEATURE”推进为四类任务可真实选择、筛选、执行和解释：中文工作台统一展示任务语义与稳定枚举，Spring Boot 本地执行器和 Python Worker Planner 按功能、缺陷、审查、文档采用不同规划重点，同时继续复用原有安全后置门。
+
+### Added
+
+- 前端新增严格 `AgentTaskType` 联合类型和四类中文 profile；创建区使用原生 radio 分段控件，实时展示类型说明，提交所选枚举，不再硬编码 `FEATURE`。
+- 任务创建成功提示、筛选选项、任务列表、详情和 Agent 规划证据统一展示“中文语义 · 工程枚举”；URL 筛选仍持久化稳定枚举值。
+- 桌面端任务类型保持四列紧凑布局，390px 移动端折为 2×2，并保留键盘焦点与屏幕阅读器语义。
+- `AgentTaskType` 统一维护中文名称、分析标题/理由、修改标题/理由和验证策略；Spring Boot `plan_task` 输出新增 `taskType`、`taskTypeLabel`、`planningFocus` 和类型化步骤。
+- Python Worker 新增对应的 `TASK_TYPE_PROFILES`；确定性计划和模型 `taskTypePolicy` 同时按 `FEATURE / BUGFIX / REVIEW / DOC` 切换分析、修改与测试策略。
+- 新增四类任务 API 创建集成测试、Java 类型语义单测和 Worker 类型化计划测试。
+- Browser smoke 逐项切换四类 radio，验证中文说明与选中状态；首个任务覆盖 `FEATURE` 筛选和 URL 恢复，第二个真实任务使用 `BUGFIX` 并校验“复现问题并定位根因”证据。
+- Browser smoke 新增 `output/playwright/repopilot-browser-smoke-mobile-task-types.png`，并在截图前断言任务类型控件完整位于 390×844 视口内。
+- PRD、API、Agent workflow、前端页面、根/前端/后端/Worker README、脚本手册和验收清单同步四类任务契约。
+
+### Verified
+
+- `mvn -q -Dmaven.repo.local=../.m2 test` passes in `backend`，四类创建、Planner 语义与既有状态机回归均为零失败。
+- `mvn -q -Dmaven.repo.local=../.m2 test` passes in `mcp-tool-server`。
+- `PYTHONPATH=. python3 -m unittest discover -s tests` passes in `agent-worker`。
+- `npm run build` passes in `frontend`。
+- 所有 `scripts/*.sh` 通过 `bash -n`，所有 `scripts/*.mjs` 通过 `node --check`。
+- `./scripts/browser-smoke.sh` passes the full registration, settings, project, index, four-type selection, FEATURE and BUGFIX planning, Agent, sandbox, approval and local PR workflow。
+- 1440×1100 桌面首屏、全页、390×844 移动端首屏和移动端任务类型聚焦截图均已人工检查，无裁切、重叠或页面横向溢出。
+- Browser smoke 退出后端口 `8080`、`8090`、`8095`、`5173` 全部空闲，临时 `browser-smoke-%` 用户为 0；PostgreSQL 和 Redis 保持 healthy。
+- `git diff --check` passes，严格密钥扫描未发现真实凭据。
+
+### Next
+
+- 让 Coder 在保持统一安全后置门的前提下进一步吸收任务类型策略，例如 REVIEW 默认优先产出审查结论、DOC 默认限制修改范围。
+- 将 Java、Python 和 TypeScript 三处任务类型文案收敛为可版本化契约，减少跨服务语义漂移。
+- 为 REVIEW 和 DOC 增加真实端到端 recipe 或模型 fixture，补齐从类型选择到差异化产物的演示证据。
+
 ## 2026-08-11, Slice 132 - 代码向量混合检索版
 
 代码检索从“只按路径、符号和源码文本匹配”推进为“关键词基线 + 可选 Embedding + pgvector cosine + 加权 RRF 混合排序”：默认不配置模型也能直接运行；启用 OpenAI-compatible Embedding 后，项目索引会批量生成代码向量，自然语言查询可召回没有字面重叠的代码；模型失败时 API 和 Agent 都保留关键词结果并明确标注降级状态。

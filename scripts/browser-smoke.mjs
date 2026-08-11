@@ -448,6 +448,19 @@ try {
   await insight.getByText("class UserService").first().waitFor();
 
   const taskForm = page.locator("form").filter({ hasText: "创建任务" });
+  const taskTypeGroup = taskForm.getByRole("group", { name: "任务类型" });
+  const taskTypeScenarios = [
+    ["功能", "新增接口、能力或业务流程，优先覆盖正向与边界场景。"],
+    ["修复", "先定位复现条件与根因，再用回归测试锁定修复。"],
+    ["审查", "聚焦风险、测试缺口和最小修复建议，保留审计证据。"],
+    ["文档", "核对实现事实，更新接口、运维或开发说明。"]
+  ];
+  for (const [label, description] of taskTypeScenarios) {
+    await selectTaskType(taskTypeGroup, label);
+    await taskTypeGroup.getByText(description, { exact: true }).waitFor();
+  }
+  await selectTaskType(taskTypeGroup, "功能");
+  await taskForm.getByText("功能开发 · FEATURE", { exact: true }).waitFor();
   await clickAndWaitForIdle(page, taskForm.getByRole("button", { name: "创建任务" }));
   await page.locator(".taskListItem").filter({ hasText: "新增 User 分页查询接口" }).waitFor();
   const taskFilters = page.getByLabel("任务筛选");
@@ -468,6 +481,7 @@ try {
   }
   const taskDetail = page.locator(".detailStack");
   await taskDetail.getByRole("heading", { name: /#\d+ 新增 User 分页查询接口/ }).waitFor();
+  await taskDetail.getByText("功能开发 · FEATURE", { exact: true }).waitFor();
 
   await clickAndWaitForIdle(page, taskDetail.getByRole("button", { name: "运行任务" }));
   await taskDetail.getByText(/正在连接实时流|实时流/).first().waitFor({ timeout: 15000 });
@@ -477,16 +491,19 @@ try {
   await expectDashboardMetric(page, runMetrics, "成功率", "100%");
   await activity.locator(".activityTitle strong").filter({ hasText: /^waiting_human_approval$/ }).waitFor();
   await taskFilters.getByLabel("任务状态筛选").selectOption("WAITING_HUMAN_APPROVAL");
+  await taskFilters.getByLabel("任务类型筛选").selectOption("FEATURE");
   await clickAndWaitForIdle(page, taskFilters.getByRole("button", { name: "应用筛选" }));
   await page.locator(".taskListItem").filter({ hasText: "新增 User 分页查询接口" }).waitFor();
   await page.waitForFunction(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get("taskStatus") === "WAITING_HUMAN_APPROVAL"
+      && params.get("taskType") === "FEATURE"
       && params.get("taskQuery") === "分页"
       && params.has("taskId");
   });
   const reloadStatusFilteredTasks = waitForTaskListQuery(page, {
     status: "WAITING_HUMAN_APPROVAL",
+    taskType: "FEATURE",
     query: "分页"
   });
   await page.reload({ waitUntil: "domcontentloaded" });
@@ -494,7 +511,8 @@ try {
   await page.locator(".taskListItem").filter({ hasText: "新增 User 分页查询接口" }).waitFor();
   await page.waitForFunction(() => {
     const status = document.querySelector('[aria-label="任务状态筛选"]');
-    return status?.value === "WAITING_HUMAN_APPROVAL";
+    const taskType = document.querySelector('[aria-label="任务类型筛选"]');
+    return status?.value === "WAITING_HUMAN_APPROVAL" && taskType?.value === "FEATURE";
   });
   const restoredStatusTaskQuery = await taskFilters.getByLabel("搜索任务").inputValue();
   if (restoredStatusTaskQuery !== "分页") {
@@ -509,6 +527,7 @@ try {
       }
       const url = new URL(text);
       return url.searchParams.get("taskStatus") === "WAITING_HUMAN_APPROVAL"
+        && url.searchParams.get("taskType") === "FEATURE"
         && url.searchParams.get("taskQuery") === "分页"
         && url.searchParams.has("taskId");
     }).catch(() => false)
@@ -528,6 +547,8 @@ try {
   await taskDetail.getByText("waiting_human_approval").first().waitFor();
   await taskDetail.getByText("Agent 执行证据").waitFor();
   await taskDetail.getByText("任务规划").waitFor();
+  const featurePlanEvidence = taskDetail.locator(".evidenceItem").filter({ hasText: "任务规划" });
+  await featurePlanEvidence.locator(".evidenceHighlights").getByText("梳理需求边界与现有调用链").waitFor();
   await taskDetail.getByText("检索到的代码上下文").waitFor();
   await taskDetail.getByText("生成的补丁产物").waitFor();
   await taskDetail.getByText("沙箱测试结果").waitFor();
@@ -671,6 +692,8 @@ try {
   await taskDetail.getByText("由 RepoPilot 准备。").first().waitFor();
   await prPanel.getByText("PR 记录已经准备完成。").waitFor();
 
+  await selectTaskType(taskTypeGroup, "修复");
+  await taskForm.getByText("缺陷修复 · BUGFIX", { exact: true }).waitFor();
   await taskForm.getByLabel("标题").fill("Fix User id validation bug");
   await taskForm
     .getByLabel("任务描述")
@@ -678,9 +701,12 @@ try {
   await clickAndWaitForIdle(page, taskForm.getByRole("button", { name: "创建任务" }));
   await page.locator(".taskListItem").filter({ hasText: "Fix User id validation bug" }).waitFor();
   await taskDetail.getByRole("heading", { name: /#\d+ Fix User id validation bug/ }).waitFor();
+  await taskDetail.getByText("缺陷修复 · BUGFIX", { exact: true }).waitFor();
 
   await clickAndWaitForIdle(page, taskDetail.getByRole("button", { name: "运行任务" }));
   await waitForBadge(taskDetail, "WAITING_HUMAN_APPROVAL");
+  const bugfixPlanEvidence = taskDetail.locator(".evidenceItem").filter({ hasText: "任务规划" });
+  await bugfixPlanEvidence.locator(".evidenceHighlights").getByText("复现问题并定位根因").waitFor();
   await taskDetail.getByText("新增 User id 参数校验保护").first().waitFor();
   await taskDetail.getByText("User id must be positive").first().waitFor();
   await taskDetail.getByText("getUserRejectsNonPositiveId").first().waitFor();
@@ -693,6 +719,7 @@ try {
   await validationChangedFiles.getByText("ADDED").waitFor();
   await assertLatestValidationPatchChangedFiles(page);
 
+  await selectTaskType(taskTypeGroup, "功能");
   await taskForm.getByLabel("标题").fill("Add User count API");
   await taskForm
     .getByLabel("任务描述")
@@ -797,10 +824,26 @@ try {
   }
   const mobileScreenshotPath = join(artifactDir, "repopilot-browser-smoke-mobile.png");
   await page.screenshot({ path: mobileScreenshotPath });
+  await taskTypeGroup.evaluate((element) => {
+    const top = window.scrollY + element.getBoundingClientRect().top - 72;
+    window.scrollTo({ top, behavior: "instant" });
+  });
+  await page.waitForTimeout(150);
+  const taskTypeBounds = await taskTypeGroup.boundingBox();
+  if (!taskTypeBounds
+    || taskTypeBounds.x < -1
+    || taskTypeBounds.x + taskTypeBounds.width > 391
+    || taskTypeBounds.y < 56
+    || taskTypeBounds.y + taskTypeBounds.height > 845) {
+    throw new Error(`Mobile task type control is clipped: ${JSON.stringify(taskTypeBounds)}`);
+  }
+  const mobileTaskTypesScreenshotPath = join(artifactDir, "repopilot-browser-smoke-mobile-task-types.png");
+  await page.screenshot({ path: mobileTaskTypesScreenshotPath });
   console.log(`Browser smoke passed for ${email}`);
   console.log(`Desktop screenshot: ${desktopScreenshotPath}`);
   console.log(`Screenshot: ${screenshotPath}`);
   console.log(`Mobile screenshot: ${mobileScreenshotPath}`);
+  console.log(`Mobile task type screenshot: ${mobileTaskTypesScreenshotPath}`);
 } catch (error) {
   const failurePath = join(artifactDir, "repopilot-browser-smoke-failure.png");
   await page.screenshot({ path: failurePath, fullPage: true }).catch(() => {});
@@ -1166,6 +1209,14 @@ async function assertLatestCreatePatchChangedFiles(page) {
     if (!changedFileByPath.has(expectedPath)) {
       throw new Error(`Latest create patch changedFiles did not include ${expectedPath}`);
     }
+  }
+}
+
+async function selectTaskType(group, label) {
+  const radio = group.getByRole("radio", { name: new RegExp(escapeRegExp(label)) });
+  await group.locator("label.taskTypeOption").filter({ hasText: label }).click();
+  if (!(await radio.isChecked())) {
+    throw new Error(`Expected task type ${label} to be selected.`);
   }
 }
 
