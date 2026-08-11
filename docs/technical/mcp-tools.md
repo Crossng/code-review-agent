@@ -18,7 +18,7 @@ POST /api/mcp/tools/{toolName}/validate
 GET /api/settings/mcp-tools
 ```
 
-该接口需要用户 JWT，只返回脱敏状态：`baseUrl`、健康检查结果、服务名、协议版本、工具数量、读/写工具数量、审计工具数量、写型工具审批门数量、关键 MVP 工具缺失项、分类和工具摘要。后端默认从 `REPOPILOT_MCP_TOOL_SERVER_URL` 读取独立工具目录；健康检查失败时不会继续等待工具目录请求，会直接返回 `ready=false` 和中文阻塞项，避免控制台加载被连续超时拖慢。
+该接口需要用户 JWT，只返回脱敏状态：`baseUrl`、健康检查结果、服务名、协议版本、工具数量、读/写工具数量、审计工具数量、写型工具审批门数量、关键 MVP 工具缺失项、分类和工具详情。每个工具详情包含中文说明、访问模式、审计/审批要求、`backendBridge`、参数 schema、默认值、枚举值和安全规则，不返回密钥或 Authorization header。后端默认从 `REPOPILOT_MCP_TOOL_SERVER_URL` 读取独立工具目录；健康检查失败时不会继续等待工具目录请求，会直接返回 `ready=false` 和中文阻塞项，避免控制台加载被连续超时拖慢。
 
 本地 smoke：
 

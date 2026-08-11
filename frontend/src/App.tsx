@@ -21,6 +21,7 @@ import {
   DashboardSummary,
   GitHubSettings,
   McpToolSettings,
+  McpToolSummary,
   ModelCallLog,
   PatchChangedFile,
   PatchRecord,
@@ -2294,6 +2295,11 @@ function McpToolSettingsPanel({ settings }: { settings: McpToolSettings | null }
               );
             })}
           </div>
+          <div className="sectionHeader">
+            <h3>工具详情</h3>
+            <span>{settings.categories.length} 个分类</span>
+          </div>
+          <McpToolCatalogDetails tools={settings.tools} />
           {settings.missingRequirements.length > 0 ? (
             <div className="errorBox">
               缺少 MCP 工具目录要求：{settings.missingRequirements.join(", ")}
@@ -2306,6 +2312,130 @@ function McpToolSettingsPanel({ settings }: { settings: McpToolSettings | null }
       )}
     </section>
   );
+}
+
+function McpToolCatalogDetails({ tools }: { tools: McpToolSummary[] }) {
+  const groupedTools = useMemo(() => groupMcpToolsByCategory(tools), [tools]);
+
+  if (groupedTools.length === 0) {
+    return <EmptyText text="工具目录暂未返回工具详情。" />;
+  }
+
+  return (
+    <div className="mcpToolCatalog" aria-label="MCP 工具详情">
+      {groupedTools.map((group) => (
+        <section className="mcpToolCategory" aria-label={`${group.category} 工具`} key={group.category}>
+          <div className="mcpToolCategoryHeader">
+            <h4>{group.category}</h4>
+            <span>{group.tools.length} 个工具</span>
+          </div>
+          <div className="mcpToolDetailList">
+            {group.tools.map((tool) => {
+              const toolArguments = tool.arguments ?? [];
+              const safetyRules = tool.safetyRules ?? [];
+              return (
+                <article className="mcpToolDetailCard" data-mode={tool.accessMode} key={tool.name}>
+                  <div className="mcpToolDetailHeader">
+                    <div>
+                      <strong>{tool.title || tool.name}</strong>
+                      <code>{tool.name}</code>
+                    </div>
+                    <div className="mcpToolDetailBadges">
+                      <Badge value={tool.accessMode || "UNKNOWN"} />
+                      {tool.mvp ? <Badge value="MVP" /> : null}
+                      {tool.auditRequired ? <Badge value="AUDIT" /> : null}
+                      {tool.approvalRequired ? <Badge value="APPROVAL" /> : null}
+                    </div>
+                  </div>
+                  {tool.description ? (
+                    <p className="mcpToolDescription">{tool.description}</p>
+                  ) : null}
+                  <div className="mcpBridgeLine">
+                    <span>后端桥</span>
+                    <code>{tool.backendBridge || "未声明"}</code>
+                  </div>
+                  <div className="mcpToolDetailColumns">
+                    <div>
+                      <h5>参数 schema</h5>
+                      {toolArguments.length > 0 ? (
+                        <div className="mcpArgumentList">
+                          {toolArguments.map((argument) => {
+                            const allowedValues = argument.allowedValues ?? [];
+                            const defaultValue = mcpDefaultValueText(argument.defaultValue);
+                            return (
+                              <div className="mcpArgumentRow" key={argument.name}>
+                                <div>
+                                  <strong>{argument.name}</strong>
+                                  <span>{argument.description || "未提供说明"}</span>
+                                </div>
+                                <div className="mcpArgumentMeta">
+                                  <span>{argument.type || "unknown"}</span>
+                                  <span>{argument.required ? "必填" : "可选"}</span>
+                                  {defaultValue === null ? null : <span>默认 {defaultValue}</span>}
+                                  {allowedValues.length > 0 ? (
+                                    <span>枚举 {summarizeList(allowedValues, 3)}</span>
+                                  ) : null}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="mcpMutedText">未声明参数。</p>
+                      )}
+                    </div>
+                    <div>
+                      <h5>安全规则</h5>
+                      {safetyRules.length > 0 ? (
+                        <ul className="mcpSafetyList">
+                          {safetyRules.map((rule) => (
+                            <li key={rule}>{rule}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="mcpMutedText">未声明额外安全规则。</p>
+                      )}
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function groupMcpToolsByCategory(tools: McpToolSummary[]) {
+  const groups = new Map<string, McpToolSummary[]>();
+  for (const tool of tools) {
+    const category = tool.category || "未分类";
+    groups.set(category, [...(groups.get(category) ?? []), tool]);
+  }
+  return Array.from(groups.entries())
+    .map(([category, categoryTools]) => ({
+      category,
+      tools: categoryTools.slice().sort((left, right) => left.name.localeCompare(right.name))
+    }))
+    .sort((left, right) => left.category.localeCompare(right.category));
+}
+
+function mcpDefaultValueText(value: unknown | null): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value === "string") {
+    return value === "" ? "\"\"" : value;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
 }
 
 function ProjectInsightPanel({

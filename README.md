@@ -44,10 +44,10 @@ GitHub 仓库接入
 - `docker-compose.yml`：PostgreSQL + pgvector、Redis。
 - `backend/`：Spring Boot、Flyway、JPA、JWT 鉴权、项目 API、Agent 任务 API。
 - `backend/`：已包含 Git 克隆工作区管理和 JavaParser AST 符号索引。
-- `backend/`：配置区可读取 Coder、GitHub、Sandbox 和 MCP 工具目录的脱敏状态。
+- `backend/`：配置区可读取 Coder、GitHub、Sandbox 和 MCP 工具目录的脱敏状态及工具详情。
 - `agent-worker/`：FastAPI Worker 契约和 MVP graph node 清单。
 - `mcp-tool-server/`：Spring Boot 工具目录与参数校验服务，输出中文工具契约和安全规则。
-- `frontend/`：Vite React 中文控制台，包含工作台、任务、证据、配置和 MCP 工具目录状态。
+- `frontend/`：Vite React 中文控制台，包含工作台、任务、证据、配置和 MCP 工具目录详情。
 - `scripts/`：覆盖本地闭环、Worker、真实 Coder、远端 PR 本地替身和真实 GitHub PR 的中文 smoke/演示脚本。
 
 ## 本地启动
@@ -86,7 +86,7 @@ cd mcp-tool-server
 mvn -Dmaven.repo.local=../.m2 spring-boot:run
 ```
 
-后端默认通过 `REPOPILOT_MCP_TOOL_SERVER_URL=http://127.0.0.1:8095` 读取工具目录，并在控制台配置区展示健康状态、协议版本、工具数量、关键工具和写型工具审批门。
+后端默认通过 `REPOPILOT_MCP_TOOL_SERVER_URL=http://127.0.0.1:8095` 读取工具目录，并在控制台配置区展示健康状态、协议版本、工具数量、关键工具、写型工具审批门、按分类展开的工具参数 schema、安全规则和后端 bridge。
 
 ## 已验证
 
@@ -97,5 +97,5 @@ mvn -Dmaven.repo.local=../.m2 spring-boot:run
 - `agent-worker`: Python 语法编译检查
 - 后端真实 API 流：注册、登录、创建项目、创建 Agent 任务、启动 run、查询 step
 - `./scripts/mcp-tool-server-smoke.sh`：验证 MCP 工具目录、路径安全校验和写型工具人工审批门
-- `McpToolSettingsControllerIntegrationTest`：验证后端配置接口读取 MCP 健康检查和工具目录，并只返回脱敏状态
+- `McpToolSettingsControllerIntegrationTest`：验证后端配置接口读取 MCP 健康检查、工具目录和工具详情，并只返回脱敏状态
 - `./scripts/remote-github-pr-smoke.sh`：无真实 GitHub token 时验证远端 PR push + API 主路径

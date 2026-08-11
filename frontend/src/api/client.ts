@@ -545,14 +545,27 @@ export type McpToolSettingsCheck = {
   message: string;
 };
 
+export type McpToolArgument = {
+  name: string;
+  type: string;
+  required: boolean;
+  description: string;
+  defaultValue: unknown | null;
+  allowedValues: string[];
+};
+
 export type McpToolSummary = {
   name: string;
   title: string;
   category: string;
+  description: string;
   accessMode: "READ" | "WRITE" | string;
   mvp: boolean;
   auditRequired: boolean;
   approvalRequired: boolean;
+  backendBridge: string;
+  arguments: McpToolArgument[];
+  safetyRules: string[];
 };
 
 export type McpToolSettings = {

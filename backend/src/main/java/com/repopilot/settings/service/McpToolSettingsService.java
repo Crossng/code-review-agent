@@ -15,6 +15,7 @@ import java.util.Set;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.repopilot.settings.dto.McpToolArgumentResponse;
 import com.repopilot.settings.dto.McpToolSettingsCheckResponse;
 import com.repopilot.settings.dto.McpToolSettingsResponse;
 import com.repopilot.settings.dto.McpToolSummaryResponse;
@@ -194,15 +195,55 @@ public class McpToolSettingsService {
                     text(tool, "name", ""),
                     text(tool, "title", ""),
                     text(tool, "category", ""),
+                    text(tool, "description", ""),
                     text(tool, "accessMode", ""),
                     tool.path("mvp").asBoolean(false),
                     tool.path("auditRequired").asBoolean(false),
-                    tool.path("approvalRequired").asBoolean(false)
+                    tool.path("approvalRequired").asBoolean(false),
+                    text(tool, "backendBridge", ""),
+                    arguments(tool.path("arguments")),
+                    stringList(tool.path("safetyRules"))
             ));
         }
         tools.sort(Comparator.comparing(McpToolSummaryResponse::category)
                 .thenComparing(McpToolSummaryResponse::name));
         return List.copyOf(tools);
+    }
+
+    private List<McpToolArgumentResponse> arguments(JsonNode argumentsNode) {
+        if (!argumentsNode.isArray()) {
+            return List.of();
+        }
+        List<McpToolArgumentResponse> arguments = new ArrayList<>();
+        for (JsonNode argument : argumentsNode) {
+            arguments.add(new McpToolArgumentResponse(
+                    text(argument, "name", ""),
+                    text(argument, "type", ""),
+                    argument.path("required").asBoolean(false),
+                    text(argument, "description", ""),
+                    defaultValue(argument),
+                    stringList(argument.path("allowedValues"))
+            ));
+        }
+        return List.copyOf(arguments);
+    }
+
+    private JsonNode defaultValue(JsonNode node) {
+        JsonNode value = node.get("defaultValue");
+        return value == null || value.isNull() ? null : value;
+    }
+
+    private List<String> stringList(JsonNode node) {
+        if (!node.isArray()) {
+            return List.of();
+        }
+        List<String> values = new ArrayList<>();
+        for (JsonNode value : node) {
+            if (value.isTextual()) {
+                values.add(value.asText());
+            }
+        }
+        return List.copyOf(values);
     }
 
     private HttpResult getJson(String url) {

@@ -665,6 +665,174 @@ textarea {
   font-size: 0.78rem;
 }
 
+.mcpToolCatalog {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.mcpToolCategory {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.mcpToolCategoryHeader {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.mcpToolCategoryHeader h4 {
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.mcpToolCategoryHeader span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.mcpToolDetailList {
+  display: grid;
+  gap: 10px;
+}
+
+.mcpToolDetailCard {
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.mcpToolDetailCard[data-mode="WRITE"] {
+  border-left-color: var(--warning);
+}
+
+.mcpToolDetailHeader {
+  align-items: flex-start;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) max-content;
+}
+
+.mcpToolDetailHeader strong {
+  display: block;
+  font-size: 0.92rem;
+  overflow-wrap: anywhere;
+}
+
+.mcpToolDetailHeader code,
+.mcpBridgeLine code {
+  color: var(--accent-strong);
+  font-size: 0.76rem;
+  overflow-wrap: anywhere;
+}
+
+.mcpToolDetailBadges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.mcpToolDescription {
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.55;
+  margin: 8px 0;
+}
+
+.mcpBridgeLine {
+  background: var(--paper-strong);
+  border: 1px solid rgba(216, 224, 216, 0.86);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 64px minmax(0, 1fr);
+  padding: 8px 10px;
+}
+
+.mcpBridgeLine span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.mcpToolDetailColumns {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1.15fr) minmax(220px, 0.85fr);
+  margin-top: 10px;
+}
+
+.mcpToolDetailColumns h5 {
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  margin: 0 0 6px;
+  text-transform: uppercase;
+}
+
+.mcpArgumentList {
+  display: grid;
+  gap: 4px;
+}
+
+.mcpArgumentRow {
+  border-top: 1px solid rgba(216, 224, 216, 0.78);
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 0.7fr);
+  padding-top: 7px;
+}
+
+.mcpArgumentRow:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.mcpArgumentRow strong {
+  display: block;
+  font-size: 0.8rem;
+}
+
+.mcpArgumentRow span,
+.mcpMutedText,
+.mcpSafetyList li {
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.mcpArgumentMeta {
+  align-content: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  justify-content: flex-end;
+}
+
+.mcpArgumentMeta span {
+  background: #f7faf6;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink);
+  padding: 2px 7px;
+}
+
+.mcpSafetyList {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.mcpMutedText {
+  margin: 0;
+}
+
 .insightGrid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
@@ -1667,8 +1835,17 @@ textarea {
   .symbolRow,
   .apiDocSnapshotRow,
   .apiRow,
+  .mcpToolDetailHeader,
+  .mcpBridgeLine,
+  .mcpToolDetailColumns,
+  .mcpArgumentRow,
   .searchBar > div {
     grid-template-columns: 1fr;
+  }
+
+  .mcpToolDetailBadges,
+  .mcpArgumentMeta {
+    justify-content: flex-start;
   }
 
   .apiParams,

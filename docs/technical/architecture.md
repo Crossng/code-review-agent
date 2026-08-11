@@ -29,9 +29,9 @@ Web Frontend
 | 服务 | 技术 | 职责 |
 | --- | --- | --- |
 | Web 前端 | React 或 Vue 3 | 项目管理、任务创建、日志流、diff 预览、审批 |
-| Backend API | Spring Boot 3 | 鉴权、项目、任务、审批、PR、日志、配置，读取 MCP 工具目录脱敏状态 |
+| Backend API | Spring Boot 3 | 鉴权、项目、任务、审批、PR、日志、配置，读取 MCP 工具目录脱敏状态和工具契约详情 |
 | Agent Worker | Python + LangGraph | 多 Agent 状态机、模型调用、计划执行、失败修复 |
-| MCP Tool Server | Spring Boot + Spring AI MCP | 当前提供工具目录、输入校验和安全规则，并被控制台配置区读取；后续暴露文件、AST、检索、Git、Maven、Docker、GitHub 工具 |
+| MCP Tool Server | Spring Boot + Spring AI MCP | 当前提供工具目录、参数 schema、backend bridge、输入校验和安全规则，并被控制台配置区读取；后续暴露文件、AST、检索、Git、Maven、Docker、GitHub 工具 |
 | PostgreSQL | PostgreSQL + pgvector | 业务数据、代码索引、向量数据、日志数据 |
 | Redis | Redis | 任务锁、短期状态、异步队列、SSE 事件缓存 |
 | Docker Sandbox | Docker | 隔离执行补丁应用、编译、测试 |
