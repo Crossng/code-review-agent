@@ -20,6 +20,7 @@ import {
   DashboardRunMetrics,
   DashboardSummary,
   GitHubSettings,
+  McpToolAuditSnapshot,
   McpToolSettings,
   McpToolSummary,
   ModelCallLog,
@@ -3156,10 +3157,15 @@ function AgentEvidencePanel({
 
 function ToolCallPanel({ toolCalls, runId }: { toolCalls: ToolCallLog[]; runId: number | null }) {
   const calls = useMemo(
-    () => toolCalls.map((call) => ({ call, retryAudit: retryAuditSummary(call.retryAudit, call.outputJson, call.status) })),
+    () => toolCalls.map((call) => ({
+      call,
+      retryAudit: retryAuditSummary(call.retryAudit, call.outputJson, call.status),
+      mcpSnapshot: mcpToolAuditSnapshot(call.mcpToolSnapshotJson)
+    })),
     [toolCalls]
   );
   const retryAuditCount = calls.filter(({ retryAudit }) => retryAudit !== null).length;
+  const mcpSnapshotCount = calls.filter(({ mcpSnapshot }) => mcpSnapshot !== null).length;
   return (
     <section className="panel" id="tool-calls">
       <div className="panelHeader">
@@ -3168,13 +3174,14 @@ function ToolCallPanel({ toolCalls, runId }: { toolCalls: ToolCallLog[]; runId: 
           <h2>工具调用审计</h2>
         </div>
         <div className="panelPills">
+          {mcpSnapshotCount > 0 ? <span className="pill">MCP 快照 {mcpSnapshotCount} 条</span> : null}
           {retryAuditCount > 0 ? <span className="pill">重试恢复 {retryAuditCount} 条</span> : null}
           {runId === null ? null : <span className="pill">Run #{runId}</span>}
         </div>
       </div>
       {toolCalls.length === 0 ? <EmptyText text="还没有工具调用记录。" /> : (
         <div className="toolCallList">
-          {calls.map(({ call, retryAudit }) => (
+          {calls.map(({ call, retryAudit, mcpSnapshot }) => (
             <article className="toolCallItem" key={call.id}>
               <div className="sectionHeader">
                 <div>
@@ -3188,6 +3195,7 @@ function ToolCallPanel({ toolCalls, runId }: { toolCalls: ToolCallLog[]; runId: 
               </div>
               {call.errorMessage ? <div className="errorBox">{call.errorMessage}</div> : null}
               <RetryAuditNote summary={retryAudit} />
+              <McpToolSnapshotNote snapshot={mcpSnapshot} />
               <div className="toolJsonGrid">
                 <div>
                   <span>输入</span>
@@ -3280,6 +3288,40 @@ function RetryAuditNote({ summary }: { summary: RetryAuditSummary | null }) {
     <div className={`retryAuditNote ${summary.recovered ? "recovered" : "failed"}`}>
       <strong>{summary.recovered ? "已重试恢复" : "重试后仍失败"}：{summary.attemptCount} 次可恢复失败尝试</strong>
       {firstFailure ? <span>首次失败：{firstFailure}</span> : null}
+    </div>
+  );
+}
+
+function McpToolSnapshotNote({ snapshot }: { snapshot: McpToolAuditSnapshot | null }) {
+  if (snapshot === null) {
+    return null;
+  }
+  const safetyRules = snapshot.safetyRules ?? [];
+  const argumentsCount = snapshot.arguments?.length ?? 0;
+  const stateLabel = snapshot.catalogAvailable
+    ? snapshot.toolFound ? "已匹配目录工具" : "目录未匹配"
+    : "目录不可用";
+  return (
+    <div className="mcpSnapshotNote" data-found={snapshot.toolFound ? "true" : "false"}>
+      <div>
+        <strong>MCP 契约快照</strong>
+        <span>{snapshot.protocolVersion ?? "协议未知"} · {stateLabel}</span>
+      </div>
+      <div className="mcpSnapshotMeta">
+        <span>工具 {snapshot.normalizedToolName || snapshot.toolName}</span>
+        {snapshot.category ? <span>分类 {snapshot.category}</span> : null}
+        {snapshot.accessMode ? <span>模式 {snapshot.accessMode}</span> : null}
+        {snapshot.backendBridge ? <span>后端桥 {snapshot.backendBridge}</span> : null}
+        {argumentsCount > 0 ? <span>参数 {argumentsCount} 个</span> : null}
+      </div>
+      {snapshot.reason ? <span className="mcpSnapshotReason">{snapshot.reason}</span> : null}
+      {safetyRules.length > 0 ? (
+        <ul className="mcpSnapshotRules">
+          {safetyRules.slice(0, 2).map((rule) => (
+            <li key={rule}>{rule}</li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }
@@ -3819,6 +3861,50 @@ function retryAuditFromJson(value: string | null, status: string): RetryAuditSum
 
 function retryAuditFirstFailure(summary: RetryAuditSummary): string | null {
   return summary.firstFailureMessage ?? summary.firstFailureType;
+}
+
+function mcpToolAuditSnapshot(value: string | null): McpToolAuditSnapshot | null {
+  const snapshot = parseJsonObject(value);
+  const provider = stringField(snapshot, "provider");
+  const toolName = stringField(snapshot, "toolName");
+  if (!provider || !toolName) {
+    return null;
+  }
+  return {
+    provider,
+    baseUrl: stringField(snapshot, "baseUrl") ?? "",
+    catalogReady: booleanField(snapshot, "catalogReady") ?? false,
+    catalogAvailable: booleanField(snapshot, "catalogAvailable") ?? false,
+    healthAvailable: booleanField(snapshot, "healthAvailable") ?? false,
+    serviceName: stringField(snapshot, "serviceName"),
+    protocolVersion: stringField(snapshot, "protocolVersion"),
+    catalogToolCount: numberField(snapshot, "catalogToolCount") ?? 0,
+    toolName,
+    normalizedToolName: stringField(snapshot, "normalizedToolName") ?? toolName,
+    toolFound: booleanField(snapshot, "toolFound") ?? false,
+    reason: stringField(snapshot, "reason") ?? undefined,
+    title: stringField(snapshot, "title") ?? undefined,
+    category: stringField(snapshot, "category") ?? undefined,
+    accessMode: stringField(snapshot, "accessMode") ?? undefined,
+    mvp: booleanField(snapshot, "mvp") ?? undefined,
+    auditRequired: booleanField(snapshot, "auditRequired") ?? undefined,
+    approvalRequired: booleanField(snapshot, "approvalRequired") ?? undefined,
+    backendBridge: stringField(snapshot, "backendBridge") ?? undefined,
+    arguments: objectArrayField(snapshot, "arguments").map(mcpToolArgumentFromJsonObject),
+    safetyRules: stringArrayField(snapshot, "safetyRules"),
+    capturedAt: stringField(snapshot, "capturedAt") ?? ""
+  };
+}
+
+function mcpToolArgumentFromJsonObject(argument: JsonObject) {
+  return {
+    name: stringField(argument, "name") ?? "",
+    type: stringField(argument, "type") ?? "",
+    required: booleanField(argument, "required") ?? false,
+    description: stringField(argument, "description") ?? "",
+    defaultValue: argument.defaultValue ?? null,
+    allowedValues: stringArrayField(argument, "allowedValues")
+  };
 }
 
 function latestStepByName(steps: AgentStep[], stepName: string) {

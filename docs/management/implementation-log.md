@@ -4231,6 +4231,39 @@ Python Agent Worker 从“所有初始节点和 helper 都堆在 `initial_nodes.
 - 在安装完整 `agent-worker` 依赖的运行环境中补充一次 `graph_engine=LANGGRAPH` 的真实依赖 smoke 证据。
 - 开始把确定性 planning/patch 节点替换为可配置的模型驱动节点，同时继续复用现有审计和安全后置门。
 
+## 2026-08-11, Slice 124 - 工具审计契约快照版
+
+MCP 工具目录从“控制台可解释”继续接入到运行证据链：每次工具调用审计现在会附带调用时的 MCP 契约快照，包含协议版本、正式工具名、backend bridge、参数 schema 和安全规则；目录不可用或内部工具名还未纳入目录时，也会留下中文 reason，方便后续排查审计覆盖缺口。
+
+### Added
+
+- 新增 Flyway `V16__tool_call_mcp_snapshot.sql`，为 `tool_call_log` 增加 `mcp_tool_snapshot_json`。
+- 新增 `McpToolAuditSnapshotService`，读取并缓存 `McpToolSettingsService.current()` 结果，生成工具契约快照；`read_project_file` 会映射到正式 `read_file`，`list_symbols` 会映射到 `get_class_structure`。
+- `ToolCallLogService` 在本地工具调用和 Worker tool-call callback 两条入口自动保存 MCP 快照；纯单元测试手动构造服务时保留 no-op 兼容构造器。
+- `ToolCallLogResponse` 新增 `mcpToolSnapshotJson`，前端 `ToolCallPanel` 展示 MCP 快照数量、协议版本、目录匹配状态、后端桥、参数数量和安全规则。
+- 数据库设计、MCP 工具设计、前端页面规格、README 和验收清单同步工具契约快照边界。
+
+### Verified
+
+- `docker compose up -d postgres redis` passes.
+- `docker compose exec -T postgres pg_isready -U repopilot -d repopilot` passes.
+- `docker compose exec -T redis redis-cli ping` passes.
+- `mvn -q -Dmaven.repo.local=../.m2 -Dtest=ToolCallLogControllerIntegrationTest,AgentWorkerCallbackControllerIntegrationTest,AgentTaskControllerIntegrationTest test` passes in `backend`.
+- `mvn -q -Dmaven.repo.local=../.m2 test` passes in `backend`.
+- `mvn -q -Dmaven.repo.local=../.m2 test` passes in `mcp-tool-server`.
+- `PYTHONPATH=. python3 -m unittest discover -s tests` passes in `agent-worker`.
+- `npm run build` passes in `frontend`.
+- `rg --files scripts -g '*.sh' | xargs bash -n` passes.
+- `rg --files scripts -g '*.mjs' | xargs -n1 node --check` passes.
+- `./scripts/mcp-tool-server-smoke.sh` passes with `toolCount=17`.
+- `git diff --check` passes.
+- Port `8095` has no leftover listener after smoke cleanup.
+
+### Next
+
+- 将 `mcpToolSnapshotJson` 中的目录版本和安全规则继续写入 run report 的工具审计摘要，让报告 Markdown 也能解释工具边界。
+- 给工具详情面板增加工具名/分类/读写模式过滤，方便工具数量继续增长后的排查。
+
 ## 2026-08-11, Slice 123 - 工具目录详情展开版
 
 MCP 工具目录从“控制台可见”继续推进到“契约可解释”：后端配置接口透传工具中文说明、参数 schema、安全规则和后端 bridge，前端配置区按分类展开工具详情，让演示者可以直接说明每个工具能做什么、需要哪些参数、哪些动作必须审计或人工审批。

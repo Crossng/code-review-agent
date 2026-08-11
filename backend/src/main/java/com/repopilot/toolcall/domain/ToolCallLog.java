@@ -40,6 +40,10 @@ public class ToolCallLog {
     @JdbcTypeCode(SqlTypes.JSON)
     private String outputJson;
 
+    @Column(name = "mcp_tool_snapshot_json", columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
+    private String mcpToolSnapshotJson;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ToolCallStatus status;
@@ -64,6 +68,7 @@ public class ToolCallLog {
             String toolName,
             String inputJson,
             String outputJson,
+            String mcpToolSnapshotJson,
             ToolCallStatus status,
             Integer durationMs,
             String errorMessage,
@@ -74,6 +79,7 @@ public class ToolCallLog {
         this.toolName = toolName;
         this.inputJson = inputJson;
         this.outputJson = outputJson;
+        this.mcpToolSnapshotJson = mcpToolSnapshotJson;
         this.status = status;
         this.durationMs = durationMs;
         this.errorMessage = errorMessage;
@@ -99,6 +105,10 @@ public class ToolCallLog {
 
     public String getOutputJson() {
         return outputJson;
+    }
+
+    public String getMcpToolSnapshotJson() {
+        return mcpToolSnapshotJson;
     }
 
     public ToolCallStatus getStatus() {

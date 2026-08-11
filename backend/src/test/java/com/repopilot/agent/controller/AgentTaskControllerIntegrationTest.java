@@ -380,6 +380,7 @@ class AgentTaskControllerIntegrationTest {
                                 "retryable", true
                         ))
                 )),
+                null,
                 ToolCallStatus.SUCCESS,
                 80,
                 null,

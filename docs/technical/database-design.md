@@ -259,6 +259,7 @@ MVP 使用 PostgreSQL 作为主数据库，并启用 pgvector 存储代码向量
 | `tool_name` | varchar(100) | 工具名，例如 `search_code`、`apply_patch`、`run_maven_test` |
 | `input_json` | jsonb | 输入摘要，敏感字段脱敏 |
 | `output_json` | jsonb | 输出摘要，超大 JSON 截断 |
+| `mcp_tool_snapshot_json` | jsonb | 调用时的 MCP 工具目录快照，包括协议版本、正式工具名、backend bridge、参数 schema 和安全规则；旧记录可为空 |
 | `status` | varchar(50) | `SUCCESS`、`FAILED` |
 | `duration_ms` | int | 调用耗时 |
 | `error_message` | text | 失败原因 |

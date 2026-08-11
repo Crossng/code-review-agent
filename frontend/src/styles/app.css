@@ -1328,6 +1328,64 @@ textarea {
   font-weight: 750;
 }
 
+.mcpSnapshotNote {
+  border: 1px solid rgba(47, 125, 85, 0.18);
+  border-radius: 8px;
+  background: #fbfdf9;
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 12px;
+  padding: 10px;
+}
+
+.mcpSnapshotNote[data-found="false"] {
+  border-color: rgba(182, 120, 0, 0.24);
+  background: #fffaf0;
+}
+
+.mcpSnapshotNote strong,
+.mcpSnapshotNote span {
+  display: block;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.mcpSnapshotNote > div:first-child {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.mcpSnapshotNote > div:first-child span,
+.mcpSnapshotReason,
+.mcpSnapshotRules li {
+  color: var(--muted);
+}
+
+.mcpSnapshotMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mcpSnapshotMeta span {
+  background: var(--paper-strong);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink);
+  padding: 2px 8px;
+  overflow-wrap: anywhere;
+}
+
+.mcpSnapshotRules {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+}
+
 .toolJsonGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

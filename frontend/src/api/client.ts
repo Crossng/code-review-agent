@@ -346,12 +346,38 @@ export type RetryAuditSummary = {
   firstFailureMessage: string | null;
 };
 
+export type McpToolAuditSnapshot = {
+  provider: string;
+  baseUrl: string;
+  catalogReady: boolean;
+  catalogAvailable: boolean;
+  healthAvailable: boolean;
+  serviceName: string | null;
+  protocolVersion: string | null;
+  catalogToolCount: number;
+  toolName: string;
+  normalizedToolName: string;
+  toolFound: boolean;
+  reason?: string;
+  title?: string;
+  category?: string;
+  accessMode?: "READ" | "WRITE" | string;
+  mvp?: boolean;
+  auditRequired?: boolean;
+  approvalRequired?: boolean;
+  backendBridge?: string;
+  arguments?: McpToolArgument[];
+  safetyRules?: string[];
+  capturedAt: string;
+};
+
 export type ToolCallLog = {
   id: number;
   agentRunId: number;
   toolName: string;
   inputJson: string | null;
   outputJson: string | null;
+  mcpToolSnapshotJson: string | null;
   retryAudit: RetryAuditSummary | null;
   status: string;
   durationMs: number;

@@ -15,6 +15,7 @@ import com.repopilot.common.ApiException;
 import com.repopilot.toolcall.domain.ToolCallLog;
 import com.repopilot.toolcall.domain.ToolCallStatus;
 import com.repopilot.toolcall.repository.ToolCallLogRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -25,10 +26,21 @@ public class ToolCallLogService {
 
     private final ToolCallLogRepository toolCallLogRepository;
     private final ObjectMapper objectMapper;
+    private final McpToolAuditSnapshotService mcpToolAuditSnapshotService;
 
     public ToolCallLogService(ToolCallLogRepository toolCallLogRepository, ObjectMapper objectMapper) {
+        this(toolCallLogRepository, objectMapper, null);
+    }
+
+    @Autowired
+    public ToolCallLogService(
+            ToolCallLogRepository toolCallLogRepository,
+            ObjectMapper objectMapper,
+            McpToolAuditSnapshotService mcpToolAuditSnapshotService
+    ) {
         this.toolCallLogRepository = toolCallLogRepository;
         this.objectMapper = objectMapper;
+        this.mcpToolAuditSnapshotService = mcpToolAuditSnapshotService;
     }
 
     public <T> T record(AgentRun run, String toolName, Object input, ToolAction<T> action) {
@@ -81,6 +93,7 @@ public class ToolCallLogService {
                 toolName,
                 jsonOrNull(input),
                 jsonOrNull(output),
+                jsonOrNull(snapshot(toolName)),
                 status,
                 normalizedDurationMs,
                 errorMessage,
@@ -105,6 +118,7 @@ public class ToolCallLogService {
                 toolName,
                 input == null ? null : json(input),
                 output == null ? null : json(output),
+                jsonOrNull(snapshot(toolName)),
                 status,
                 (int) Math.min(Integer.MAX_VALUE, Math.max(0, duration)),
                 errorMessage,
@@ -121,6 +135,10 @@ public class ToolCallLogService {
             return null;
         }
         return json(value);
+    }
+
+    private Object snapshot(String toolName) {
+        return mcpToolAuditSnapshotService == null ? null : mcpToolAuditSnapshotService.snapshot(toolName);
     }
 
     private String json(Object value) {

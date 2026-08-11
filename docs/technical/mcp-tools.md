@@ -20,6 +20,8 @@ GET /api/settings/mcp-tools
 
 该接口需要用户 JWT，只返回脱敏状态：`baseUrl`、健康检查结果、服务名、协议版本、工具数量、读/写工具数量、审计工具数量、写型工具审批门数量、关键 MVP 工具缺失项、分类和工具详情。每个工具详情包含中文说明、访问模式、审计/审批要求、`backendBridge`、参数 schema、默认值、枚举值和安全规则，不返回密钥或 Authorization header。后端默认从 `REPOPILOT_MCP_TOOL_SERVER_URL` 读取独立工具目录；健康检查失败时不会继续等待工具目录请求，会直接返回 `ready=false` 和中文阻塞项，避免控制台加载被连续超时拖慢。
 
+工具调用审计会在 `tool_call_log.mcp_tool_snapshot_json` 记录调用时的 MCP 契约快照：`provider`、`baseUrl`、`protocolVersion`、目录健康/匹配状态、原始工具名、规范化工具名、backend bridge、参数 schema 和安全规则。Worker 旧内部工具名会做轻量兼容映射，例如 `read_project_file` 归一到正式 `read_file`；目录不可用或工具未匹配时也会留下中文 reason，便于排查审计缺口。
+
 本地 smoke：
 
 ```bash
