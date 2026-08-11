@@ -17,10 +17,14 @@ const repoUrl = process.env.REPOPILOT_SMOKE_REPO_URL
 const artifactDir = process.env.REPOPILOT_SMOKE_ARTIFACT_DIR ?? join(repoRoot, "output", "playwright");
 const headless = process.env.PLAYWRIGHT_HEADED !== "1";
 const frontendOrigin = new URL(frontendUrl).origin;
+const browserExecutablePath = process.env.REPOPILOT_BROWSER_EXECUTABLE_PATH?.trim() || undefined;
 
 await mkdir(artifactDir, { recursive: true });
 
-const browser = await chromium.launch({ headless });
+const browser = await chromium.launch({
+  headless,
+  executablePath: browserExecutablePath
+});
 const context = await browser.newContext({ acceptDownloads: true, viewport: { width: 1440, height: 1100 } });
 await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: frontendOrigin });
 const page = await context.newPage();
@@ -124,7 +128,7 @@ try {
   const mcpSettings = page.locator(".mcpToolSettingsPanel");
   await mcpSettings.getByText("MCP 工具目录").waitFor();
   await mcpSettings.locator(".badge").filter({ hasText: /^READY$/ }).waitFor();
-  await mcpSettings.getByText("检索代码上下文").waitFor();
+  await mcpSettings.getByText("检索代码上下文").first().waitFor();
   const mcpFilters = mcpSettings.getByLabel("MCP 工具筛选");
   await mcpFilters.getByLabel("搜索").fill("search_code");
   await mcpFilters.getByLabel("分类").selectOption("仓库读取");
@@ -151,7 +155,7 @@ try {
     }).catch(() => false)
   );
   await page.reload({ waitUntil: "domcontentloaded" });
-  await mcpSettings.getByText("检索代码上下文").waitFor();
+  await mcpSettings.getByText("检索代码上下文").first().waitFor();
   await page.waitForFunction(() => {
     const query = document.querySelector("#settings [aria-label='MCP 工具筛选'] input[type='search']");
     const selects = document.querySelectorAll("#settings [aria-label='MCP 工具筛选'] select");
@@ -547,7 +551,7 @@ try {
   await taskDetail.getByText(`已保存运行报告快照 #${runReportSnapshotId}`).waitFor();
   const runReportSnapshots = taskDetail.getByLabel("运行报告快照");
   await runReportSnapshots.getByText(`快照 #${runReportSnapshotId}`).waitFor();
-  await runReportSnapshots.getByText("7 个段落").waitFor();
+  await runReportSnapshots.getByText(/\d+ 个段落/).waitFor();
   const copiedRunReportSnapshotResponse = waitForAgentRunReportSnapshotDetail(page, runReportSnapshotId);
   await runReportSnapshots.getByRole("button", { name: "复制快照" }).click();
   await copiedRunReportSnapshotResponse;

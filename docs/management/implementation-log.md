@@ -4231,6 +4231,40 @@ Python Agent Worker 从“所有初始节点和 helper 都堆在 `initial_nodes.
 - 在安装完整 `agent-worker` 依赖的运行环境中补充一次 `graph_engine=LANGGRAPH` 的真实依赖 smoke 证据。
 - 开始把确定性 planning/patch 节点替换为可配置的模型驱动节点，同时继续复用现有审计和安全后置门。
 
+## 2026-08-11, Slice 128 - 浏览器冒烟本机兜底版
+
+浏览器 smoke 从“依赖 Playwright 下载 Chromium”改成“优先复用本机浏览器”：本地存在 Chrome/Chromium/Edge 时直接用系统浏览器执行 Playwright，避免 CDN 下载失败阻断本地端到端验证；这次也补跑通过了包含 MCP 工具目录视图链接恢复的完整 browser smoke。
+
+### Added
+
+- `scripts/browser-smoke.sh` 新增 `find_browser_executable(...)`，优先读取 `REPOPILOT_BROWSER_EXECUTABLE_PATH`，否则自动查找 macOS/Linux 常见 Chrome、Chromium 和 Edge 路径。
+- 找到本机浏览器时跳过 `npx playwright install chromium`，并把路径通过 `REPOPILOT_BROWSER_EXECUTABLE_PATH` 传给 `npm run smoke:browser`。
+- `scripts/browser-smoke.mjs` 支持把 `REPOPILOT_BROWSER_EXECUTABLE_PATH` 传给 `chromium.launch(...)`。
+- Browser smoke 的 MCP 工具目录断言收窄到 `.first()`，避免关键工具列表和详情卡同名文本触发 Playwright strict mode。
+- 运行报告快照段落数断言改为 `\d+ 个段落`，避免新增诊断 section 后硬编码段落数导致误报。
+- 脚本 README 和验收清单同步本机浏览器兜底、MCP 工具目录 URL 恢复和完整 browser smoke 证据。
+
+### Verified
+
+- `command -v npx >/dev/null 2>&1` passes.
+- `docker compose up -d postgres redis` passes.
+- `docker compose exec -T postgres pg_isready -U repopilot -d repopilot` passes.
+- `docker compose exec -T redis redis-cli ping` passes.
+- `npm run build` passes in `frontend`.
+- `mvn -q -Dmaven.repo.local=../.m2 test` passes in `backend`.
+- `mvn -q -Dmaven.repo.local=../.m2 test` passes in `mcp-tool-server`.
+- `PYTHONPATH=. python3 -m unittest discover -s tests` passes in `agent-worker`.
+- `rg --files scripts -g '*.sh' | xargs bash -n` passes.
+- `rg --files scripts -g '*.mjs' | xargs -n1 node --check` passes.
+- `./scripts/mcp-tool-server-smoke.sh` passes.
+- `./scripts/browser-smoke.sh` passes for `browser-smoke-1786456446-31181@example.test`; screenshot: `output/playwright/repopilot-browser-smoke.png`.
+- `git diff --check` passes.
+- `lsof -nP -iTCP:8095 -sTCP:LISTEN` returns no listener.
+
+### Next
+
+- 继续把 Worker Coder 从 stub 双场景推进到真实 token 演示质量。
+
 ## 2026-08-11, Slice 127 - 工具目录视图可分享版
 
 MCP 工具目录筛选从“当前页面可用”继续变成“链接可复现”：配置区会把工具搜索、分类和读写模式同步进 URL，复制出来的工具视图链接能带着筛选状态回到 `#settings`，方便排查某一类工具或单个工具契约。

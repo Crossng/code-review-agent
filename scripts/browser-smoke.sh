@@ -85,6 +85,32 @@ wait_for_url() {
   return 1
 }
 
+find_browser_executable() {
+  if [[ -n "${REPOPILOT_BROWSER_EXECUTABLE_PATH:-}" && -x "${REPOPILOT_BROWSER_EXECUTABLE_PATH:-}" ]]; then
+    printf '%s\n' "$REPOPILOT_BROWSER_EXECUTABLE_PATH"
+    return 0
+  fi
+
+  local candidates=(
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    "/Applications/Chromium.app/Contents/MacOS/Chromium"
+    "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
+    "/usr/bin/google-chrome"
+    "/usr/bin/google-chrome-stable"
+    "/usr/bin/chromium"
+    "/usr/bin/chromium-browser"
+    "/snap/bin/chromium"
+  )
+  local candidate
+  for candidate in "${candidates[@]}"; do
+    if [[ -x "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
 docker compose up -d postgres redis
 
 if curl -fsS "$MCP_TOOL_SERVER_URL/actuator/health" >/dev/null 2>&1; then
@@ -127,14 +153,20 @@ else
   wait_for_url "$FRONTEND_URL" "frontend" 90
 fi
 
-(
-  cd "$ROOT_DIR/frontend"
-  npx playwright install chromium
-)
+browser_executable_path="$(find_browser_executable || true)"
+if [[ -n "$browser_executable_path" ]]; then
+  echo "Using browser executable at $browser_executable_path"
+else
+  (
+    cd "$ROOT_DIR/frontend"
+    npx playwright install chromium
+  )
+fi
 
 (
   cd "$ROOT_DIR/frontend"
   REPOPILOT_FRONTEND_URL="$FRONTEND_URL" \
+    REPOPILOT_BROWSER_EXECUTABLE_PATH="$browser_executable_path" \
     REPOPILOT_SMOKE_EMAIL="$SMOKE_EMAIL" \
     REPOPILOT_SMOKE_PASSWORD="$SMOKE_PASSWORD" \
     REPOPILOT_SMOKE_ARTIFACT_DIR="$ARTIFACT_DIR" \
