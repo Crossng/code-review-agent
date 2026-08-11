@@ -419,6 +419,7 @@ export type PullRequestRecord = {
   commitSha: string | null;
   commitMessage: string | null;
   status: string;
+  publishOutcome: string | null;
   remotePushedAt: string | null;
   openedAt: string | null;
   errorMessage: string | null;

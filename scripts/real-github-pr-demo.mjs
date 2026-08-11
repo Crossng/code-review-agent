@@ -134,6 +134,7 @@ try {
       baseBranch: pullRequest.baseBranch,
       targetBranch: pullRequest.targetBranch,
       commitSha: pullRequest.commitSha,
+      publishOutcome: pullRequest.publishOutcome,
       remotePushedAt: pullRequest.remotePushedAt,
       openedAt: pullRequest.openedAt
     },
@@ -150,6 +151,7 @@ try {
   console.log("真实 GitHub PR 发布演示通过。");
   console.log(`PR: ${pullRequest.url}`);
   console.log(`分支: ${pullRequest.targetBranch}`);
+  console.log(`发布结果: ${pullRequest.publishOutcome}`);
   console.log(`证据文件: ${artifactPath}`);
 } catch (error) {
   console.error(redact(`真实 GitHub PR 发布演示失败：${error.message}`));
@@ -294,6 +296,9 @@ function assertPullRequest(pullRequest) {
   }
   if (!pullRequest.remotePushedAt || !pullRequest.openedAt) {
     throw new Error("PR 响应缺少 remotePushedAt 或 openedAt。");
+  }
+  if (!["REMOTE_CREATED", "REMOTE_REUSED_EXISTING", "REMOTE_RECONCILED"].includes(pullRequest.publishOutcome)) {
+    throw new Error(`PR publishOutcome=${pullRequest.publishOutcome}，不是可接受的远端发布结果。`);
   }
   if (!pullRequest.targetBranch?.startsWith("repopilot/task-")) {
     throw new Error(`PR targetBranch=${pullRequest.targetBranch} 不符合 RepoPilot 分支约定。`);

@@ -172,6 +172,7 @@ class PullRequestApprovalIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.status").value("DRAFT_READY"))
+                .andExpect(jsonPath("$.data.publishOutcome").value("LOCAL_DRAFT_READY"))
                 .andExpect(jsonPath("$.data.taskStatus").value("DONE"))
                 .andExpect(jsonPath("$.data.baseBranch").value("main"))
                 .andExpect(jsonPath("$.data.targetBranch").value(fixture.patch().getTargetBranch()))
@@ -189,7 +190,8 @@ class PullRequestApprovalIntegrationTest {
                         .header(AUTHORIZATION, bearer(token)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.commitSha").value(commitSha))
-                .andExpect(jsonPath("$.data.status").value("DRAFT_READY"));
+                .andExpect(jsonPath("$.data.status").value("DRAFT_READY"))
+                .andExpect(jsonPath("$.data.publishOutcome").value("LOCAL_DRAFT_READY"));
 
         mockMvc.perform(get("/api/tasks/{taskId}/pull-request/preflight", fixture.task().getId())
                         .header(AUTHORIZATION, bearer(token)))
@@ -289,6 +291,7 @@ class PullRequestApprovalIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.status").value("DRAFT_READY"))
+                .andExpect(jsonPath("$.data.publishOutcome").value("LOCAL_DRAFT_READY"))
                 .andExpect(jsonPath("$.data.taskStatus").value("DONE"))
                 .andExpect(jsonPath("$.data.targetBranch").value(fixture.patch().getTargetBranch()))
                 .andReturn();

@@ -4231,6 +4231,40 @@ Python Agent Worker 从“所有初始节点和 helper 都堆在 `initial_nodes.
 - 在安装完整 `agent-worker` 依赖的运行环境中补充一次 `graph_engine=LANGGRAPH` 的真实依赖 smoke 证据。
 - 开始把确定性 planning/patch 节点替换为可配置的模型驱动节点，同时继续复用现有审计和安全后置门。
 
+## 2026-08-11, Slice 130 - GitHub PR幂等对账版
+
+真实 GitHub 发布从“失败后可以重试”推进到“先查重、再创建、异常后自动对账”：RepoPilot 现在会按 open/head/base 查询已有 PR，避免重复创建；创建发生 422、5xx、限流、超时或响应解析异常时，会再次查询远端状态，已经创建成功的 PR 可以自动恢复为 `OPEN`。发布结果会持久化并在中文控制台展示，能够区分新建、复用已有、对账恢复和真实失败。
+
+### Added
+
+- `GitHubPullRequestService` 在 push 后先调用 GitHub PR 列表接口，使用 `state=open`、`head={owner}:{targetBranch}`、`base={baseBranch}` 和 `per_page=1` 精确查重；命中时不再发送创建请求。
+- 创建请求返回 422、408、409、429、5xx 或发生 I/O/响应解析异常时，再执行一次同 head/base 对账；命中时恢复成功，未命中时保留原始创建错误。
+- 新增 `PullRequestPublishOutcome`：`LOCAL_DRAFT_READY`、`REMOTE_CREATED`、`REMOTE_REUSED_EXISTING`、`REMOTE_RECONCILED`、`REMOTE_FAILED`。
+- 新增 Flyway `V17__pull_request_publish_outcome.sql`，为 `pull_request_record` 增加 `publish_outcome` 并迁移旧 `DRAFT_READY`、`OPEN`、`FAILED` 数据。
+- 标准 PR API 新增 `publishOutcome`；控制台 PR 面板用中文显示“本地草稿已准备”“GitHub 新建成功”“已复用同分支 PR”“创建异常后已对账恢复”或“远端发布失败”。
+- `GitHubPullRequestServiceTest` 覆盖正常 201、新调用前复用已有 PR、422 后对账恢复、损坏的 201 响应后对账恢复，以及 422 后仍无匹配 PR 时保留失败。
+- `remote-github-pr-smoke` 的 GitHub API stub 改为真实竞态：第一次 GET 返回空列表，POST 记录 PR 后返回 422，第二次 GET 返回同一个 PR；证据记录脱敏的 `GET -> POST -> GET` 请求序列、查询参数和 `REMOTE_RECONCILED`。
+- `real-github-pr-demo` 证据新增 `publishOutcome`，接受真实新建、复用已有或异常后对账恢复三种成功结果。
+- API、数据库、前端、沙箱/GitHub、Agent workflow、脚本手册、真实 token runbook 和验收清单同步外部幂等契约。
+
+### Verified
+
+- `mvn -q -Dmaven.repo.local=../.m2 test` passes in `backend`; Flyway validates 17 migrations and PostgreSQL schema reaches v17.
+- `mvn -q -Dmaven.repo.local=../.m2 -Dtest=GitHubPullRequestServiceTest test` passes with five GitHub publish/reconciliation cases.
+- `mvn -q -Dmaven.repo.local=../.m2 test` passes in `mcp-tool-server`.
+- `PYTHONPATH=. python3 -m unittest discover -s tests` passes in `agent-worker`.
+- `npm run build` passes in `frontend`.
+- `rg --files scripts -g '*.sh' | xargs bash -n` and `rg --files scripts -g '*.mjs' | xargs -n1 node --check` pass.
+- `./scripts/remote-github-pr-smoke.sh` passes against a real Spring Boot backend, Docker sandbox, local bare origin and conflict-producing GitHub API stub; artifact records `requestCount=3`、`lookupCount=2`、`createCount=1`、`GET -> POST -> GET` and `OPEN / REMOTE_RECONCILED`，with all Authorization values redacted.
+- `./scripts/browser-smoke.sh` passes with the existing full browser workflow and writes `output/playwright/repopilot-browser-smoke.png`.
+- Remote smoke cleanup leaves `0` `remote-github-pr-smoke-%` users; ports `8080`, `8090` and `8095` are free after verification.
+- `git diff --check` passes.
+
+### Next
+
+- 在真实 GitHub token 和可丢弃 demo 仓库环境中运行 `./scripts/real-github-pr-demo.sh`，留存真实 `REMOTE_CREATED` 或对账复用证据。
+- 继续推进 Worker Coder 真实 Java 业务 diff 稳定性，并把远端 PR 发布结果纳入更完整的运行报告。
+
 ## 2026-08-11, Slice 129 - Worker真实Coder演示入口版
 
 Worker Coder 从“本地 stub 双业务场景可验证”继续推进到“真实 token 环境有独立演示入口”：新增脚本会启动真实后端和真实 FastAPI Worker，把后端执行模式切到 `WORKER_PRIMARY`，让 Worker Coder 使用真实 OpenAI-compatible 配置生成一个最小 `.repopilot/` 说明文件 diff，再验证模型审计、工具审计、安全预检、沙箱测试、风险审查和人工审批暂停点。

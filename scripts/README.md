@@ -189,7 +189,7 @@ export REPOPILOT_CODER_MODEL=...
 ./scripts/remote-github-pr-smoke.sh
 ```
 
-该脚本用于在没有真实 GitHub token 的本地环境中，重复验证远端 GitHub PR 发布主路径。它不会访问 github.com，也不会创建真实 PR，而是使用本地 bare Git 仓库模拟 GitHub origin，并用本地 HTTP server 模拟 GitHub `/repos/{owner}/{repo}/pulls` API。
+该脚本用于在没有真实 GitHub token 的本地环境中，重复验证远端 GitHub PR 发布和外部幂等对账。它不会访问 github.com，也不会创建真实 PR，而是使用本地 bare Git 仓库模拟 GitHub origin，并用本地 HTTP server 模拟 GitHub `/repos/{owner}/{repo}/pulls` API。
 
 该脚本会：
 
@@ -199,8 +199,9 @@ export REPOPILOT_CODER_MODEL=...
 - 注册临时用户，创建 github.com 形式的项目，执行 clone 和 index。
 - 创建“远端 PR smoke：新增 User count API”任务，生成 `SPRING_USER_COUNT_RECIPE` patch，通过 Docker 沙箱测试并自动审批。
 - 检查 PR preflight 的 `publishMode=REMOTE_GITHUB_PR`，随后调用 `/api/tasks/{taskId}/pull-request`。
-- 验证后端真实执行 `git push origin repopilot/task-{taskId}`，本地 bare 仓库存在目标分支，GitHub API stub 收到 1 次 PR 创建请求。
-- 验证 PR 记录为 `OPEN`，包含 PR number、URL、target branch、commit sha、`remotePushedAt` 和 `openedAt`。
+- 验证后端真实执行 `git push origin repopilot/task-{taskId}`，本地 bare 仓库存在目标分支。
+- GitHub API stub 先返回空的开放 PR 列表，创建请求再返回 422 并生成同 head/base 的远端 PR，最后一次查询返回该 PR；脚本断言请求顺序为 `GET -> POST -> GET`，并校验 `state/open`、`owner:head`、`base`、title 和 body。
+- 验证 PR 记录为 `OPEN / REMOTE_RECONCILED`，包含 PR number、URL、target branch、commit sha、`remotePushedAt` 和 `openedAt`。
 - 将脱敏后的运行证据写入 `output/remote-github-pr-smoke/last-run.json`，并清理临时业务数据、workspace 和 Git 替身仓库。
 
 脚本使用假的本地 token，只校验 token 是否进入 Authorization header；输出和证据文件会把 Authorization header 脱敏，不打印 GitHub token、模型 key 或 Authorization header 原文。
@@ -228,6 +229,8 @@ export REPOPILOT_GITHUB_TOKEN=...
 - 注册临时用户，创建指定 GitHub 项目，执行 clone 和 index。
 - 创建默认任务“新增 User count API”，使用本地 recipe 生成稳定 patch 并通过 Docker 沙箱测试。
 - 自动审批已测试通过的 patch，检查 PR preflight，然后调用 `/api/tasks/{taskId}/pull-request`。
+- 远端发布会先按 head/base 查找开放 PR；已有 PR 时复用，创建出现 422、5xx 或网络响应异常时再次对账，避免生成重复 PR。
+- 成功证据包含 `publishOutcome`，可区分 `REMOTE_CREATED`、`REMOTE_REUSED_EXISTING` 和 `REMOTE_RECONCILED`。
 - 验证 PR 记录为 `OPEN`，包含 PR number、URL、target branch、commit sha、`remotePushedAt` 和 `openedAt`。
 - 将脱敏后的运行证据写入 `output/real-github-pr-demo/last-run.json`。
 - 清理本次演示创建的临时用户、项目、任务、运行、补丁、测试、审批和本地 PR 记录。

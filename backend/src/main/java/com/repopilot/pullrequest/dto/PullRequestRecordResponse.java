@@ -4,6 +4,7 @@ import java.time.Instant;
 
 import com.repopilot.agent.domain.AgentTaskStatus;
 import com.repopilot.pullrequest.domain.PullRequestProvider;
+import com.repopilot.pullrequest.domain.PullRequestPublishOutcome;
 import com.repopilot.pullrequest.domain.PullRequestRecord;
 import com.repopilot.pullrequest.domain.PullRequestStatus;
 
@@ -21,6 +22,7 @@ public record PullRequestRecordResponse(
         String commitSha,
         String commitMessage,
         PullRequestStatus status,
+        PullRequestPublishOutcome publishOutcome,
         Instant remotePushedAt,
         Instant openedAt,
         String errorMessage,
@@ -44,6 +46,7 @@ public record PullRequestRecordResponse(
                 record.getCommitSha(),
                 record.getCommitMessage(),
                 record.getStatus(),
+                record.getPublishOutcome(),
                 record.getRemotePushedAt(),
                 record.getOpenedAt(),
                 record.getErrorMessage(),

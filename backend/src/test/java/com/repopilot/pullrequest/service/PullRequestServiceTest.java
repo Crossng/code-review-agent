@@ -28,6 +28,7 @@ import com.repopilot.common.ApiException;
 import com.repopilot.patch.domain.PatchRecord;
 import com.repopilot.patch.repository.PatchRecordRepository;
 import com.repopilot.project.domain.Project;
+import com.repopilot.pullrequest.domain.PullRequestPublishOutcome;
 import com.repopilot.pullrequest.domain.PullRequestRecord;
 import com.repopilot.pullrequest.domain.PullRequestStatus;
 import com.repopilot.pullrequest.dto.PullRequestPreflightResponse;
@@ -105,6 +106,7 @@ class PullRequestServiceTest {
         PullRequestRecord record = service.prepare(fixture.task().getId(), fixture.user().getId());
 
         assertEquals(PullRequestStatus.DRAFT_READY, record.getStatus());
+        assertEquals(PullRequestPublishOutcome.LOCAL_DRAFT_READY, record.getPublishOutcome());
         assertEquals("main", record.getBaseBranch());
         assertEquals("repopilot/task-20", record.getTargetBranch());
         assertEquals("abc123def456", record.getCommitSha());
@@ -177,6 +179,7 @@ class PullRequestServiceTest {
         verify(pullRequestRecordRepository, org.mockito.Mockito.times(2)).save(captor.capture());
         PullRequestRecord failedRecord = captor.getAllValues().get(1);
         assertEquals(PullRequestStatus.FAILED, failedRecord.getStatus());
+        assertEquals(PullRequestPublishOutcome.REMOTE_FAILED, failedRecord.getPublishOutcome());
         assertEquals("已启用 GitHub 发布，但尚未配置 token", failedRecord.getErrorMessage());
     }
 
@@ -199,7 +202,8 @@ class PullRequestServiceTest {
         when(gitHubPullRequestService.publish(eq(fixture.project()), any(PullRequestRecord.class)))
                 .thenReturn(new GitHubPullRequestService.GitHubPullRequest(
                         12,
-                        "https://github.com/example/demo/pull/12"
+                        "https://github.com/example/demo/pull/12",
+                        PullRequestPublishOutcome.REMOTE_CREATED
                 ));
 
         PullRequestRecord record = service.prepare(fixture.task().getId(), fixture.user().getId());
@@ -207,6 +211,7 @@ class PullRequestServiceTest {
         assertEquals(PullRequestStatus.OPEN, record.getStatus());
         assertEquals(12, record.getPrNumber());
         assertEquals("https://github.com/example/demo/pull/12", record.getUrl());
+        assertEquals(PullRequestPublishOutcome.REMOTE_CREATED, record.getPublishOutcome());
         assertNotNull(record.getOpenedAt());
         assertEquals(AgentTaskStatus.DONE, fixture.task().getStatus());
         verify(agentTaskRepository).save(fixture.task());
@@ -236,7 +241,8 @@ class PullRequestServiceTest {
         when(gitHubPullRequestService.publish(eq(fixture.project()), eq(failedRecord)))
                 .thenReturn(new GitHubPullRequestService.GitHubPullRequest(
                         18,
-                        "https://github.com/example/demo/pull/18"
+                        "https://github.com/example/demo/pull/18",
+                        PullRequestPublishOutcome.REMOTE_RECONCILED
                 ));
         when(pullRequestRecordRepository.save(any(PullRequestRecord.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -247,6 +253,7 @@ class PullRequestServiceTest {
         assertEquals(PullRequestStatus.OPEN, record.getStatus());
         assertEquals(18, record.getPrNumber());
         assertEquals("https://github.com/example/demo/pull/18", record.getUrl());
+        assertEquals(PullRequestPublishOutcome.REMOTE_RECONCILED, record.getPublishOutcome());
         assertEquals(AgentTaskStatus.DONE, fixture.task().getStatus());
         verify(pullRequestGitService, never()).materialize(any(), any(), anyString());
         verify(agentTaskRepository).save(fixture.task());

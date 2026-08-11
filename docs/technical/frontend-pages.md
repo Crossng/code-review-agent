@@ -97,7 +97,7 @@ Agent 执行页必须特别处理长任务状态：
 | `DiffViewer` | 展示 unified diff、文件级摘要、patch generation mode、生成来源和模型名 |
 | `TestLogPanel` | 展示 Maven 测试日志 |
 | `ApprovalActions` | 提供通过审批、拒绝和重新生成操作 |
-| `PrResultCard` | 用中文标签展示 PR 链接、分支、提交、打开状态和正文；远端发布失败时展示中文失败类型、原因、下一步和原始错误 |
+| `PrResultCard` | 用中文标签展示 PR 链接、分支、提交、打开状态、发布结果和正文；`publishOutcome` 会翻译为本地草稿、新建成功、复用已有、对账恢复或远端失败，远端发布失败时展示中文失败类型、原因、下一步和原始错误 |
 | `PullRequestPreflightSummary` | 用中文标签展示 PR 发布前置检查、发布模式、本地草稿状态、远程 GitHub 状态和 blocker |
 | `ToolCallAuditPanel` | 展示工具调用输入、输出摘要、状态、耗时和 MCP 工具契约快照 |
 | `ModelCallAuditPanel` | 展示模型调用提示词、响应摘要、模型名、token 和耗时 |

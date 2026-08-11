@@ -908,7 +908,7 @@ GET /api/agent/tasks?projectId=1&status=WAITING_HUMAN_APPROVAL&taskType=FEATURE&
 | `GET` | `/tasks/{id}/pull-request` | 查询最新 PR 记录 |
 | `GET` | `/tasks/{id}/pull-request/preflight` | 查询 PR 发布前置检查 |
 
-当前实现会在 patch 审批通过且沙箱测试通过后创建本地 target branch、应用 diff、生成 commit，并写入 `DRAFT_READY` 记录，同时把任务标记为 `DONE` 以释放项目写入槽。配置 `REPOPILOT_GITHUB_ENABLED=true` 且提供 `REPOPILOT_GITHUB_TOKEN` 或 `GITHUB_TOKEN` 后，会继续 push target branch、调用 GitHub API 创建 PR，并把记录更新为 `OPEN`。
+当前实现会在 patch 审批通过且沙箱测试通过后创建本地 target branch、应用 diff、生成 commit，并写入 `DRAFT_READY` 记录，同时把任务标记为 `DONE` 以释放项目写入槽。配置 `REPOPILOT_GITHUB_ENABLED=true` 且提供 `REPOPILOT_GITHUB_TOKEN` 或 `GITHUB_TOKEN` 后，会继续 push target branch，按 `state=open + owner:head + base` 查询同分支 PR；已有 PR 时直接对账复用，没有时才调用 GitHub API 创建。创建请求出现 422、5xx 或网络响应异常时会再次查询并恢复已创建 PR，避免重复 PR。
 
 响应：
 
@@ -926,6 +926,7 @@ GET /api/agent/tasks?projectId=1&status=WAITING_HUMAN_APPROVAL&taskType=FEATURE&
   "commitSha": "8e2f1a5...",
   "commitMessage": "RepoPilot：新增 User 分页查询接口\n\n由 RepoPilot 生成。\n\n任务：#1001\n运行：#2001\n补丁：#3001\n测试：mvn test 已通过",
   "status": "DRAFT_READY",
+  "publishOutcome": "LOCAL_DRAFT_READY",
   "remotePushedAt": null,
   "openedAt": null,
   "errorMessage": null,
@@ -941,7 +942,8 @@ GET /api/agent/tasks?projectId=1&status=WAITING_HUMAN_APPROVAL&taskType=FEATURE&
 - 项目本地仓库工作区必须干净。
 - 同一项目不能有其他写入型任务正在运行，否则返回 `409 PROJECT_WRITE_TASK_RUNNING`。
 - 未开启 GitHub 发布时，记录停留在 `DRAFT_READY`，`url` 和 `prNumber` 为空，任务状态为 `DONE`。
-- 远端 PR 创建失败后会保留 `FAILED` 记录和本地分支/commit；从 `FAILED_PR_CREATION` 重试会复用已有记录继续发布，成功后更新为 `OPEN`。
+- `publishOutcome` 取值为 `LOCAL_DRAFT_READY`、`REMOTE_CREATED`、`REMOTE_REUSED_EXISTING`、`REMOTE_RECONCILED` 或 `REMOTE_FAILED`，用于区分本地草稿、新建远端 PR、复用已有 PR、创建异常后对账恢复和真实失败。
+- 远端 PR 创建失败后会保留 `FAILED` 记录和本地分支/commit；从 `FAILED_PR_CREATION` 重试会复用已有记录，先查询同 head/base 的开放 PR，再决定是否创建，成功后更新为 `OPEN`。
 
 ### GET `/tasks/{id}/pull-request/preflight`
 
@@ -1097,6 +1099,8 @@ GET /api/agent/tasks?projectId=1&status=WAITING_HUMAN_APPROVAL&taskType=FEATURE&
 | `PROJECT_NOT_GITHUB_REPOSITORY` | 409 | 项目不是 github.com 仓库 |
 | `GITHUB_TOKEN_NOT_CONFIGURED` | 409 | 已开启 GitHub 发布但未配置 token |
 | `GITHUB_BRANCH_PUSH_FAILED` | 409 | target branch push 失败 |
+| `GITHUB_PR_LOOKUP_FAILED` | 502 | 按 head/base 查询 GitHub PR 失败 |
+| `GITHUB_PR_RESPONSE_INVALID` | 502 | GitHub PR 响应缺少编号或 URL |
 | `SANDBOX_PREPARE_FAILED` | 500 | 沙箱工作区准备失败 |
 | `SANDBOX_INVALID_PATH` | 500 | 沙箱路径越界 |
 | `SANDBOX_TEST_FAILED` | 422 | 测试失败 |

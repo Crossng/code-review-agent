@@ -90,8 +90,10 @@ feat: add user pagination API
 7. git commit
 8. 保存 pull_request_record，状态为 DRAFT_READY
 9. git push origin target branch
-10. 调用 GitHub API 创建 PR
-11. 更新 pull_request_record URL、编号、状态和打开时间
+10. 按 `state=open + owner:head + base` 查询同分支 GitHub PR
+11. 已存在则复用；不存在才调用 GitHub API 创建 PR
+12. 创建出现 422、5xx 或网络响应异常时再次查询并对账恢复
+13. 更新 pull_request_record URL、编号、状态、`publish_outcome` 和打开时间
 ```
 
 GitHub 发布配置：
@@ -106,13 +108,13 @@ REPOPILOT_GITHUB_API_BASE_URL=https://api.github.com
 
 真实远端 PR 演示前可运行 `./scripts/real-token-demo-check.sh` 做体检；默认模式会提示 Docker、PostgreSQL/Redis、沙箱镜像、Maven cache、后端真实 Coder、Worker Planner/Coder 可选模型入口、`REPOPILOT_REAL_GITHUB_PR_CONFIRM=create-pr`、`REPOPILOT_REAL_GITHUB_PR_REPO_URL`、`REPOPILOT_GITHUB_ENABLED=true` 和 `REPOPILOT_GITHUB_TOKEN`/`GITHUB_TOKEN` 是否到位但不失败，`--strict` 模式会在 Docker、后端真实 Coder 或远端 PR 缺项时返回非 0；Worker Planner/Coder 默认关闭只作为可选增强提示，显式启用但缺少 fixture/model/key 时才在 strict 模式失败。需要顺手启动基础依赖时可加 `--start-deps`。脚本将脱敏体检证据写入 `output/real-token-demo-check/last-run.json`，并生成中文 Markdown 操作手册 `output/real-token-demo-check/last-run.md`；脚本只展示 token/key 是否配置，不打印 token、模型 key 或 Authorization header。
 
-真实 GitHub PR 发布演示可运行 `./scripts/real-github-pr-demo.sh`。该脚本要求显式设置 `REPOPILOT_REAL_GITHUB_PR_CONFIRM=create-pr`、`REPOPILOT_REAL_GITHUB_PR_REPO_URL`、`REPOPILOT_GITHUB_ENABLED=true` 和 GitHub token，然后创建临时用户和指定 GitHub 项目，生成稳定的 User count API patch，自动审批，通过 PR preflight 后真实 push `repopilot/task-{taskId}` 分支并创建远端 PR。脚本会清理 RepoPilot 本地临时业务数据，但不会关闭远端 PR 或删除远端分支；演示时应使用可丢弃的公开仓库，且仓库内容应与 `examples/demo-spring-repo` 结构一致。当前 clone 阶段不注入 token，私有仓库需要本机 Git 已有读取凭据。
+真实 GitHub PR 发布演示可运行 `./scripts/real-github-pr-demo.sh`。该脚本要求显式设置 `REPOPILOT_REAL_GITHUB_PR_CONFIRM=create-pr`、`REPOPILOT_REAL_GITHUB_PR_REPO_URL`、`REPOPILOT_GITHUB_ENABLED=true` 和 GitHub token，然后创建临时用户和指定 GitHub 项目，生成稳定的 User count API patch，自动审批，通过 PR preflight 后真实 push `repopilot/task-{taskId}` 分支并创建或对账复用远端 PR。证据会记录 `publishOutcome`。脚本会清理 RepoPilot 本地临时业务数据，但不会关闭远端 PR 或删除远端分支；演示时应使用可丢弃的公开仓库，且仓库内容应与 `examples/demo-spring-repo` 结构一致。当前 clone 阶段不注入 token，私有仓库需要本机 Git 已有读取凭据。
 
 `GET /api/settings/github` 提供当前 GitHub 发布配置的只读脱敏状态，前端可展示 `LOCAL_DRAFT_ONLY` 或 `REMOTE_GITHUB_PR`、API base URL、token 是否配置和缺失项，但不返回 token 原文。
 
 `GET /api/tasks/{id}/pull-request/preflight` 提供任务级 PR 发布前置检查，覆盖任务状态、patch 审批、沙箱测试、本地草稿准备、远程 GitHub 仓库资格和 token 配置。该接口只读，不创建分支或 PR，供控制台在审批前后展示 blocker 和 warning。
 
-远端发布链路的本地验证可运行 `./scripts/remote-github-pr-smoke.sh`。脚本使用临时 bare Git 仓库模拟 `origin`，并用本地 HTTP server 模拟 GitHub `/repos/{owner}/{repo}/pulls` API；后端仍以 `REPOPILOT_GITHUB_ENABLED=true`、github.com 形式仓库 URL 和标准用户 API 流程运行。脚本会真实执行 `git push origin {targetBranch}`，断言远端替身分支存在、PR API 收到 token header、title/head/base/body 正确，并确认服务返回 PR number/url 和 `OPEN` PR 记录。这样即使没有真实 GitHub token，也可以重复验证 push + GitHub API 创建 PR 的主路径；脱敏证据写入 `output/remote-github-pr-smoke/last-run.json`。
+远端发布链路的本地验证可运行 `./scripts/remote-github-pr-smoke.sh`。脚本使用临时 bare Git 仓库模拟 `origin`，并用本地 HTTP server 模拟 GitHub `/repos/{owner}/{repo}/pulls` API；后端仍以 `REPOPILOT_GITHUB_ENABLED=true`、github.com 形式仓库 URL 和标准用户 API 流程运行。脚本会真实执行 `git push origin {targetBranch}`，模拟第一次 GET 查重为空、POST 创建发生 422 竞态、第二次 GET 找到已创建 PR，断言查询参数、token header、title/head/base/body 和 `publishOutcome=REMOTE_RECONCILED`。这样即使没有真实 GitHub token，也可以重复验证 push、外部幂等查重和异常对账恢复；脱敏证据写入 `output/remote-github-pr-smoke/last-run.json`。
 
 PR body 模板：
 
@@ -142,7 +144,7 @@ PR body 模板：
 | diff 应用失败 | 标记 patch 失败，要求重新生成 |
 | 测试失败 | 保存日志，最多进入 RepairAgent 2 次；当前确定性修复覆盖缺失 `spring-boot-starter-test` 和常见 Java 标准库缺 import 编译失败，无法修复时进入 `FAILED_TEST` 等待人工处理或 Regenerate |
 | push 失败 | 保留本地分支，允许重试 |
-| PR 创建失败 | 保存 GitHub API 响应，允许从 `FAILED_PR_CREATION` 重试；重试会复用已有 `pull_request_record` 和本地分支/commit，成功后更新为 `OPEN` |
+| PR 创建失败 | 对 422、5xx 和网络响应异常先按 head/base 对账；找到开放 PR 时恢复为 `OPEN / REMOTE_RECONCILED`，确实不存在时保存 GitHub API 响应并允许从 `FAILED_PR_CREATION` 重试 |
 
 ## 8. 安全要求
 

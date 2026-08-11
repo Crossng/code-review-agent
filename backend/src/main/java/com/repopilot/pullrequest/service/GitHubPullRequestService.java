@@ -2,9 +2,11 @@ package com.repopilot.pullrequest.service;
 
 import java.io.IOException;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
@@ -13,6 +15,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repopilot.common.ApiException;
 import com.repopilot.project.domain.Project;
+import com.repopilot.pullrequest.domain.PullRequestPublishOutcome;
 import com.repopilot.pullrequest.domain.PullRequestRecord;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -70,10 +73,21 @@ public class GitHubPullRequestService {
         String authToken = token();
         pullRequestGitService.pushBranch(project, record.getTargetBranch(), authToken);
         record.markRemotePushed();
+
+        Optional<GitHubPullRequest> existing = findOpenPullRequest(
+                repository,
+                record,
+                authToken,
+                PullRequestPublishOutcome.REMOTE_REUSED_EXISTING
+        );
+        if (existing.isPresent()) {
+            return existing.get();
+        }
         return createPullRequest(repository, record, authToken);
     }
 
     private GitHubPullRequest createPullRequest(GitHubRepository repository, PullRequestRecord record, String authToken) {
+        ApiException failure;
         try {
             String requestBody = objectMapper.writeValueAsString(Map.of(
                     "title", record.getTitle(),
@@ -81,36 +95,153 @@ public class GitHubPullRequestService {
                     "base", record.getBaseBranch(),
                     "body", record.getBody()
             ));
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(apiBaseUrl() + "/repos/" + repository.owner() + "/" + repository.name() + "/pulls"))
-                    .timeout(Duration.ofSeconds(60))
-                    .header("Authorization", "Bearer " + authToken)
-                    .header("Accept", "application/vnd.github+json")
-                    .header("X-GitHub-Api-Version", "2022-11-28")
+            HttpRequest request = githubRequestBuilder(URI.create(pullsEndpoint(repository)), authToken)
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                     .build();
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() != 201) {
-                throw new ApiException(
-                        HttpStatus.BAD_GATEWAY,
-                        "GITHUB_PR_CREATE_FAILED",
-                        "GitHub 返回 HTTP " + response.statusCode() + "：" + excerpt(response.body())
+            if (response.statusCode() == 201) {
+                return pullRequestFrom(
+                        objectMapper.readTree(response.body()),
+                        PullRequestPublishOutcome.REMOTE_CREATED
                 );
             }
-            JsonNode body = objectMapper.readTree(response.body());
-            int number = body.path("number").asInt(0);
-            String url = body.path("html_url").asText(null);
-            if (number <= 0 || url == null || url.isBlank()) {
-                throw new ApiException(HttpStatus.BAD_GATEWAY, "GITHUB_PR_CREATE_FAILED", "GitHub 响应没有包含 PR 编号或 URL");
+
+            failure = createFailure(response.statusCode(), response.body());
+            if (isAmbiguousCreateFailure(response.statusCode())) {
+                return reconcileAfterCreateFailure(repository, record, authToken, failure);
             }
-            return new GitHubPullRequest(number, url);
+            throw failure;
         } catch (IOException exception) {
-            throw new ApiException(HttpStatus.BAD_GATEWAY, "GITHUB_PR_CREATE_FAILED", exception.getMessage());
+            failure = new ApiException(
+                    HttpStatus.BAD_GATEWAY,
+                    "GITHUB_PR_CREATE_FAILED",
+                    "GitHub PR 创建请求失败：" + exceptionMessage(exception)
+            );
+            return reconcileAfterCreateFailure(repository, record, authToken, failure);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new ApiException(HttpStatus.BAD_GATEWAY, "GITHUB_PR_CREATE_FAILED", "GitHub 请求被中断");
         }
+    }
+
+    private Optional<GitHubPullRequest> findOpenPullRequest(
+            GitHubRepository repository,
+            PullRequestRecord record,
+            String authToken,
+            PullRequestPublishOutcome publishOutcome
+    ) {
+        String query = "state=open"
+                + "&head=" + encode(repository.owner() + ":" + record.getTargetBranch())
+                + "&base=" + encode(record.getBaseBranch())
+                + "&per_page=1";
+        HttpRequest request = githubRequestBuilder(
+                URI.create(pullsEndpoint(repository) + "?" + query),
+                authToken
+        ).GET().build();
+
+        try {
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200) {
+                throw new ApiException(
+                        HttpStatus.BAD_GATEWAY,
+                        "GITHUB_PR_LOOKUP_FAILED",
+                        "GitHub PR 对账返回 HTTP " + response.statusCode() + "：" + excerpt(response.body())
+                );
+            }
+            JsonNode body = objectMapper.readTree(response.body());
+            if (!body.isArray()) {
+                throw new ApiException(HttpStatus.BAD_GATEWAY, "GITHUB_PR_LOOKUP_FAILED", "GitHub PR 对账响应不是数组");
+            }
+            for (JsonNode candidate : body) {
+                if (matchesBranches(candidate, record)) {
+                    return Optional.of(pullRequestFrom(candidate, publishOutcome));
+                }
+            }
+            return Optional.empty();
+        } catch (IOException exception) {
+            throw new ApiException(
+                    HttpStatus.BAD_GATEWAY,
+                    "GITHUB_PR_LOOKUP_FAILED",
+                    "GitHub PR 对账请求失败：" + exceptionMessage(exception)
+            );
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "GITHUB_PR_LOOKUP_FAILED", "GitHub PR 对账请求被中断");
+        }
+    }
+
+    private GitHubPullRequest reconcileAfterCreateFailure(
+            GitHubRepository repository,
+            PullRequestRecord record,
+            String authToken,
+            ApiException createFailure
+    ) {
+        try {
+            Optional<GitHubPullRequest> reconciled = findOpenPullRequest(
+                    repository,
+                    record,
+                    authToken,
+                    PullRequestPublishOutcome.REMOTE_RECONCILED
+            );
+            if (reconciled.isPresent()) {
+                return reconciled.get();
+            }
+        } catch (ApiException reconciliationFailure) {
+            if (Thread.currentThread().isInterrupted()) {
+                throw reconciliationFailure;
+            }
+        }
+        throw createFailure;
+    }
+
+    private HttpRequest.Builder githubRequestBuilder(URI uri, String authToken) {
+        return HttpRequest.newBuilder()
+                .uri(uri)
+                .timeout(Duration.ofSeconds(60))
+                .header("Authorization", "Bearer " + authToken)
+                .header("Accept", "application/vnd.github+json")
+                .header("X-GitHub-Api-Version", "2022-11-28");
+    }
+
+    private String pullsEndpoint(GitHubRepository repository) {
+        return apiBaseUrl() + "/repos/" + repository.owner() + "/" + repository.name() + "/pulls";
+    }
+
+    private String encode(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8);
+    }
+
+    private boolean matchesBranches(JsonNode candidate, PullRequestRecord record) {
+        return record.getTargetBranch().equals(candidate.path("head").path("ref").asText())
+                && record.getBaseBranch().equals(candidate.path("base").path("ref").asText());
+    }
+
+    private GitHubPullRequest pullRequestFrom(JsonNode body, PullRequestPublishOutcome publishOutcome) {
+        int number = body.path("number").asInt(0);
+        String url = body.path("html_url").asText(null);
+        if (number <= 0 || url == null || url.isBlank()) {
+            throw new ApiException(HttpStatus.BAD_GATEWAY, "GITHUB_PR_RESPONSE_INVALID", "GitHub 响应没有包含 PR 编号或 URL");
+        }
+        return new GitHubPullRequest(number, url, publishOutcome);
+    }
+
+    private ApiException createFailure(int statusCode, String body) {
+        return new ApiException(
+                HttpStatus.BAD_GATEWAY,
+                "GITHUB_PR_CREATE_FAILED",
+                "GitHub 返回 HTTP " + statusCode + "：" + excerpt(body)
+        );
+    }
+
+    private boolean isAmbiguousCreateFailure(int statusCode) {
+        return statusCode == 408 || statusCode == 409 || statusCode == 422 || statusCode == 429 || statusCode >= 500;
+    }
+
+    private String exceptionMessage(IOException exception) {
+        return exception.getMessage() == null || exception.getMessage().isBlank()
+                ? exception.getClass().getSimpleName()
+                : exception.getMessage();
     }
 
     private Optional<GitHubRepository> repository(Project project) {
@@ -187,6 +318,10 @@ public class GitHubPullRequestService {
     private record GitHubRepository(String owner, String name) {
     }
 
-    public record GitHubPullRequest(Integer number, String url) {
+    public record GitHubPullRequest(
+            Integer number,
+            String url,
+            PullRequestPublishOutcome publishOutcome
+    ) {
     }
 }

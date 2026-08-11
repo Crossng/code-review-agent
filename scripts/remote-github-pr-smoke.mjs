@@ -48,6 +48,7 @@ const secretValues = [
 const children = [];
 const githubRequests = [];
 let githubServer;
+let stubPullRequest = null;
 
 await mkdir(logDir, { recursive: true });
 await mkdir(artifactDir, { recursive: true });
@@ -153,7 +154,7 @@ try {
 
   const pullRequest = await apiPost(apiBase, `/tasks/${task.id}/pull-request`, token, {});
   assertPullRequest(pullRequest);
-  assertGitHubRequest(githubRequests, pullRequest);
+  assertGitHubRequests(githubRequests, pullRequest);
   const pushedSha = verifyPushedBranch(gitFixture.bareRepository, pullRequest);
 
   const finalTask = await apiGet(apiBase, `/agent/tasks/${task.id}`, token);
@@ -205,18 +206,24 @@ try {
       baseBranch: pullRequest.baseBranch,
       targetBranch: pullRequest.targetBranch,
       commitSha: pullRequest.commitSha,
+      publishOutcome: pullRequest.publishOutcome,
       remotePushedAt: pullRequest.remotePushedAt,
       openedAt: pullRequest.openedAt
     },
-    githubApiRequest: {
+    githubApiRequests: {
       requestCount: githubRequests.length,
-      method: githubRequests[0]?.method,
-      path: githubRequests[0]?.path,
-      authorizationHeaderPresent: Boolean(githubRequests[0]?.authorization),
-      authorizationHeaderValue: githubRequests[0]?.authorization ? "<redacted>" : null,
-      accept: githubRequests[0]?.accept,
-      apiVersion: githubRequests[0]?.apiVersion,
-      body: githubRequests[0]?.body
+      lookupCount: githubRequests.filter((request) => request.method === "GET").length,
+      createCount: githubRequests.filter((request) => request.method === "POST").length,
+      sequence: githubRequests.map((request) => ({
+        method: request.method,
+        path: request.path,
+        query: request.query,
+        authorizationHeaderPresent: Boolean(request.authorization),
+        authorizationHeaderValue: request.authorization ? "<redacted>" : null,
+        accept: request.accept,
+        apiVersion: request.apiVersion,
+        body: request.body
+      }))
     },
     testRuns: testRuns.map((testRun) => ({
       id: testRun.id,
@@ -281,35 +288,57 @@ async function prepareLocalGitHubRepository() {
 
 async function startGitHubApiStub() {
   const server = createServer(async (request, response) => {
-    if (request.method !== "POST" || request.url !== `/repos/${repoOwner}/${repoName}/pulls`) {
+    const requestUrl = new URL(request.url ?? "/", "http://127.0.0.1");
+    if (requestUrl.pathname !== `/repos/${repoOwner}/${repoName}/pulls`) {
       response.writeHead(404);
       response.end();
       return;
     }
-    const rawBody = await readRequestBody(request);
-    const body = JSON.parse(rawBody);
+    const rawBody = request.method === "POST" ? await readRequestBody(request) : "";
+    const body = rawBody ? JSON.parse(rawBody) : null;
     githubRequests.push({
       method: request.method,
-      path: request.url,
+      path: requestUrl.pathname,
+      query: Object.fromEntries(requestUrl.searchParams.entries()),
       authorization: request.headers.authorization,
       accept: request.headers.accept,
       apiVersion: request.headers["x-github-api-version"],
       contentType: request.headers["content-type"],
       body
     });
-    const payload = {
+
+    if (request.method === "GET") {
+      writeJsonResponse(response, 200, stubPullRequest ? [stubPullRequest] : []);
+      return;
+    }
+    if (request.method !== "POST") {
+      writeJsonResponse(response, 405, { message: "Method not allowed" });
+      return;
+    }
+
+    stubPullRequest = {
       number: 987,
-      html_url: `https://github.com/${repoFullName}/pull/987`
+      html_url: `https://github.com/${repoFullName}/pull/987`,
+      state: "open",
+      head: { ref: body.head },
+      base: { ref: body.base }
     };
-    const encoded = Buffer.from(JSON.stringify(payload), "utf8");
-    response.writeHead(201, {
-      "Content-Type": "application/json",
-      "Content-Length": encoded.length
+    writeJsonResponse(response, 422, {
+      message: "Validation Failed",
+      errors: [{ message: "A pull request already exists for this head and base" }]
     });
-    response.end(encoded);
   });
   await new Promise((resolveListen) => server.listen(0, "127.0.0.1", resolveListen));
   return server;
+}
+
+function writeJsonResponse(response, status, payload) {
+  const encoded = Buffer.from(JSON.stringify(payload), "utf8");
+  response.writeHead(status, {
+    "Content-Type": "application/json",
+    "Content-Length": encoded.length
+  });
+  response.end(encoded);
 }
 
 async function configureLocalRewrite(localPath, bareRepositoryUrl) {
@@ -414,35 +443,52 @@ function assertPullRequest(pullRequest) {
   if (!pullRequest.remotePushedAt || !pullRequest.openedAt) {
     throw new Error("PR 响应缺少 remotePushedAt 或 openedAt。");
   }
+  if (pullRequest.publishOutcome !== "REMOTE_RECONCILED") {
+    throw new Error(`PR publishOutcome=${pullRequest.publishOutcome}，需要 REMOTE_RECONCILED。`);
+  }
   if (!pullRequest.targetBranch?.startsWith("repopilot/task-")) {
     throw new Error(`PR targetBranch=${pullRequest.targetBranch} 不符合 RepoPilot 分支约定。`);
   }
 }
 
-function assertGitHubRequest(requests, pullRequest) {
-  if (requests.length !== 1) {
-    throw new Error(`GitHub API stub 收到 ${requests.length} 个 PR 请求，预期 1 个。`);
+function assertGitHubRequests(requests, pullRequest) {
+  if (requests.length !== 3) {
+    throw new Error(`GitHub API stub 收到 ${requests.length} 个请求，预期 GET -> POST -> GET 共 3 个。`);
   }
-  const request = requests[0];
-  if (request.authorization !== `Bearer ${fakeGithubToken}`) {
-    throw new Error("GitHub API stub 没有收到预期的 Authorization bearer header。");
+  const [firstLookup, createRequest, reconcileLookup] = requests;
+  const sequence = requests.map((request) => request.method).join(" -> ");
+  if (sequence !== "GET -> POST -> GET") {
+    throw new Error(`GitHub API 请求顺序=${sequence}，预期 GET -> POST -> GET。`);
   }
-  if (request.accept !== "application/vnd.github+json") {
-    throw new Error(`GitHub API Accept header=${request.accept}，不符合预期。`);
+  for (const request of requests) {
+    if (request.authorization !== `Bearer ${fakeGithubToken}`) {
+      throw new Error("GitHub API stub 没有收到预期的 Authorization bearer header。");
+    }
+    if (request.accept !== "application/vnd.github+json") {
+      throw new Error(`GitHub API Accept header=${request.accept}，不符合预期。`);
+    }
+    if (request.apiVersion !== "2022-11-28") {
+      throw new Error(`GitHub API version=${request.apiVersion}，不符合预期。`);
+    }
   }
-  if (request.apiVersion !== "2022-11-28") {
-    throw new Error(`GitHub API version=${request.apiVersion}，不符合预期。`);
+  for (const lookup of [firstLookup, reconcileLookup]) {
+    if (lookup.query.state !== "open"
+      || lookup.query.head !== `${repoOwner}:${pullRequest.targetBranch}`
+      || lookup.query.base !== defaultBranch
+      || lookup.query.per_page !== "1") {
+      throw new Error(`GitHub PR 对账参数不符合预期: ${JSON.stringify(lookup.query)}`);
+    }
   }
-  if (request.body.title !== "RepoPilot：远端 PR smoke：新增 User count API") {
-    throw new Error(`GitHub PR title=${request.body.title}，不符合中文标题约定。`);
+  if (createRequest.body.title !== "RepoPilot：远端 PR smoke：新增 User count API") {
+    throw new Error(`GitHub PR title=${createRequest.body.title}，不符合中文标题约定。`);
   }
-  if (request.body.head !== pullRequest.targetBranch || request.body.base !== defaultBranch) {
-    throw new Error(`GitHub PR head/base 不符合预期: ${JSON.stringify(request.body)}`);
+  if (createRequest.body.head !== pullRequest.targetBranch || createRequest.body.base !== defaultBranch) {
+    throw new Error(`GitHub PR head/base 不符合预期: ${JSON.stringify(createRequest.body)}`);
   }
-  if (!String(request.body.body ?? "").includes("请给 User 模块新增 count API")) {
+  if (!String(createRequest.body.body ?? "").includes("请给 User 模块新增 count API")) {
     throw new Error("GitHub PR body 缺少任务描述。");
   }
-  assertNoSecretLeak(JSON.stringify({ ...request, authorization: "<redacted>" }));
+  assertNoSecretLeak(JSON.stringify(requests.map((request) => ({ ...request, authorization: "<redacted>" }))));
 }
 
 async function waitForTaskStatus(apiBase, token, taskId, expectedStatus) {

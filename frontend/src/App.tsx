@@ -3743,6 +3743,23 @@ function PullRequestFailureNotice({ failure }: { failure: PullRequestFailureExpl
   );
 }
 
+function pullRequestPublishOutcomeLabel(outcome: string | null): string {
+  switch (outcome) {
+    case "LOCAL_DRAFT_READY":
+      return "本地草稿已准备";
+    case "REMOTE_CREATED":
+      return "GitHub 新建成功";
+    case "REMOTE_REUSED_EXISTING":
+      return "已复用同分支 PR";
+    case "REMOTE_RECONCILED":
+      return "创建异常后已对账恢复";
+    case "REMOTE_FAILED":
+      return "远端发布失败";
+    default:
+      return "未记录";
+  }
+}
+
 function PullRequestPanel({
   pullRequest,
   preflight
@@ -3767,6 +3784,7 @@ function PullRequestPanel({
             <Meta label="分支" value={pullRequest.targetBranch ?? "未准备"} />
             <Meta label="提交" value={shortSha(pullRequest.commitSha)} />
             <Meta label="PR" value={pullRequest.prNumber === null ? "未打开" : `#${pullRequest.prNumber}`} />
+            <Meta label="发布结果" value={pullRequestPublishOutcomeLabel(pullRequest.publishOutcome)} />
             <Meta label="打开时间" value={pullRequest.openedAt ? formatDate(pullRequest.openedAt) : "未打开"} />
           </div>
           {pullRequest.url ? <a className="externalLink" href={pullRequest.url} target="_blank" rel="noreferrer">打开 PR</a> : null}

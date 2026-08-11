@@ -66,6 +66,10 @@ public class PullRequestRecord {
     @Column(nullable = false)
     private PullRequestStatus status;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "publish_outcome", nullable = false)
+    private PullRequestPublishOutcome publishOutcome;
+
     @Column(name = "remote_pushed_at")
     private Instant remotePushedAt;
 
@@ -106,6 +110,7 @@ public class PullRequestRecord {
         this.commitSha = commitSha;
         this.commitMessage = commitMessage;
         this.status = status;
+        this.publishOutcome = PullRequestPublishOutcome.LOCAL_DRAFT_READY;
     }
 
     @PrePersist
@@ -172,6 +177,10 @@ public class PullRequestRecord {
         return status;
     }
 
+    public PullRequestPublishOutcome getPublishOutcome() {
+        return publishOutcome;
+    }
+
     public Instant getRemotePushedAt() {
         return remotePushedAt;
     }
@@ -197,16 +206,18 @@ public class PullRequestRecord {
         this.errorMessage = null;
     }
 
-    public void markOpen(Integer prNumber, String url) {
+    public void markOpen(Integer prNumber, String url, PullRequestPublishOutcome publishOutcome) {
         this.prNumber = prNumber;
         this.url = url;
         this.status = PullRequestStatus.OPEN;
+        this.publishOutcome = publishOutcome;
         this.openedAt = Instant.now();
         this.errorMessage = null;
     }
 
     public void markFailed(String errorMessage) {
         this.status = PullRequestStatus.FAILED;
+        this.publishOutcome = PullRequestPublishOutcome.REMOTE_FAILED;
         this.errorMessage = errorMessage;
     }
 }

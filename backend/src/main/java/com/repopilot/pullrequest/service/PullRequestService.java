@@ -279,7 +279,7 @@ public class PullRequestService {
                     record.getAgentTask().getProject(),
                     record
             );
-            record.markOpen(pullRequest.number(), pullRequest.url());
+            record.markOpen(pullRequest.number(), pullRequest.url(), pullRequest.publishOutcome());
             record.getAgentTask().setStatus(AgentTaskStatus.DONE);
             agentTaskRepository.save(record.getAgentTask());
             return pullRequestRecordRepository.save(record);
@@ -324,7 +324,7 @@ public class PullRequestService {
                 - Commit：%s
 
                 说明：
-                RepoPilot 会先准备本地分支和提交；启用远端 GitHub 发布时，会继续推送目标分支并创建 PR。
+                RepoPilot 会先准备本地分支和提交；启用远端 GitHub 发布时，会继续推送目标分支，先查重再创建或对账复用 PR。
                 """
                 .formatted(
                         task.getDescription(),

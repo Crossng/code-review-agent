@@ -230,6 +230,7 @@ MVP 使用 PostgreSQL 作为主数据库，并启用 pgvector 存储代码向量
 | `commit_sha` | varchar(80) | 本地准备好的 commit |
 | `commit_message` | text | 本地 commit message |
 | `status` | varchar(50) | `DRAFT_READY`、`OPEN`、`FAILED` |
+| `publish_outcome` | varchar(64) | `LOCAL_DRAFT_READY`、`REMOTE_CREATED`、`REMOTE_REUSED_EXISTING`、`REMOTE_RECONCILED`、`REMOTE_FAILED` |
 | `remote_pushed_at` | timestamp | target branch 推送到远端的时间 |
 | `opened_at` | timestamp | GitHub PR 创建时间 |
 | `error_message` | text | PR 创建失败原因 |

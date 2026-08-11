@@ -98,4 +98,4 @@ mvn -Dmaven.repo.local=../.m2 spring-boot:run
 - 后端真实 API 流：注册、登录、创建项目、创建 Agent 任务、启动 run、查询 step
 - `./scripts/mcp-tool-server-smoke.sh`：验证 MCP 工具目录、路径安全校验和写型工具人工审批门
 - `McpToolSettingsControllerIntegrationTest`：验证后端配置接口读取 MCP 健康检查、工具目录和工具详情，并只返回脱敏状态
-- `./scripts/remote-github-pr-smoke.sh`：无真实 GitHub token 时验证远端 PR push + API 主路径
+- `./scripts/remote-github-pr-smoke.sh`：无真实 GitHub token 时验证远端 PR push、head/base 查重和 422 后对账恢复
