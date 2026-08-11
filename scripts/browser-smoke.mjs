@@ -121,6 +121,52 @@ try {
   await sandboxSettings.getByText("maven:3.9-eclipse-temurin-17").waitFor();
   await sandboxSettings.getByText("沙箱就绪检查").waitFor();
   await sandboxSettings.getByText("Maven 缓存路径：").waitFor();
+  const mcpSettings = page.locator(".mcpToolSettingsPanel");
+  await mcpSettings.getByText("MCP 工具目录").waitFor();
+  await mcpSettings.locator(".badge").filter({ hasText: /^READY$/ }).waitFor();
+  await mcpSettings.getByText("检索代码上下文").waitFor();
+  const mcpFilters = mcpSettings.getByLabel("MCP 工具筛选");
+  await mcpFilters.getByLabel("搜索").fill("search_code");
+  await mcpFilters.getByLabel("分类").selectOption("仓库读取");
+  await mcpFilters.getByLabel("模式").selectOption("READ");
+  await mcpFilters.getByText(/显示 1\/\d+ 个工具/).waitFor();
+  await page.waitForFunction(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("mcpToolQuery") === "search_code"
+      && params.get("mcpToolCategory") === "仓库读取"
+      && params.get("mcpToolMode") === "READ";
+  });
+  await mcpFilters.getByRole("button", { name: "复制工具视图链接" }).click();
+  await mcpFilters.getByText("工具目录链接已复制").waitFor();
+  await page.waitForFunction(() =>
+    navigator.clipboard.readText().then((text) => {
+      if (!text) {
+        return false;
+      }
+      const url = new URL(text);
+      return url.hash === "#settings"
+        && url.searchParams.get("mcpToolQuery") === "search_code"
+        && url.searchParams.get("mcpToolCategory") === "仓库读取"
+        && url.searchParams.get("mcpToolMode") === "READ";
+    }).catch(() => false)
+  );
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await mcpSettings.getByText("检索代码上下文").waitFor();
+  await page.waitForFunction(() => {
+    const query = document.querySelector("#settings [aria-label='MCP 工具筛选'] input[type='search']");
+    const selects = document.querySelectorAll("#settings [aria-label='MCP 工具筛选'] select");
+    return query?.value === "search_code"
+      && selects[0]?.value === "仓库读取"
+      && selects[1]?.value === "READ";
+  });
+  await mcpFilters.getByText(/显示 1\/\d+ 个工具/).waitFor();
+  await mcpFilters.getByRole("button", { name: "重置" }).click();
+  await page.waitForFunction(() => {
+    const params = new URLSearchParams(window.location.search);
+    return !params.has("mcpToolQuery")
+      && !params.has("mcpToolCategory")
+      && !params.has("mcpToolMode");
+  });
 
   const projectForm = page.locator("form").filter({ hasText: "添加项目" });
   await projectForm.getByLabel("仓库地址").fill(repoUrl);

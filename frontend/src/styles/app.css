@@ -613,6 +613,7 @@ textarea {
 
 .mcpToolSettingsPanel {
   content-visibility: auto;
+  grid-column: 1 / -1;
 }
 
 .coderSettingsGrid,
@@ -678,7 +679,7 @@ textarea {
   border-radius: 8px;
   display: grid;
   gap: 8px;
-  grid-template-columns: minmax(220px, 1.2fr) minmax(150px, 0.7fr) minmax(130px, 0.6fr) max-content max-content;
+  grid-template-columns: minmax(220px, 1.2fr) minmax(150px, 0.7fr) minmax(130px, 0.6fr) repeat(2, max-content) minmax(96px, max-content) minmax(100px, max-content);
   margin: 0 0 12px;
   padding: 10px;
 }
@@ -711,6 +712,11 @@ textarea {
   justify-self: end;
   margin: 0;
   white-space: nowrap;
+}
+
+.mcpToolFilterBar .copyMcpToolLinkStatus {
+  align-self: center;
+  justify-self: end;
 }
 
 .mcpToolCategory {
@@ -1050,7 +1056,8 @@ textarea {
 .saveApiDocsSnapshotButton,
 .copyOverviewLinkButton,
 .copyProjectLinkButton,
-.copyTaskLinkButton {
+.copyTaskLinkButton,
+.copyMcpToolLinkButton {
   padding: 7px 10px;
 }
 
@@ -1060,7 +1067,8 @@ textarea {
 .saveApiDocsStatus,
 .copyOverviewLinkStatus,
 .copyProjectLinkStatus,
-.copyTaskLinkStatus {
+.copyTaskLinkStatus,
+.copyMcpToolLinkStatus {
   color: var(--accent-strong);
   font-size: 0.78rem;
   font-weight: 850;
@@ -1950,6 +1958,10 @@ textarea {
   }
 
   .mcpToolFilterBar .filterSummary {
+    justify-self: start;
+  }
+
+  .mcpToolFilterBar .copyMcpToolLinkStatus {
     justify-self: start;
   }
 

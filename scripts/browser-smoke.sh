@@ -6,6 +6,7 @@ LOG_DIR="$ROOT_DIR/target/browser-smoke/logs"
 ARTIFACT_DIR="$ROOT_DIR/output/playwright"
 BACKEND_URL="${REPOPILOT_BACKEND_URL:-http://127.0.0.1:8080}"
 FRONTEND_URL="${REPOPILOT_FRONTEND_URL:-http://127.0.0.1:5173/}"
+MCP_TOOL_SERVER_URL="${REPOPILOT_MCP_TOOL_SERVER_URL:-http://127.0.0.1:8095}"
 SMOKE_EMAIL="${REPOPILOT_SMOKE_EMAIL:-browser-smoke-$(date +%s)-$$@example.test}"
 SMOKE_PASSWORD="${REPOPILOT_SMOKE_PASSWORD:-password123}"
 
@@ -13,6 +14,7 @@ mkdir -p "$LOG_DIR" "$ARTIFACT_DIR" "$ROOT_DIR/target/browser-smoke/workspace"
 
 backend_pid=""
 frontend_pid=""
+mcp_tool_server_pid=""
 
 cleanup() {
   if [[ -n "$frontend_pid" ]]; then
@@ -22,6 +24,10 @@ cleanup() {
   if [[ -n "$backend_pid" ]]; then
     kill "$backend_pid" >/dev/null 2>&1 || true
     wait "$backend_pid" >/dev/null 2>&1 || true
+  fi
+  if [[ -n "$mcp_tool_server_pid" ]]; then
+    kill "$mcp_tool_server_pid" >/dev/null 2>&1 || true
+    wait "$mcp_tool_server_pid" >/dev/null 2>&1 || true
   fi
   rm -rf "$ROOT_DIR/target/browser-smoke/workspace"
   cleanup_smoke_data || true
@@ -81,6 +87,20 @@ wait_for_url() {
 
 docker compose up -d postgres redis
 
+if curl -fsS "$MCP_TOOL_SERVER_URL/actuator/health" >/dev/null 2>&1; then
+  echo "Using existing MCP tool server at $MCP_TOOL_SERVER_URL"
+else
+  echo "Starting MCP tool server..."
+  mcp_tool_server_port="$(node -e 'console.log(new URL(process.argv[1]).port || "80")' "$MCP_TOOL_SERVER_URL")"
+  (
+    cd "$ROOT_DIR/mcp-tool-server"
+    MCP_TOOL_SERVER_PORT="$mcp_tool_server_port" \
+      mvn -q -Dmaven.repo.local=../.m2 spring-boot:run
+  ) >"$LOG_DIR/mcp-tool-server.log" 2>&1 &
+  mcp_tool_server_pid="$!"
+  wait_for_url "$MCP_TOOL_SERVER_URL/actuator/health" "MCP tool server" 90
+fi
+
 if curl -fsS "$BACKEND_URL/actuator/health" >/dev/null 2>&1; then
   echo "Using existing backend at $BACKEND_URL"
 else
@@ -88,6 +108,7 @@ else
   (
     cd "$ROOT_DIR/backend"
     REPOPILOT_WORKSPACE_ROOT="../target/browser-smoke/workspace" \
+      REPOPILOT_MCP_TOOL_SERVER_URL="$MCP_TOOL_SERVER_URL" \
       mvn -q -Dmaven.repo.local=../.m2 spring-boot:run
   ) >"$LOG_DIR/backend.log" 2>&1 &
   backend_pid="$!"

@@ -4231,6 +4231,44 @@ Python Agent Worker 从“所有初始节点和 helper 都堆在 `initial_nodes.
 - 在安装完整 `agent-worker` 依赖的运行环境中补充一次 `graph_engine=LANGGRAPH` 的真实依赖 smoke 证据。
 - 开始把确定性 planning/patch 节点替换为可配置的模型驱动节点，同时继续复用现有审计和安全后置门。
 
+## 2026-08-11, Slice 127 - 工具目录视图可分享版
+
+MCP 工具目录筛选从“当前页面可用”继续变成“链接可复现”：配置区会把工具搜索、分类和读写模式同步进 URL，复制出来的工具视图链接能带着筛选状态回到 `#settings`，方便排查某一类工具或单个工具契约。
+
+### Added
+
+- `McpToolCatalogDetails` 初始化时读取 `mcpToolQuery`、`mcpToolCategory` 和 `mcpToolMode`，恢复工具搜索、分类和读写模式筛选。
+- 工具筛选变化时复用 `replaceBrowserUrl(...)` 更新 URL，仅增删 MCP 工具目录相关参数，并保留概览、项目、任务和 Controller API 等其他视图参数。
+- 工具筛选重置时同步移除 MCP 工具目录 URL 参数。
+- 工具筛选条新增 `复制工具视图链接`，复制包含当前筛选参数和 `#settings` hash 的 URL，并展示中文复制状态。
+- `scripts/browser-smoke.sh` 启动或复用 MCP 工具目录服务，并把 `REPOPILOT_MCP_TOOL_SERVER_URL` 传给本地后端 smoke。
+- `scripts/browser-smoke.mjs` 增加 MCP 工具目录浏览器断言，覆盖 `search_code` / `仓库读取` / `READ` 筛选、URL 参数、剪贴板链接和 reload 恢复。
+- 前端页面规格和验收清单同步 MCP 工具目录视图可分享能力。
+
+### Verified
+
+- `docker compose up -d postgres redis` passes.
+- `docker compose exec -T postgres pg_isready -U repopilot -d repopilot` passes.
+- `docker compose exec -T redis redis-cli ping` passes.
+- `npm run build` passes in `frontend`.
+- `mvn -q -Dmaven.repo.local=../.m2 test` passes in `backend`.
+- `mvn -q -Dmaven.repo.local=../.m2 test` passes in `mcp-tool-server`.
+- `PYTHONPATH=. python3 -m unittest discover -s tests` passes in `agent-worker`.
+- `rg --files scripts -g '*.sh' | xargs bash -n` passes.
+- `rg --files scripts -g '*.mjs' | xargs -n1 node --check` passes.
+- `./scripts/mcp-tool-server-smoke.sh` passes.
+- `git diff --check` passes.
+- `lsof -nP -iTCP:8095 -sTCP:LISTEN` returns no listener.
+
+### Notes
+
+- `./scripts/browser-smoke.sh` started backend, frontend and MCP tool server, then stopped before browser assertions because Playwright needed to download Chromium `149.0.7827.55` and the CDN TLS connection reset repeatedly (`ECONNRESET`). No app assertion failed in that run.
+
+### Next
+
+- 在能下载或已缓存 Playwright Chromium 的环境里补跑 `./scripts/browser-smoke.sh`，拿到 MCP 工具目录视图链接恢复的浏览器级证据。
+- 继续把 Worker Coder 从 stub 双场景推进到真实 token 演示质量。
+
 ## 2026-08-11, Slice 126 - 工具目录筛选版
 
 MCP 工具目录从“能展开查看”继续走向“工具多了也能快速定位”：配置区的工具详情现在可以按关键词、分类和读写模式筛选，筛选后仍保留按分类分组、参数 schema、安全规则和 backend bridge 的完整展示。

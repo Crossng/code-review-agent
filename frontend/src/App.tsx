@@ -226,6 +226,9 @@ const runMetricsDaysParam = "runMetricsDays";
 const activityLimitParam = "activityLimit";
 const controllerRiskFilterLevelParam = "controllerRiskLevel";
 const controllerRiskFilterCodeParam = "controllerRiskCode";
+const mcpToolQueryParam = "mcpToolQuery";
+const mcpToolCategoryParam = "mcpToolCategory";
+const mcpToolModeParam = "mcpToolMode";
 const controllerApiAnchorPrefix = "controller-api-";
 const controllerRiskLevels = ["ALL", "HIGH", "MEDIUM", "LOW", "NONE"];
 const controllerRiskLevelSet = new Set(controllerRiskLevels);
@@ -233,6 +236,12 @@ const controllerRiskLevelSet = new Set(controllerRiskLevels);
 type ControllerApiRiskFilters = {
   riskLevel: string;
   riskCode: string;
+};
+
+type McpToolCatalogFilters = {
+  query: string;
+  category: string;
+  accessMode: string;
 };
 
 function positiveIntegerParam(params: URLSearchParams, name: string): number | "" {
@@ -333,6 +342,18 @@ function initialControllerApiRiskFilters(): ControllerApiRiskFilters {
   return {
     riskLevel: controllerRiskLevelSet.has(requestedRiskLevel) ? requestedRiskLevel : "ALL",
     riskCode: requestedRiskCode
+  };
+}
+
+function initialMcpToolCatalogFilters(): McpToolCatalogFilters {
+  if (typeof window === "undefined") {
+    return { query: "", category: "ALL", accessMode: "ALL" };
+  }
+  const params = new URLSearchParams(window.location.search);
+  return {
+    query: params.get(mcpToolQueryParam)?.trim() ?? "",
+    category: params.get(mcpToolCategoryParam)?.trim() || "ALL",
+    accessMode: params.get(mcpToolModeParam)?.trim() || "ALL"
   };
 }
 
@@ -484,6 +505,33 @@ function dashboardOverviewUrl(days: number, limit: number) {
   return url;
 }
 
+function mcpToolCatalogUrl(filters: McpToolCatalogFilters, hash?: string) {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const url = new URL(window.location.href);
+  const query = filters.query.trim();
+  if (query === "") {
+    url.searchParams.delete(mcpToolQueryParam);
+  } else {
+    url.searchParams.set(mcpToolQueryParam, query);
+  }
+  if (filters.category === "ALL") {
+    url.searchParams.delete(mcpToolCategoryParam);
+  } else {
+    url.searchParams.set(mcpToolCategoryParam, filters.category);
+  }
+  if (filters.accessMode === "ALL") {
+    url.searchParams.delete(mcpToolModeParam);
+  } else {
+    url.searchParams.set(mcpToolModeParam, filters.accessMode);
+  }
+  if (hash !== undefined) {
+    url.hash = hash;
+  }
+  return url;
+}
+
 function replaceBrowserUrl(url: URL | null) {
   if (url === null) {
     return;
@@ -513,6 +561,10 @@ function syncActivityLimitToUrl(limit: number) {
 
 function syncControllerApiRiskFiltersToUrl(riskLevel: string, riskCode: string) {
   replaceBrowserUrl(controllerApiRiskFilterUrl(riskLevel, riskCode));
+}
+
+function syncMcpToolFiltersToUrl(filters: McpToolCatalogFilters) {
+  replaceBrowserUrl(mcpToolCatalogUrl(filters));
 }
 
 async function copyUrlToClipboard(
@@ -2316,9 +2368,8 @@ function McpToolSettingsPanel({ settings }: { settings: McpToolSettings | null }
 }
 
 function McpToolCatalogDetails({ tools }: { tools: McpToolSummary[] }) {
-  const [query, setQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("ALL");
-  const [accessModeFilter, setAccessModeFilter] = useState("ALL");
+  const [filters, setFilters] = useState<McpToolCatalogFilters>(initialMcpToolCatalogFilters);
+  const [copyLinkStatus, setCopyLinkStatus] = useState<string | null>(null);
   const queryInputId = useId();
   const categorySelectId = useId();
   const accessModeSelectId = useId();
@@ -2330,15 +2381,31 @@ function McpToolCatalogDetails({ tools }: { tools: McpToolSummary[] }) {
     return Array.from(new Set(tools.map((tool) => tool.accessMode || "UNKNOWN")))
       .sort((left, right) => left.localeCompare(right));
   }, [tools]);
-  const normalizedQuery = query.trim().toLowerCase();
+  const categoryOptions = useMemo(
+    () => selectedOptionFirst(categories, filters.category),
+    [categories, filters.category]
+  );
+  const accessModeOptions = useMemo(
+    () => selectedOptionFirst(accessModes, filters.accessMode),
+    [accessModes, filters.accessMode]
+  );
+  const normalizedQuery = filters.query.trim().toLowerCase();
   const filteredTools = useMemo(() => {
     return tools
-      .filter((tool) => categoryFilter === "ALL" || (tool.category || "未分类") === categoryFilter)
-      .filter((tool) => accessModeFilter === "ALL" || (tool.accessMode || "UNKNOWN") === accessModeFilter)
+      .filter((tool) => filters.category === "ALL" || (tool.category || "未分类") === filters.category)
+      .filter((tool) => filters.accessMode === "ALL" || (tool.accessMode || "UNKNOWN") === filters.accessMode)
       .filter((tool) => mcpToolMatchesQuery(tool, normalizedQuery));
-  }, [accessModeFilter, categoryFilter, normalizedQuery, tools]);
+  }, [filters.accessMode, filters.category, normalizedQuery, tools]);
   const groupedTools = useMemo(() => groupMcpToolsByCategory(filteredTools), [filteredTools]);
-  const filtersActive = query.trim() !== "" || categoryFilter !== "ALL" || accessModeFilter !== "ALL";
+  const filtersActive = filters.query.trim() !== "" || filters.category !== "ALL" || filters.accessMode !== "ALL";
+
+  useEffect(() => {
+    syncMcpToolFiltersToUrl(filters);
+  }, [filters]);
+
+  async function copyMcpToolCatalogLink() {
+    await copyUrlToClipboard(mcpToolCatalogUrl(filters, "settings"), "工具目录链接已复制", setCopyLinkStatus);
+  }
 
   if (tools.length === 0) {
     return <EmptyText text="工具目录暂未返回工具详情。" />;
@@ -2353,19 +2420,19 @@ function McpToolCatalogDetails({ tools }: { tools: McpToolSummary[] }) {
             id={queryInputId}
             type="search"
             placeholder="工具名、标题、说明或后端桥"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            value={filters.query}
+            onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))}
           />
         </label>
         <label htmlFor={categorySelectId}>
           <span>分类</span>
           <select
             id={categorySelectId}
-            value={categoryFilter}
-            onChange={(event) => setCategoryFilter(event.target.value)}
+            value={filters.category}
+            onChange={(event) => setFilters((current) => ({ ...current, category: event.target.value }))}
           >
             <option value="ALL">全部分类</option>
-            {categories.map((category) => (
+            {categoryOptions.map((category) => (
               <option value={category} key={category}>{category}</option>
             ))}
           </select>
@@ -2374,11 +2441,11 @@ function McpToolCatalogDetails({ tools }: { tools: McpToolSummary[] }) {
           <span>模式</span>
           <select
             id={accessModeSelectId}
-            value={accessModeFilter}
-            onChange={(event) => setAccessModeFilter(event.target.value)}
+            value={filters.accessMode}
+            onChange={(event) => setFilters((current) => ({ ...current, accessMode: event.target.value }))}
           >
             <option value="ALL">全部模式</option>
-            {accessModes.map((mode) => (
+            {accessModeOptions.map((mode) => (
               <option value={mode} key={mode}>{mcpAccessModeLabel(mode)}</option>
             ))}
           </select>
@@ -2388,14 +2455,18 @@ function McpToolCatalogDetails({ tools }: { tools: McpToolSummary[] }) {
           type="button"
           disabled={!filtersActive}
           onClick={() => {
-            setQuery("");
-            setCategoryFilter("ALL");
-            setAccessModeFilter("ALL");
+            setFilters({ query: "", category: "ALL", accessMode: "ALL" });
           }}
         >
           重置
         </button>
+        <button className="ghostButton copyMcpToolLinkButton" type="button" onClick={copyMcpToolCatalogLink}>
+          复制工具视图链接
+        </button>
         <span className="filterSummary">显示 {filteredTools.length}/{tools.length} 个工具</span>
+        <span className="copyMcpToolLinkStatus" aria-live="polite">
+          {copyLinkStatus ?? ""}
+        </span>
       </div>
       {groupedTools.length === 0 ? (
         <EmptyText text="没有工具匹配当前筛选。" />
@@ -2485,6 +2556,13 @@ function McpToolCatalogDetails({ tools }: { tools: McpToolSummary[] }) {
       )}
     </>
   );
+}
+
+function selectedOptionFirst(options: string[], selected: string) {
+  if (selected === "ALL" || options.includes(selected)) {
+    return options;
+  }
+  return [selected, ...options];
 }
 
 function mcpToolMatchesQuery(tool: McpToolSummary, normalizedQuery: string) {
